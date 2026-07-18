@@ -15,7 +15,7 @@ interface ConversationState {
   setStreaming: (streaming: boolean) => void;
 }
 
-export const useConversationStore = create<ConversationState>((set, get) => ({
+export const useConversationStore = create<ConversationState>((set) => ({
   conversations: [],
   currentConversationId: null,
   messages: {},
