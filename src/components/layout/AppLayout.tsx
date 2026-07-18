@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import TopBar from "./TopBar";
 import Sidebar from "./Sidebar";
+import RightPanel from "./RightPanel";
 
 export default function AppLayout() {
   return (
@@ -11,6 +12,7 @@ export default function AppLayout() {
         <main className="flex-1 min-w-0 overflow-hidden">
           <Outlet />
         </main>
+        <RightPanel />
       </div>
     </div>
   );
