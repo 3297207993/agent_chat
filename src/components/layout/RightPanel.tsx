@@ -1,15 +1,12 @@
 import { useState } from "react";
-import { useLocation } from "react-router-dom";
 import { useUIStore } from "@/stores/uiStore";
 import { useConversationStore } from "@/stores/conversationStore";
-import { useProviderStore } from "@/stores/providerStore";
 import {
   FileText,
   Wrench,
   BookOpen,
   Plug,
   Brain,
-  Info,
 } from "lucide-react";
 
 type TabId = "context" | "tools" | "rules" | "mcp" | "memory";
@@ -22,15 +19,12 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "memory", label: "记忆", icon: <Brain size={13} /> },
 ];
 
-/** 对话页面的 Tab 面板 */
-function ChatPanel({
-  activeTab,
-  setActiveTab,
-}: {
-  activeTab: TabId;
-  setActiveTab: (id: TabId) => void;
-}) {
+export default function RightPanel() {
+  const { rightPanelOpen } = useUIStore();
+  const [activeTab, setActiveTab] = useState<TabId>("context");
   const { currentConversationId, messages } = useConversationStore();
+
+  if (!rightPanelOpen) return null;
 
   const currentMessages = currentConversationId
     ? messages[currentConversationId] || []
@@ -45,7 +39,7 @@ function ChatPanel({
   }, 0);
 
   return (
-    <>
+    <aside className="w-72 bg-[#161b22] border-l border-[#30363d] flex flex-col flex-shrink-0">
       {/* Tabs */}
       <div className="flex border-b border-[#30363d]">
         {TABS.map((tab) => (
@@ -66,7 +60,6 @@ function ChatPanel({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3">
-        {/* Context Tab */}
         {activeTab === "context" && (
           <div className="space-y-4">
             <section>
@@ -113,7 +106,6 @@ function ChatPanel({
           </div>
         )}
 
-        {/* Tools Tab */}
         {activeTab === "tools" && (
           <div className="space-y-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681]">
@@ -125,7 +117,6 @@ function ChatPanel({
           </div>
         )}
 
-        {/* Rules Tab */}
         {activeTab === "rules" && (
           <div className="space-y-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681]">
@@ -137,7 +128,6 @@ function ChatPanel({
           </div>
         )}
 
-        {/* MCP Tab */}
         {activeTab === "mcp" && (
           <div className="space-y-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681]">
@@ -149,7 +139,6 @@ function ChatPanel({
           </div>
         )}
 
-        {/* Memory Tab */}
         {activeTab === "memory" && (
           <div className="space-y-3">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681]">
@@ -161,111 +150,6 @@ function ChatPanel({
           </div>
         )}
       </div>
-    </>
-  );
-}
-
-/** 管理页面的总结面板 */
-function PageSummaryPanel() {
-  const location = useLocation();
-  const { theme, fontSize } = useUIStore();
-  const { providers, activeProviderId, activeModelId } = useProviderStore();
-  const activeProvider = providers.find((p) => p.id === activeProviderId);
-  const activeModel = activeProvider?.models.find((m) => m.id === activeModelId);
-
-  const PAGE_INFO: Record<
-    string,
-    { title: string; sections: { label: string; value: string }[] }
-  > = {
-    "/rules": {
-      title: "规则概览",
-      sections: [
-        { label: "规则总数", value: "0 条规则" },
-        { label: "全局规则", value: "暂无全局规则" },
-        { label: "分类规则", value: "暂无分类规则" },
-      ],
-    },
-    "/mcp": {
-      title: "MCP 状态",
-      sections: [
-        { label: "Server 状态", value: "暂无运行中的 Server" },
-        { label: "已注册工具", value: "0 个工具" },
-      ],
-    },
-    "/skills": {
-      title: "Skill 概览",
-      sections: [
-        { label: "已启用 Skill", value: "0 个 Skill" },
-        { label: "触发命令", value: "无" },
-      ],
-    },
-    "/memory": {
-      title: "记忆概览",
-      sections: [
-        { label: "记忆条目", value: "0 条" },
-        { label: "最近访问", value: "无" },
-      ],
-    },
-    "/settings": {
-      title: "当前配置",
-      sections: [
-        { label: "主题", value: theme === "dark" ? "暗色" : theme === "light" ? "亮色" : "跟随系统" },
-        { label: "字体大小", value: `${fontSize}px` },
-        {
-          label: "LLM 模型",
-          value: activeModel?.name
-            ? `${activeProvider?.name} / ${activeModel.name}`
-            : "未配置",
-        },
-      ],
-    },
-    "/debug": {
-      title: "调试信息",
-      sections: [
-        { label: "版本", value: "v0.1.0" },
-        { label: "框架", value: "React + Vite + Tailwind" },
-        { label: "构建", value: "Vite" },
-      ],
-    },
-  };
-
-  const info = PAGE_INFO[location.pathname];
-  if (!info) return null;
-
-  return (
-    <>
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#30363d]">
-        <Info size={14} className="text-[#58a6ff]" />
-        <span className="text-[12px] font-semibold">{info.title}</span>
-      </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {info.sections.map((section) => (
-          <section key={section.label}>
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681] mb-1.5">
-              {section.label}
-            </h3>
-            <div className="text-[12px] text-[#8b949e]">{section.value}</div>
-          </section>
-        ))}
-      </div>
-    </>
-  );
-}
-
-export default function RightPanel() {
-  const { rightPanelOpen } = useUIStore();
-  const location = useLocation();
-  const [activeTab, setActiveTab] = useState<TabId>("context");
-
-  if (!rightPanelOpen) return null;
-
-  return (
-    <aside className="w-72 bg-[#161b22] border-l border-[#30363d] flex flex-col flex-shrink-0">
-      {location.pathname === "/" ? (
-        <ChatPanel activeTab={activeTab} setActiveTab={setActiveTab} />
-      ) : (
-        <PageSummaryPanel />
-      )}
     </aside>
   );
 }
