@@ -28,9 +28,12 @@ export default function TopBar() {
   return (
     <header className="flex items-center gap-2 px-4 h-11 bg-[#161b22] border-b border-[#30363d] flex-shrink-0 select-none">
       {/* App name */}
-      <span className="text-sm font-semibold text-[#e6edf3] tracking-wide mr-4">
+      <button
+        onClick={() => navigate("/")}
+        className="text-sm font-semibold text-[#e6edf3] tracking-wide mr-4 hover:text-[#58a6ff] cursor-pointer"
+      >
         Agent Chat
-      </span>
+      </button>
 
       {/* Management buttons */}
       <button
