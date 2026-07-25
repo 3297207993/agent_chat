@@ -15,6 +15,7 @@ function convertToAISDKMessages(messages: Message[]) {
 
 interface StreamCallbacks {
   onToken: (text: string) => void;
+  onReasoning: (text: string) => void;
   onError: (error: Error) => void;
   onFinish: () => void;
 }
@@ -37,8 +38,15 @@ export function createChatStream(
 
   void (async () => {
     try {
-      for await (const chunk of result.textStream) {
-        callbacks.onToken(chunk);
+      for await (const part of result.stream) {
+        switch (part.type) {
+          case "text-delta":
+            callbacks.onToken(part.text);
+            break;
+          case "reasoning-delta":
+            callbacks.onReasoning(part.text);
+            break;
+        }
       }
       callbacks.onFinish();
     } catch (error) {

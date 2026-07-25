@@ -15,6 +15,7 @@ export default function ChatInput() {
     messages,
     addMessage,
     appendToLastAssistantMessage,
+    appendReasoningToLastAssistantMessage,
     setLastMessageStatus,
     isStreaming,
     setStreaming,
@@ -100,6 +101,9 @@ export default function ChatInput() {
       {
         onToken: (token) => {
           appendToLastAssistantMessage(currentConversationId, token);
+        },
+        onReasoning: (reasoning) => {
+          appendReasoningToLastAssistantMessage(currentConversationId, reasoning);
         },
         onError: (error) => {
           const errorContent: MessageContent = {

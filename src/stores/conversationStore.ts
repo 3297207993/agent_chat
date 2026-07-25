@@ -13,6 +13,7 @@ interface ConversationState {
   addMessage: (conversationId: string, message: Message) => void;
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
   appendToLastAssistantMessage: (conversationId: string, text: string) => void;
+  appendReasoningToLastAssistantMessage: (conversationId: string, text: string) => void;
   setLastMessageStatus: (conversationId: string, status: Message["status"]) => void;
   setStreaming: (streaming: boolean) => void;
 }
@@ -87,6 +88,31 @@ export const useConversationStore = create<ConversationState>((set) => ({
         content[content.length - 1] = { ...lastBlock, text: lastBlock.text + text };
       } else {
         content.push({ type: "text", text });
+      }
+
+      return {
+        messages: {
+          ...state.messages,
+          [conversationId]: msgs.map((m) =>
+            m.id === lastMsg.id ? { ...m, content } : m
+          ),
+        },
+      };
+    }),
+
+  appendReasoningToLastAssistantMessage: (conversationId, text) =>
+    set((state) => {
+      const msgs = state.messages[conversationId] || [];
+      const lastMsg = msgs[msgs.length - 1];
+      if (!lastMsg || lastMsg.role !== "assistant") return state;
+
+      const content = [...lastMsg.content];
+      const lastBlock = content[content.length - 1];
+
+      if (lastBlock && lastBlock.type === "reasoning") {
+        content[content.length - 1] = { ...lastBlock, text: lastBlock.text + text };
+      } else {
+        content.push({ type: "reasoning", text });
       }
 
       return {
