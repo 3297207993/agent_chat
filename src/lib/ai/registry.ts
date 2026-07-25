@@ -48,4 +48,11 @@ export const BUILTIN_PROVIDERS: Record<string, {
       { id: "qwen-max", name: "Qwen-Max", capabilities: { vision: false, toolCalling: true, reasoning: false, streaming: true, maxTokens: 32768 }, isFavorite: false, sortOrder: 1 },
     ],
   },
+  custom: {
+    id: "custom",
+    name: "自定义 OpenAI 兼容接口",
+    type: "openai-compatible",
+    defaultBaseURL: "http://localhost:11434/v1",
+    models: [],
+  },
 };

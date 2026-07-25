@@ -13,6 +13,7 @@ import {
   EyeOff,
   ChevronDown,
   ChevronRight,
+  X,
 } from "lucide-react";
 
 type ThemeOption = "dark" | "light" | "system";
@@ -24,11 +25,13 @@ const THEME_OPTIONS: { value: ThemeOption; label: string; icon: React.ReactNode 
 ];
 
 export default function SettingsPage() {
-  const { providers, addProvider, removeProvider, activeProviderId, activeModelId, setActiveModel } = useProviderStore();
+  const { providers, addProvider, removeProvider, addModel, removeModel, activeProviderId, activeModelId, setActiveModel } = useProviderStore();
   const { theme, setTheme, fontSize, setFontSize } = useUIStore();
 
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({});
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+  const [addingModelFor, setAddingModelFor] = useState<string | null>(null);
+  const [newModelForm, setNewModelForm] = useState({ id: "", name: "" });
 
   const handleAddProvider = (builtinId: string) => {
     const builtin = BUILTIN_PROVIDERS[builtinId];
@@ -52,6 +55,20 @@ export default function SettingsPage() {
 
     addProvider(config);
     setExpandedProvider(builtin.id);
+  };
+
+  const handleAddModel = (providerId: string) => {
+    const { id, name } = newModelForm;
+    if (!id.trim() || !name.trim()) return;
+    addModel(providerId, {
+      id: id.trim(),
+      name: name.trim(),
+      capabilities: { vision: false, toolCalling: true, reasoning: false, streaming: true, maxTokens: 128000 },
+      isFavorite: false,
+      sortOrder: 0,
+    });
+    setNewModelForm({ id: "", name: "" });
+    setAddingModelFor(null);
   };
 
   const availableBuiltins = Object.values(BUILTIN_PROVIDERS).filter(
@@ -241,15 +258,71 @@ export default function SettingsPage() {
 
                       {/* Models */}
                       <div>
-                        <label className="text-[11px] text-[#6e7681] block mb-1.5">
-                          模型列表
-                        </label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[11px] text-[#6e7681]">
+                            模型列表
+                          </label>
+                          <button
+                            onClick={() => {
+                              setAddingModelFor(addingModelFor === provider.id ? null : provider.id);
+                              setNewModelForm({ id: "", name: "" });
+                            }}
+                            className="flex items-center gap-1 text-[11px] text-[#58a6ff] hover:text-[#79c0ff]"
+                          >
+                            <Plus size={12} />
+                            添加模型
+                          </button>
+                        </div>
+
+                        {/* Add model form */}
+                        {addingModelFor === provider.id && (
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <input
+                              type="text"
+                              value={newModelForm.id}
+                              onChange={(e) =>
+                                setNewModelForm((prev) => ({ ...prev, id: e.target.value }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleAddModel(provider.id);
+                                if (e.key === "Escape") setAddingModelFor(null);
+                              }}
+                              placeholder="模型 ID（如 gpt-4o）"
+                              className="flex-1 px-2 py-1 bg-[#0d1117] border border-[#30363d] rounded-md text-[11px] text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                            />
+                            <input
+                              type="text"
+                              value={newModelForm.name}
+                              onChange={(e) =>
+                                setNewModelForm((prev) => ({ ...prev, name: e.target.value }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleAddModel(provider.id);
+                                if (e.key === "Escape") setAddingModelFor(null);
+                              }}
+                              placeholder="显示名称"
+                              className="w-28 px-2 py-1 bg-[#0d1117] border border-[#30363d] rounded-md text-[11px] text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                            />
+                            <button
+                              onClick={() => handleAddModel(provider.id)}
+                              className="px-2 py-1 bg-[#238636] text-white text-[11px] rounded-md hover:bg-[#2ea043]"
+                            >
+                              确认
+                            </button>
+                          </div>
+                        )}
+
                         <div className="space-y-1">
+                          {provider.models.length === 0 && (
+                            <div className="text-[11px] text-[#6e7681] italic py-2 text-center">
+                              暂无模型，点击"添加模型"手动添加
+                            </div>
+                          )}
                           {provider.models.map((model) => (
                             <div
                               key={model.id}
                               onClick={() => setActiveModel(provider.id, model.id)}
-                              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs cursor-pointer ${
+                              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs cursor-pointer group ${
                                 activeProviderId === provider.id &&
                                 activeModelId === model.id
                                   ? "bg-[#1a3a5c] text-[#e6edf3]"
@@ -270,6 +343,7 @@ export default function SettingsPage() {
                                   )}
                               </div>
                               <span className="flex-1">{model.name}</span>
+                              <span className="text-[10px] text-[#6e7681] mr-1">{model.id}</span>
                               <div className="flex gap-1">
                                 {model.capabilities.vision && (
                                   <span className="px-1 py-0.5 rounded bg-[#21262d] text-[10px] text-[#8b949e]">
@@ -287,6 +361,16 @@ export default function SettingsPage() {
                                   </span>
                                 )}
                               </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeModel(provider.id, model.id);
+                                }}
+                                className="w-5 h-5 flex items-center justify-center rounded text-[#6e7681] hover:text-[#f85149] hover:bg-[#21262d] opacity-0 group-hover:opacity-100"
+                                title="删除模型"
+                              >
+                                <X size={11} />
+                              </button>
                             </div>
                           ))}
                         </div>
