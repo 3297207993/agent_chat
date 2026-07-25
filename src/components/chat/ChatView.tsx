@@ -1,15 +1,28 @@
 import { useConversationStore } from "@/stores/conversationStore";
+import { useProviderStore } from "@/stores/providerStore";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 
 export default function ChatView() {
   const { currentConversationId, messages, isStreaming } = useConversationStore();
+  const { getActiveProvider } = useProviderStore();
 
   const currentMessages = currentConversationId ? messages[currentConversationId] || [] : [];
+  const activeProvider = getActiveProvider();
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#0d1117]">
       <MessageList messages={currentMessages} isStreaming={isStreaming} />
+      {!activeProvider && currentConversationId && currentMessages.length === 0 && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-2">
+            <p className="text-sm text-[#8b949e]">尚未配置 API Key</p>
+            <p className="text-xs text-[#6e7681]">
+              请前往设置页面添加 Provider 并配置 API Key 以开始对话
+            </p>
+          </div>
+        </div>
+      )}
       <ChatInput />
     </div>
   );

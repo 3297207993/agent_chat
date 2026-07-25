@@ -1,12 +1,26 @@
 import { useState, useRef, useCallback } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
+import { useProviderStore } from "@/stores/providerStore";
+import { createChatStream } from "@/lib/ai/chat";
 import type { MessageContent } from "@/types/chat";
 import { Send, Paperclip, Image, Square } from "lucide-react";
 
 export default function ChatInput() {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { currentConversationId, addMessage, isStreaming, setStreaming } = useConversationStore();
+  const abortRef = useRef<AbortController | null>(null);
+
+  const {
+    currentConversationId,
+    messages,
+    addMessage,
+    appendToLastAssistantMessage,
+    setLastMessageStatus,
+    isStreaming,
+    setStreaming,
+  } = useConversationStore();
+
+  const { getActiveProvider, getActiveModel } = useProviderStore();
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -18,41 +32,100 @@ export default function ChatInput() {
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text || !currentConversationId) return;
+    if (!text || !currentConversationId || isStreaming) return;
 
-    const content: MessageContent[] = [{ type: "text", text }];
-    const message = {
+    const providerConfig = getActiveProvider();
+    const modelConfig = getActiveModel();
+
+    if (!providerConfig || !modelConfig) {
+      const errorMessage: MessageContent[] = [
+        {
+          type: "text",
+          text: "请先在设置中配置 API Key 并选择模型。",
+        },
+      ];
+      addMessage(currentConversationId, {
+        id: crypto.randomUUID(),
+        conversationId: currentConversationId,
+        role: "assistant",
+        content: errorMessage,
+        tokenCount: 0,
+        createdAt: Date.now(),
+        status: "error",
+      });
+      return;
+    }
+
+    // 1. 添加用户消息
+    const userContent: MessageContent[] = [{ type: "text", text }];
+    const userMessage = {
       id: crypto.randomUUID(),
       conversationId: currentConversationId,
       role: "user" as const,
-      content,
+      content: userContent,
       tokenCount: Math.ceil(text.length / 4),
       createdAt: Date.now(),
       status: "done" as const,
     };
-
-    addMessage(currentConversationId, message);
+    addMessage(currentConversationId, userMessage);
     setInput("");
 
-    // Simulate assistant response (placeholder - will be replaced with real AI SDK integration)
-    setTimeout(() => {
-      const assistantContent: MessageContent[] = [
-        {
-          type: "text",
-          text: "这是一个模拟回复。AI SDK 流式对话功能将在后续集成。\n\n当前对话 ID: `" + currentConversationId + "`\n\n你可以继续输入消息测试界面交互。",
+    // 2. 创建空的 assistant 消息，状态为 streaming
+    const assistantId = crypto.randomUUID();
+    const assistantMessage = {
+      id: assistantId,
+      conversationId: currentConversationId,
+      role: "assistant" as const,
+      content: [] as MessageContent[],
+      tokenCount: 0,
+      createdAt: Date.now(),
+      status: "streaming" as const,
+    };
+    addMessage(currentConversationId, assistantMessage);
+    setStreaming(true);
+
+    // 3. 构建消息历史（包含刚发送的用户消息）
+    const currentMessages = messages[currentConversationId] || [];
+    const allMessages = [...currentMessages, userMessage];
+
+    // 4. 创建 AbortController
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
+    // 5. 调用流式对话
+    createChatStream(
+      providerConfig,
+      modelConfig.id,
+      allMessages,
+      {
+        onToken: (token) => {
+          appendToLastAssistantMessage(currentConversationId, token);
         },
-      ];
-      const assistantMessage = {
-        id: crypto.randomUUID(),
-        conversationId: currentConversationId,
-        role: "assistant" as const,
-        content: assistantContent,
-        tokenCount: 20,
-        createdAt: Date.now(),
-        status: "done" as const,
-      };
-      addMessage(currentConversationId, assistantMessage);
-    }, 500);
+        onError: (error) => {
+          const errorContent: MessageContent = {
+            type: "text",
+            text: `请求失败：${error.message || "未知错误"}`,
+          };
+          appendToLastAssistantMessage(currentConversationId, errorContent.text);
+          setLastMessageStatus(currentConversationId, "error");
+          setStreaming(false);
+          abortRef.current = null;
+        },
+        onFinish: () => {
+          setLastMessageStatus(currentConversationId, "done");
+          setStreaming(false);
+          abortRef.current = null;
+        },
+      },
+      abortController.signal
+    );
+  };
+
+  const handleStop = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    setStreaming(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -60,10 +133,6 @@ export default function ChatInput() {
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const handleStop = () => {
-    setStreaming(false);
   };
 
   return (
