@@ -7,7 +7,7 @@ export async function getMessagesByConversation(
   return db.messages
     .where("conversationId")
     .equals(conversationId)
-    .sortBy("createdAt");
+    .toArray();
 }
 
 export async function createMessage(
