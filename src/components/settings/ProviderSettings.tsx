@@ -29,6 +29,7 @@ export default function ProviderSettings() {
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
   const [addingModelFor, setAddingModelFor] = useState<string | null>(null);
   const [newModelForm, setNewModelForm] = useState({ id: "", name: "" });
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const handleAddProvider = (builtinId: string) => {
     const builtin = BUILTIN_PROVIDERS[builtinId];
@@ -78,22 +79,36 @@ export default function ProviderSettings() {
         <h2 className="text-sm font-semibold text-[#8b949e] uppercase tracking-wide">
           LLM Provider
         </h2>
-        <div className="relative group">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#238636] text-white text-xs rounded-md hover:bg-[#2ea043]">
+        <div className="relative">
+          <button
+            onClick={() => setDropdownOpen((prev) => !prev)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#238636] text-white text-xs rounded-md hover:bg-[#2ea043]"
+          >
             <Plus size={13} />
             添加 Provider
           </button>
-          <div className="absolute right-0 top-full mt-1 w-52 bg-[#161b22] border border-[#30363d] rounded-lg shadow-lg hidden group-hover:block z-10">
-            {builtins.map((builtin) => (
-              <button
-                key={builtin.id}
-                onClick={() => handleAddProvider(builtin.id)}
-                className="w-full text-left px-3 py-2 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] first:rounded-t-lg last:rounded-b-lg"
-              >
-                {builtin.name}
-              </button>
-            ))}
-          </div>
+          {dropdownOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-[5]"
+                onClick={() => setDropdownOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-1 w-52 bg-[#161b22] border border-[#30363d] rounded-lg shadow-lg z-10">
+                {builtins.map((builtin) => (
+                  <button
+                    key={builtin.id}
+                    onClick={() => {
+                      handleAddProvider(builtin.id);
+                      setDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    {builtin.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
