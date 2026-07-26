@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type { ProviderConfig, ModelConfig } from "@/types/provider";
 
 interface ProviderState {
@@ -16,66 +17,71 @@ interface ProviderState {
   getActiveProvider: () => ProviderConfig | undefined;
 }
 
-export const useProviderStore = create<ProviderState>((set, get) => ({
-  providers: [],
-  activeProviderId: null,
-  activeModelId: null,
+export const useProviderStore = create<ProviderState>()(
+  persist(
+    (set, get) => ({
+      providers: [],
+      activeProviderId: null,
+      activeModelId: null,
 
-  addProvider: (config) =>
-    set((state) => ({
-      providers: [
-        ...state.providers,
-        { ...config, createdAt: Date.now(), updatedAt: Date.now() },
-      ],
-    })),
+      addProvider: (config) =>
+        set((state) => ({
+          providers: [
+            ...state.providers,
+            { ...config, createdAt: Date.now(), updatedAt: Date.now() },
+          ],
+        })),
 
-  removeProvider: (id) =>
-    set((state) => ({
-      providers: state.providers.filter((p) => p.id !== id),
-      activeProviderId:
-        state.activeProviderId === id ? null : state.activeProviderId,
-    })),
+      removeProvider: (id) =>
+        set((state) => ({
+          providers: state.providers.filter((p) => p.id !== id),
+          activeProviderId:
+            state.activeProviderId === id ? null : state.activeProviderId,
+        })),
 
-  updateProvider: (id, updates) =>
-    set((state) => ({
-      providers: state.providers.map((p) =>
-        p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
-      ),
-    })),
+      updateProvider: (id, updates) =>
+        set((state) => ({
+          providers: state.providers.map((p) =>
+            p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
+          ),
+        })),
 
-  addModel: (providerId, model) =>
-    set((state) => ({
-      providers: state.providers.map((p) =>
-        p.id === providerId
-          ? { ...p, models: [...p.models, { ...model, providerId }], updatedAt: Date.now() }
-          : p
-      ),
-    })),
+      addModel: (providerId, model) =>
+        set((state) => ({
+          providers: state.providers.map((p) =>
+            p.id === providerId
+              ? { ...p, models: [...p.models, { ...model, providerId }], updatedAt: Date.now() }
+              : p
+          ),
+        })),
 
-  removeModel: (providerId, modelId) =>
-    set((state) => ({
-      providers: state.providers.map((p) =>
-        p.id === providerId
-          ? { ...p, models: p.models.filter((m) => m.id !== modelId), updatedAt: Date.now() }
-          : p
-      ),
-      activeModelId:
-        state.activeProviderId === providerId && state.activeModelId === modelId
-          ? null
-          : state.activeModelId,
-    })),
+      removeModel: (providerId, modelId) =>
+        set((state) => ({
+          providers: state.providers.map((p) =>
+            p.id === providerId
+              ? { ...p, models: p.models.filter((m) => m.id !== modelId), updatedAt: Date.now() }
+              : p
+          ),
+          activeModelId:
+            state.activeProviderId === providerId && state.activeModelId === modelId
+              ? null
+              : state.activeModelId,
+        })),
 
-  setActiveModel: (providerId, modelId) =>
-    set({ activeProviderId: providerId, activeModelId: modelId }),
+      setActiveModel: (providerId, modelId) =>
+        set({ activeProviderId: providerId, activeModelId: modelId }),
 
-  getActiveModel: () => {
-    const { providers, activeProviderId, activeModelId } = get();
-    const provider = providers.find((p) => p.id === activeProviderId);
-    return provider?.models.find((m) => m.id === activeModelId);
-  },
+      getActiveModel: () => {
+        const { providers, activeProviderId, activeModelId } = get();
+        const provider = providers.find((p) => p.id === activeProviderId);
+        return provider?.models.find((m) => m.id === activeModelId);
+      },
 
-  getActiveProvider: () => {
-    const { providers, activeProviderId } = get();
-    return providers.find((p) => p.id === activeProviderId);
-  },
-}));
+      getActiveProvider: () => {
+        const { providers, activeProviderId } = get();
+        return providers.find((p) => p.id === activeProviderId);
+      },
+    }),
+    { name: "provider-store" }
+  )
+);
