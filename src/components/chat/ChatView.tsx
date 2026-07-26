@@ -4,16 +4,37 @@ import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 
 export default function ChatView() {
-  const { currentConversationId, messages, isStreaming } = useConversationStore();
+  const { currentConversationId, messages, isStreaming, createConversation } =
+    useConversationStore();
   const { getActiveProvider } = useProviderStore();
 
   const currentMessages = currentConversationId ? messages[currentConversationId] || [] : [];
   const activeProvider = getActiveProvider();
 
+  if (!currentConversationId) {
+    return (
+      <div className="flex-1 flex flex-col min-w-0 bg-[#0d1117]">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="text-4xl">💬</div>
+            <h2 className="text-lg font-semibold text-[#c9d1d9]">欢迎使用 Agent Chat</h2>
+            <p className="text-sm text-[#8b949e]">请新建一个对话以开始聊天</p>
+            <button
+              onClick={() => createConversation()}
+              className="px-4 py-2 rounded-lg bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-medium transition-colors"
+            >
+              新建对话
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#0d1117]">
       <MessageList messages={currentMessages} isStreaming={isStreaming} />
-      {!activeProvider && currentConversationId && currentMessages.length === 0 && (
+      {!activeProvider && currentMessages.length === 0 && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-2">
             <p className="text-sm text-[#8b949e]">尚未配置 API Key</p>
