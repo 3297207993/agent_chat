@@ -12,6 +12,7 @@ export default function ChatInput() {
 
   const {
     currentConversationId,
+    conversations,
     messages,
     addMessage,
     appendToLastAssistantMessage,
@@ -19,6 +20,7 @@ export default function ChatInput() {
     setLastMessageStatus,
     isStreaming,
     setStreaming,
+    updateConversationMeta,
   } = useConversationStore();
 
   const { getActiveProvider, getActiveModel } = useProviderStore();
@@ -70,6 +72,20 @@ export default function ChatInput() {
     };
     addMessage(currentConversationId, userMessage);
     setInput("");
+
+    // 更新对话元数据
+    const conv = conversations.find((c) => c.id === currentConversationId);
+    const isFirstMessage = conv ? conv.messageCount === 0 : true;
+    const newTitle =
+      isFirstMessage && text.length > 0
+        ? text.length > 20
+          ? text.slice(0, 20) + "…"
+          : text
+        : undefined;
+    updateConversationMeta(currentConversationId, {
+      ...(newTitle ? { title: newTitle } : {}),
+      messageCount: (conv?.messageCount || 0) + 1,
+    });
 
     // 2. 创建空的 assistant 消息，状态为 streaming
     const assistantId = crypto.randomUUID();
