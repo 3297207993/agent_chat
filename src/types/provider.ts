@@ -2,6 +2,7 @@ export interface ProviderConfig {
   id: string;
   name: string;
   type: "official" | "openai-compatible" | "custom";
+  providerKey: string;
   packageName?: string;
   baseURL?: string;
   apiKey: string;

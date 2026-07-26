@@ -8,7 +8,7 @@ type AIProvider = OpenAIProvider | DeepSeekProvider | OpenAICompatibleProvider;
 const providerCache = new Map<string, AIProvider>();
 
 function getProviderCacheKey(config: ProviderConfig): string {
-  return `${config.id}-${config.apiKey.slice(-4)}`;
+  return `${config.providerKey}-${config.apiKey.slice(-4)}`;
 }
 
 export function getProvider(config: ProviderConfig): AIProvider {
@@ -18,7 +18,7 @@ export function getProvider(config: ProviderConfig): AIProvider {
 
   let provider: AIProvider;
 
-  switch (config.id) {
+  switch (config.providerKey) {
     case "openai":
       provider = createOpenAI({ apiKey: config.apiKey });
       break;

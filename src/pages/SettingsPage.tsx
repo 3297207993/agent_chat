@@ -26,7 +26,7 @@ const THEME_OPTIONS: { value: ThemeOption; label: string; icon: React.ReactNode 
 ];
 
 export default function SettingsPage() {
-  const { providers, addProvider, removeProvider, addModel, removeModel, activeProviderId, activeModelId, setActiveModel } = useProviderStore();
+  const { providers, addProvider, removeProvider, updateProvider, addModel, removeModel, activeProviderId, activeModelId, setActiveModel } = useProviderStore();
   const { theme, setTheme, fontSize, setFontSize } = useUIStore();
 
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({});
@@ -38,15 +38,17 @@ export default function SettingsPage() {
     const builtin = BUILTIN_PROVIDERS[builtinId];
     if (!builtin) return;
 
+    const id = `${builtinId}-${Date.now()}`;
     const models: ModelConfig[] = builtin.models.map((m) => ({
       ...m,
-      providerId: builtin.id,
+      providerId: id,
     }));
 
     const config: Omit<ProviderConfig, "createdAt" | "updatedAt"> = {
-      id: builtin.id,
+      id,
       name: builtin.name,
       type: builtin.type,
+      providerKey: builtinId,
       packageName: builtin.packageName,
       baseURL: builtin.defaultBaseURL,
       apiKey: "",
@@ -55,7 +57,7 @@ export default function SettingsPage() {
     };
 
     addProvider(config);
-    setExpandedProvider(builtin.id);
+    setExpandedProvider(id);
   };
 
   const handleAddModel = (providerId: string) => {
@@ -72,9 +74,7 @@ export default function SettingsPage() {
     setAddingModelFor(null);
   };
 
-  const availableBuiltins = Object.values(BUILTIN_PROVIDERS).filter(
-    (b) => !providers.find((p) => p.id === b.id)
-  );
+  const builtins = Object.values(BUILTIN_PROVIDERS);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -134,14 +134,13 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold text-[#8b949e] uppercase tracking-wide">
               LLM Provider
             </h2>
-            {availableBuiltins.length > 0 && (
-              <div className="relative group">
+            <div className="relative group">
                 <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#238636] text-white text-xs rounded-md hover:bg-[#2ea043]">
                   <Plus size={13} />
                   添加 Provider
                 </button>
-                <div className="absolute right-0 top-full mt-1 w-48 bg-[#161b22] border border-[#30363d] rounded-lg shadow-lg hidden group-hover:block z-10">
-                  {availableBuiltins.map((builtin) => (
+                <div className="absolute right-0 top-full mt-1 w-52 bg-[#161b22] border border-[#30363d] rounded-lg shadow-lg hidden group-hover:block z-10">
+                  {builtins.map((builtin) => (
                     <button
                       key={builtin.id}
                       onClick={() => handleAddProvider(builtin.id)}
@@ -152,7 +151,6 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </div>
-            )}
           </div>
 
           {providers.length === 0 ? (
@@ -209,6 +207,20 @@ export default function SettingsPage() {
                   {/* Expanded Content */}
                   {expandedProvider === provider.id && (
                     <div className="px-4 pb-4 border-t border-[#30363d] pt-3 space-y-3">
+                      {/* Provider Name */}
+                      <div>
+                        <label className="text-[11px] text-[#6e7681] block mb-1">
+                          Provider 名称
+                        </label>
+                        <input
+                          type="text"
+                          value={provider.name}
+                          onChange={(e) => updateProvider(provider.id, { name: e.target.value })}
+                          placeholder="例如：DeepSeek-个人、智谱 AI、Ollama 本地"
+                          className="w-full px-2.5 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                        />
+                      </div>
+
                       {/* API Key */}
                       <div>
                         <label className="text-[11px] text-[#6e7681] block mb-1">
@@ -219,9 +231,7 @@ export default function SettingsPage() {
                             type={showApiKey[provider.id] ? "text" : "password"}
                             value={provider.apiKey}
                             placeholder="输入 API Key..."
-                            onChange={() => {
-                              /* TODO: update API key */
-                            }}
+                            onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
                             className="flex-1 px-2.5 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
                           />
                           <button
@@ -252,6 +262,7 @@ export default function SettingsPage() {
                             type="text"
                             value={provider.baseURL || ""}
                             placeholder="https://api.example.com/v1"
+                            onChange={(e) => updateProvider(provider.id, { baseURL: e.target.value })}
                             className="w-full px-2.5 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
                           />
                         </div>
