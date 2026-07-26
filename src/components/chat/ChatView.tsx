@@ -1,5 +1,6 @@
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
+import { APP_NAME } from "@/lib/constants";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 
@@ -17,7 +18,7 @@ export default function ChatView() {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-4">
             <div className="text-4xl">💬</div>
-            <h2 className="text-lg font-semibold text-[#c9d1d9]">欢迎使用 Agent Chat</h2>
+            <h2 className="text-lg font-semibold text-[#c9d1d9]">欢迎使用 {APP_NAME}</h2>
             <p className="text-sm text-[#8b949e]">请新建一个对话以开始聊天</p>
             <button
               onClick={() => createConversation()}

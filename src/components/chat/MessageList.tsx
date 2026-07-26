@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Message } from "@/types/chat";
+import { APP_NAME } from "@/lib/constants";
 import ChatMessage from "./ChatMessage";
 
 interface Props {
@@ -21,7 +22,7 @@ export default function MessageList({ messages, isStreaming }: Props) {
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="text-3xl mb-3">💬</div>
-          <h2 className="text-lg font-semibold mb-1">Agent Chat</h2>
+          <h2 className="text-lg font-semibold mb-1">{APP_NAME}</h2>
           <p className="text-sm text-[#8b949e]">选择一个对话或创建新对话开始</p>
         </div>
       </div>

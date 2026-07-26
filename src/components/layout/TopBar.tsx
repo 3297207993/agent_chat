@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUIStore } from "@/stores/uiStore";
 import { useProviderStore } from "@/stores/providerStore";
+import { APP_NAME } from "@/lib/constants";
 import {
   Settings,
   PanelRightOpen,
@@ -32,7 +33,7 @@ export default function TopBar() {
         onClick={() => navigate("/")}
         className="text-sm font-semibold text-[#e6edf3] tracking-wide mr-4 hover:text-[#58a6ff] cursor-pointer"
       >
-        Agent Chat
+        {APP_NAME}
       </button>
 
       {/* Management buttons */}

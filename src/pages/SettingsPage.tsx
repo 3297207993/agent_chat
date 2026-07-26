@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useProviderStore } from "@/stores/providerStore";
 import { useUIStore } from "@/stores/uiStore";
 import { BUILTIN_PROVIDERS } from "@/lib/ai/registry";
+import { APP_NAME } from "@/lib/constants";
 import type { ProviderConfig, ModelConfig } from "@/types/provider";
 import {
   Plus,
@@ -391,7 +392,7 @@ export default function SettingsPage() {
           <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4">
             <div className="text-sm text-[#8b949e]">
               <p>
-                <span className="text-[#e6edf3]">Agent Chat</span> v0.1.0
+                <span className="text-[#e6edf3]">{APP_NAME}</span> v0.1.0
               </p>
               <p className="text-xs mt-1">
                 基于 Tauri + React + Vercel AI SDK 构建的跨平台 AI Agent 桌面客户端
