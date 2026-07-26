@@ -1,2 +1,24 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
