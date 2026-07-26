@@ -1,8 +1,10 @@
 import type { Message, MessageContent } from "@/types/chat";
 import ReasoningBlock from "./ReasoningBlock";
 import ToolCallCard from "./ToolCallCard";
+import CodeBlock from "./CodeBlock";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeKatex from "rehype-katex";
 import { User, Bot, Copy, RefreshCw } from "lucide-react";
 
 interface Props {
@@ -17,7 +19,30 @@ function MessageContentRenderer({ content }: { content: MessageContent[] }) {
           case "text":
             return (
               <div key={i} className="prose prose-invert max-w-none text-sm leading-relaxed">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{
+                    pre({ children }) {
+                      return <>{children}</>;
+                    },
+                    code({ className, children, ...props }) {
+                      const match = /language-(\w+)/.exec(className || "");
+                      const code = String(children).replace(/\n$/, "");
+                      if (match) {
+                        return <CodeBlock language={match[1]} code={code} />;
+                      }
+                      return (
+                        <code
+                          className="px-1 py-0.5 bg-[#21262d] border border-[#30363d] rounded text-[13px] font-mono text-[#e6edf3]"
+                          {...props}
+                        >
+                          {children}
+                        </code>
+                      );
+                    },
+                  }}
+                >
                   {block.text}
                 </ReactMarkdown>
               </div>
