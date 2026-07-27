@@ -12,6 +12,10 @@ import {
   deleteMessagesByConversation as dbDeleteMessages,
   toMessage,
 } from "@/lib/db/messageDB";
+import { resetDatabase } from "@/lib/db/database";
+
+// 自减计数器，生成运行时临时负 id，避免与 DB 自增 id 冲突
+let _msgIdCounter = 0;
 
 interface ConversationState {
   conversations: Conversation[];
@@ -34,8 +38,8 @@ interface ConversationState {
   deleteConversation: (id: string) => Promise<void>;
 
   // Messages
-  addMessage: (conversationId: string, message: Message) => void;
-  updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
+  addMessage: (conversationId: string, message: Omit<Message, "id">) => void;
+  updateMessage: (conversationId: string, messageId: number, updates: Partial<Message>) => void;
   appendToLastAssistantMessage: (conversationId: string, text: string) => void;
   appendReasoningToLastAssistantMessage: (conversationId: string, text: string) => void;
   setLastMessageStatus: (conversationId: string, status: Message["status"]) => void;
@@ -55,22 +59,26 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   // ── Init ──
 
   loadFromDB: async () => {
-    const rows = await getAllConversations();
-    const conversations: Conversation[] = rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      categoryId: r.categoryId,
-      modelId: r.modelId,
-      providerId: r.providerId,
-      systemPrompt: r.systemPrompt,
-      pinned: r.pinned === 1,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      messageCount: r.messageCount,
-    }));
-
-    // 只加载对话列表，不加载消息（消息按需加载）
-    set({ conversations, initialized: true });
+    try {
+      const rows = await getAllConversations();
+      const conversations: Conversation[] = rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        categoryId: r.categoryId,
+        modelId: r.modelId,
+        providerId: r.providerId,
+        systemPrompt: r.systemPrompt,
+        pinned: r.pinned === 1,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        messageCount: r.messageCount,
+      }));
+      set({ conversations, initialized: true });
+    } catch {
+      // 数据库升级失败时重置
+      await resetDatabase();
+      set({ conversations: [], initialized: true });
+    }
   },
 
   // ── Navigation ──
@@ -173,15 +181,18 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   // ── Messages ──
 
   addMessage: (conversationId, message) => {
+    const id = --_msgIdCounter; // 临时负 id，持久化时 DB 会分配正 id
+    const msg: Message = { ...message, id };
+
     set((state) => ({
       messages: {
         ...state.messages,
-        [conversationId]: [...(state.messages[conversationId] || []), message],
+        [conversationId]: [...(state.messages[conversationId] || []), msg],
       },
     }));
-    // 持久化消息到 IndexedDB
-    if (message.status !== "pending" && message.status !== "streaming") {
-      dbCreateMessage(conversationId, message);
+    // 持久化消息到 IndexedDB（done/error 立即持久化，streaming 等 finish 再持久化）
+    if (msg.status !== "pending" && msg.status !== "streaming") {
+      dbCreateMessage(conversationId, msg);
     }
   },
 
@@ -199,7 +210,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   appendToLastAssistantMessage: (conversationId, text) => {
     const { messages } = get();
     const msgs = messages[conversationId] || [];
-    const lastMsg = msgs[msgs.length - 1];
+    const idx = msgs.length - 1;
+    if (idx < 0) return;
+    const lastMsg = msgs[idx];
     if (!lastMsg || lastMsg.role !== "assistant") return;
 
     const content = [...lastMsg.content];
@@ -211,20 +224,18 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       content.push({ type: "text", text });
     }
 
-    set({
-      messages: {
-        ...messages,
-        [conversationId]: msgs.map((m) =>
-          m.id === lastMsg.id ? { ...m, content } : m
-        ),
-      },
-    });
+    const updatedMsgs = [...msgs];
+    updatedMsgs[idx] = { ...lastMsg, content };
+
+    set({ messages: { ...messages, [conversationId]: updatedMsgs } });
   },
 
   appendReasoningToLastAssistantMessage: (conversationId, text) => {
     const { messages } = get();
     const msgs = messages[conversationId] || [];
-    const lastMsg = msgs[msgs.length - 1];
+    const idx = msgs.length - 1;
+    if (idx < 0) return;
+    const lastMsg = msgs[idx];
     if (!lastMsg || lastMsg.role !== "assistant") return;
 
     const content = [...lastMsg.content];
@@ -236,32 +247,25 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       content.push({ type: "reasoning", text });
     }
 
-    set({
-      messages: {
-        ...messages,
-        [conversationId]: msgs.map((m) =>
-          m.id === lastMsg.id ? { ...m, content } : m
-        ),
-      },
-    });
+    const updatedMsgs = [...msgs];
+    updatedMsgs[idx] = { ...lastMsg, content };
+
+    set({ messages: { ...messages, [conversationId]: updatedMsgs } });
   },
 
   setLastMessageStatus: (conversationId, status) => {
     const { messages } = get();
     const msgs = messages[conversationId] || [];
-    const lastMsg = msgs[msgs.length - 1];
-    if (!lastMsg) return;
+    const idx = msgs.length - 1;
+    if (idx < 0) return;
+    const lastMsg = msgs[idx];
 
-    set({
-      messages: {
-        ...messages,
-        [conversationId]: msgs.map((m) =>
-          m.id === lastMsg.id ? { ...m, status } : m
-        ),
-      },
-    });
+    const updatedMsgs = [...msgs];
+    updatedMsgs[idx] = { ...lastMsg, status };
 
-    // 当消息变为 done 时持久化
+    set({ messages: { ...messages, [conversationId]: updatedMsgs } });
+
+    // 当消息变为 done/error 时持久化
     if (status === "done" || status === "error") {
       dbCreateMessage(conversationId, { ...lastMsg, status });
     }

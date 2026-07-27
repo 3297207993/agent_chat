@@ -48,7 +48,6 @@ export default function ChatInput() {
         },
       ];
       addMessage(currentConversationId, {
-        id: crypto.randomUUID(),
         conversationId: currentConversationId,
         role: "assistant",
         content: errorMessage,
@@ -61,14 +60,14 @@ export default function ChatInput() {
 
     // 1. 添加用户消息
     const userContent: MessageContent[] = [{ type: "text", text }];
-    const userMessage = {
-      id: crypto.randomUUID(),
+    const userMessage: Message = {
+      id: 0,
       conversationId: currentConversationId,
-      role: "user" as const,
+      role: "user",
       content: userContent,
       tokenCount: Math.ceil(text.length / 4),
       createdAt: Date.now(),
-      status: "done" as const,
+      status: "done",
     };
     addMessage(currentConversationId, userMessage);
     setInput("");
@@ -88,15 +87,14 @@ export default function ChatInput() {
     });
 
     // 2. 创建空的 assistant 消息，状态为 streaming
-    const assistantId = crypto.randomUUID();
-    const assistantMessage = {
-      id: assistantId,
+    const assistantMessage: Message = {
+      id: 0,
       conversationId: currentConversationId,
-      role: "assistant" as const,
-      content: [] as MessageContent[],
+      role: "assistant",
+      content: [],
       tokenCount: 0,
       createdAt: Date.now(),
-      status: "streaming" as const,
+      status: "streaming",
     };
     addMessage(currentConversationId, assistantMessage);
     setStreaming(true);

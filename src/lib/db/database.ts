@@ -14,7 +14,7 @@ export interface ConversationRow {
 }
 
 export interface MessageRow {
-  id: string;
+  id?: number; // Dexie 自增主键，新增时不传
   conversationId: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string; // JSON.stringify(MessageContent[])
@@ -40,12 +40,20 @@ class AgentChatDB extends Dexie {
 
   constructor() {
     super("AgentChat");
-    this.version(1).stores({
+    // 版本 2：messages 使用自增主键 ++id
+    this.version(2).stores({
       conversations: "id, categoryId, updatedAt, pinned",
-      messages: "id, conversationId, createdAt",
+      messages: "++id, conversationId, createdAt",
       categories: "id, name",
     });
   }
 }
 
 export const db = new AgentChatDB();
+
+// 数据库重置工具：删除所有数据后刷新页面，重新创建
+export async function resetDatabase(): Promise<void> {
+  await db.delete();
+  // delete 后 db 实例不可用，刷新页面让新的 Dexie 实例从头创建
+  window.location.reload();
+}

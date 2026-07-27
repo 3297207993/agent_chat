@@ -13,9 +13,8 @@ export async function getMessagesByConversation(
 export async function createMessage(
   conversationId: string,
   message: Message
-): Promise<void> {
-  const row: MessageRow = {
-    id: message.id,
+): Promise<number> {
+  await db.messages.add({
     conversationId,
     role: message.role,
     content: JSON.stringify(message.content),
@@ -23,19 +22,26 @@ export async function createMessage(
     tokenCount: message.tokenCount,
     createdAt: message.createdAt,
     status: message.status,
-  };
-  await db.messages.add(row);
+  });
+  // 返回刚插入的自增 id（利用 Dexie 事务后查询）
+  const rows = await db.messages
+    .where("conversationId")
+    .equals(conversationId)
+    .reverse()
+    .limit(1)
+    .toArray();
+  return rows[0]?.id ?? 0;
 }
 
 export async function updateMessageContent(
-  messageId: string,
+  messageId: number,
   content: MessageContent[]
 ): Promise<void> {
   await db.messages.update(messageId, { content: JSON.stringify(content) });
 }
 
 export async function updateMessageStatus(
-  messageId: string,
+  messageId: number,
   status: MessageRow["status"]
 ): Promise<void> {
   await db.messages.update(messageId, { status });
@@ -49,7 +55,7 @@ export async function deleteMessagesByConversation(
 
 export function toMessage(row: MessageRow): Message {
   return {
-    id: row.id,
+    id: row.id!,
     conversationId: row.conversationId,
     role: row.role,
     content: JSON.parse(row.content) as MessageContent[],

@@ -21,7 +21,7 @@ export interface Conversation {
 }
 
 export interface Message {
-  id: string;
+  id: number;
   conversationId: string;
   role: "user" | "assistant" | "system" | "tool";
   content: MessageContent[];
