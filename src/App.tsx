@@ -9,13 +9,16 @@ import SkillPage from "@/pages/SkillPage";
 import MemoryPage from "@/pages/MemoryPage";
 import DebugPage from "@/pages/DebugPage";
 import { useConversationStore } from "@/stores/conversationStore";
+import { useCategoryStore } from "@/stores/categoryStore";
 
 function App() {
-  const loadFromDB = useConversationStore((s) => s.loadFromDB);
+  const loadConversations = useConversationStore((s) => s.loadFromDB);
+  const loadCategories = useCategoryStore((s) => s.loadFromDB);
 
   useEffect(() => {
-    loadFromDB();
-  }, [loadFromDB]);
+    loadConversations();
+    loadCategories();
+  }, [loadConversations, loadCategories]);
 
   return (
     <Routes>

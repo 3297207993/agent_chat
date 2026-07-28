@@ -2,7 +2,8 @@ import { db, type CategoryRow } from "./database";
 import type { Category } from "@/types/chat";
 
 export async function getAllCategories(): Promise<CategoryRow[]> {
-  return db.categories.orderBy("sortOrder").toArray();
+  const rows = await db.categories.toArray();
+  return rows.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export async function createCategory(data: Omit<CategoryRow, "id"> & { id?: string }): Promise<string> {

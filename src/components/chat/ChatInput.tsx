@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
 import { createChatStream } from "@/lib/ai/chat";
-import type { MessageContent } from "@/types/chat";
+import type { Message, MessageContent } from "@/types/chat";
 import { Send, Paperclip, Image, Square } from "lucide-react";
 
 export default function ChatInput() {
