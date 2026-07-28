@@ -1,9 +1,12 @@
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import { createDeepSeek, type DeepSeekProvider } from "@ai-sdk/deepseek";
+import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI, type GoogleGenerativeAIProvider } from "@ai-sdk/google";
+import { createXai, type XaiProvider } from "@ai-sdk/xai";
 import { createOpenAICompatible, type OpenAICompatibleProvider } from "@ai-sdk/openai-compatible";
 import type { ProviderConfig } from "@/types/provider";
 
-type AIProvider = OpenAIProvider | DeepSeekProvider | OpenAICompatibleProvider;
+type AIProvider = OpenAIProvider | DeepSeekProvider | AnthropicProvider | GoogleGenerativeAIProvider | XaiProvider | OpenAICompatibleProvider;
 
 const providerCache = new Map<string, AIProvider>();
 
@@ -25,6 +28,15 @@ export function getProvider(config: ProviderConfig): AIProvider {
     case "deepseek":
       provider = createDeepSeek({ apiKey: config.apiKey });
       break;
+    case "anthropic":
+      provider = createAnthropic({ apiKey: config.apiKey });
+      break;
+    case "google":
+      provider = createGoogleGenerativeAI({ apiKey: config.apiKey });
+      break;
+    case "xai":
+      provider = createXai({ apiKey: config.apiKey });
+      break;
     default:
       provider = createOpenAICompatible({
         name: config.name,
@@ -39,7 +51,8 @@ export function getProvider(config: ProviderConfig): AIProvider {
 }
 
 export function getModel(provider: AIProvider, modelId: string) {
-  return (provider as OpenAICompatibleProvider)(modelId);
+  // All AI SDK providers follow the same callable pattern: provider(modelId)
+  return (provider as any)(modelId);
 }
 
 export function clearProviderCache() {
