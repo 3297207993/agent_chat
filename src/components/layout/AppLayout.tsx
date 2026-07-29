@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import TopBar from "./TopBar";
 import Sidebar from "./Sidebar";
 import RightPanel from "./RightPanel";
+import PermissionDialog from "@/components/tools/PermissionDialog";
 
 export default function AppLayout() {
   return (
@@ -14,6 +15,8 @@ export default function AppLayout() {
         </main>
         <RightPanel />
       </div>
+      {/* 全局工具调用审批弹窗 */}
+      <PermissionDialog />
     </div>
   );
 }

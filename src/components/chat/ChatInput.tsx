@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
-import { createChatStream } from "@/lib/ai/chat";
+import { createAgentStream } from "@/lib/ai/agent";
 import type { Message, MessageContent } from "@/types/chat";
 import { Send, Paperclip, Image, Square } from "lucide-react";
 
@@ -17,6 +17,8 @@ export default function ChatInput() {
     addMessage,
     appendToLastAssistantMessage,
     appendReasoningToLastAssistantMessage,
+    appendToolCallToMessage,
+    updateToolResultInMessage,
     setLastMessageStatus,
     isStreaming,
     setStreaming,
@@ -107,8 +109,8 @@ export default function ChatInput() {
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    // 5. 调用流式对话
-    createChatStream(
+    // 5. 调用 Agent 循环（支持工具调用 + maxSteps 多步交互）
+    createAgentStream(
       providerConfig,
       modelConfig.id,
       allMessages,
@@ -119,12 +121,15 @@ export default function ChatInput() {
         onReasoning: (reasoning) => {
           appendReasoningToLastAssistantMessage(currentConversationId, reasoning);
         },
+        onToolCall: (toolCallId, toolName, args) => {
+          appendToolCallToMessage(currentConversationId, toolCallId, toolName, args);
+        },
+        onToolResult: (toolCallId, toolName, result) => {
+          updateToolResultInMessage(currentConversationId, toolCallId, toolName, result);
+        },
         onError: (error) => {
-          const errorContent: MessageContent = {
-            type: "text",
-            text: `请求失败：${error.message || "未知错误"}`,
-          };
-          appendToLastAssistantMessage(currentConversationId, errorContent.text);
+          const msg = `请求失败：${error.message || "未知错误"}`;
+          appendToLastAssistantMessage(currentConversationId, msg);
           setLastMessageStatus(currentConversationId, "error");
           setStreaming(false);
           abortRef.current = null;
@@ -135,7 +140,8 @@ export default function ChatInput() {
           abortRef.current = null;
         },
       },
-      abortController.signal
+      abortController.signal,
+      15, // maxSteps
     );
   };
 

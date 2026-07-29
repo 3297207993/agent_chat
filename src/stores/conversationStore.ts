@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Conversation, Message } from "@/types/chat";
+import type { Conversation, Message, MessageContent } from "@/types/chat";
 import {
   getAllConversations,
   createConversation as dbCreate,
@@ -42,6 +42,18 @@ interface ConversationState {
   updateMessage: (conversationId: string, messageId: number, updates: Partial<Message>) => void;
   appendToLastAssistantMessage: (conversationId: string, text: string) => void;
   appendReasoningToLastAssistantMessage: (conversationId: string, text: string) => void;
+  appendToolCallToMessage: (
+    conversationId: string,
+    toolCallId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ) => void;
+  updateToolResultInMessage: (
+    conversationId: string,
+    toolCallId: string,
+    toolName: string,
+    result: string,
+  ) => void;
   setLastMessageStatus: (conversationId: string, status: Message["status"]) => void;
   setStreaming: (streaming: boolean) => void;
 
@@ -250,6 +262,48 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const updatedMsgs = [...msgs];
     updatedMsgs[idx] = { ...lastMsg, content };
 
+    set({ messages: { ...messages, [conversationId]: updatedMsgs } });
+  },
+
+  appendToolCallToMessage: (
+    conversationId,
+    toolCallId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ) => {
+    const { messages } = get();
+    const msgs = messages[conversationId] || [];
+    const idx = msgs.length - 1;
+    if (idx < 0) return;
+    const lastMsg = msgs[idx];
+
+    const content: MessageContent[] = [
+      ...lastMsg.content,
+      { type: "tool_call", toolCallId, toolName, args },
+    ];
+    const updatedMsgs = [...msgs];
+    updatedMsgs[idx] = { ...lastMsg, content };
+    set({ messages: { ...messages, [conversationId]: updatedMsgs } });
+  },
+
+  updateToolResultInMessage: (
+    conversationId,
+    toolCallId: string,
+    toolName: string,
+    result: string,
+  ) => {
+    const { messages } = get();
+    const msgs = messages[conversationId] || [];
+    const idx = msgs.length - 1;
+    if (idx < 0) return;
+    const lastMsg = msgs[idx];
+
+    const content: MessageContent[] = [
+      ...lastMsg.content,
+      { type: "tool_result", toolCallId, toolName, result },
+    ];
+    const updatedMsgs = [...msgs];
+    updatedMsgs[idx] = { ...lastMsg, content };
     set({ messages: { ...messages, [conversationId]: updatedMsgs } });
   },
 
