@@ -289,7 +289,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   updateToolResultInMessage: (
     conversationId,
     toolCallId: string,
-    toolName: string,
+    _toolName: string,
     result: string,
   ) => {
     const { messages } = get();
@@ -298,10 +298,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     if (idx < 0) return;
     const lastMsg = msgs[idx];
 
-    const content: MessageContent[] = [
-      ...lastMsg.content,
-      { type: "tool_result", toolCallId, toolName, result },
-    ];
+    // 找到匹配的 tool_call block，更新 result，不加新 block
+    const content = lastMsg.content.map((c) => {
+      if (c.type === "tool_call" && c.toolCallId === toolCallId) {
+        return { ...c, result };
+      }
+      return c;
+    });
     const updatedMsgs = [...msgs];
     updatedMsgs[idx] = { ...lastMsg, content };
     set({ messages: { ...messages, [conversationId]: updatedMsgs } });

@@ -34,5 +34,5 @@ export interface Message {
 export type MessageContent =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
-  | { type: "tool_call"; toolCallId: string; toolName: string; args: Record<string, unknown> }
+  | { type: "tool_call"; toolCallId: string; toolName: string; args: Record<string, unknown>; result?: string }
   | { type: "tool_result"; toolCallId: string; toolName: string; result: string };

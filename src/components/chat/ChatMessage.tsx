@@ -54,8 +54,9 @@ function MessageContentRenderer({ content }: { content: MessageContent[] }) {
               <ToolCallCard
                 key={i}
                 toolName={block.toolName}
-                args={block.args as Record<string, unknown>}
-                status="done"
+                args={block.args}
+                result={block.result}
+                status={block.result ? "done" : "running"}
               />
             );
           case "tool_result":
