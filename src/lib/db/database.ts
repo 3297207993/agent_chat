@@ -7,6 +7,7 @@ export interface ConversationRow {
   modelId: string;
   providerId: string;
   systemPrompt?: string;
+  ruleIds?: string; // JSON.stringify(string[])
   pinned: number; // 0/1
   createdAt: number;
   updatedAt: number;
@@ -30,6 +31,7 @@ export interface CategoryRow {
   color: string;
   icon: string;
   sortOrder: number;
+  ruleIds?: string; // JSON.stringify(string[])
   createdAt: number;
 }
 
@@ -46,11 +48,29 @@ export interface McpServerRow {
   updatedAt: number;
 }
 
+export interface RuleRow {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  format: "markdown" | "yaml";
+  type: "always" | "manual" | "requested";
+  scope: "global" | "category" | "conversation";
+  categoryId?: string;
+  conversationId?: string;
+  globs?: string; // JSON.stringify(string[])
+  enabled: number; // 0/1
+  priority: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 class AgentChatDB extends Dexie {
   conversations!: EntityTable<ConversationRow, "id">;
   messages!: EntityTable<MessageRow, "id">;
   categories!: EntityTable<CategoryRow, "id">;
   mcpServers!: EntityTable<McpServerRow, "id">;
+  rules!: EntityTable<RuleRow, "id">;
 
   constructor() {
     super("AgentChat");
@@ -63,6 +83,14 @@ class AgentChatDB extends Dexie {
     // 版本 3：新增 mcpServers 表
     this.version(3).stores({
       mcpServers: "id, name, transport, enabled",
+    });
+    // 版本 4：新增 rules 表 & conversations/categories 增加 ruleIds 索引
+    this.version(4).stores({
+      conversations: "id, categoryId, updatedAt, pinned, *ruleIds",
+      messages: "++id, conversationId, createdAt",
+      categories: "id, name",
+      mcpServers: "id, name, transport, enabled",
+      rules: "id, scope, type, enabled, categoryId, conversationId",
     });
   }
 }

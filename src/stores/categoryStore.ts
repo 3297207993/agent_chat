@@ -18,6 +18,7 @@ interface CategoryState {
   renameCategory: (id: string, name: string) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   updateCategory: (id: string, updates: Partial<Category>) => Promise<void>;
+  setCategoryRules: (id: string, ruleIds: string[]) => Promise<void>;
 }
 
 export const useCategoryStore = create<CategoryState>((set, get) => ({
@@ -33,7 +34,7 @@ export const useCategoryStore = create<CategoryState>((set, get) => ({
     }
   },
 
-  addCategory: async (name) => {
+  addCategory: async (name: string) => {
     const id = crypto.randomUUID();
     const { categories } = get();
     const color = DEFAULT_COLORS[categories.length % DEFAULT_COLORS.length];
@@ -43,31 +44,45 @@ export const useCategoryStore = create<CategoryState>((set, get) => ({
       color,
       icon: "folder",
       sortOrder: categories.length,
+      ruleIds: [],
       createdAt: Date.now(),
     };
     set((s) => ({ categories: [...s.categories, category] }));
-    await dbCreate({ ...category, icon: "folder" });
+    await dbCreate({ ...category, icon: "folder", ruleIds: "[]" });
     return id;
   },
 
-  renameCategory: async (id, name) => {
+  renameCategory: async (id: string, name: string) => {
     set((s) => ({
       categories: s.categories.map((c) => (c.id === id ? { ...c, name } : c)),
     }));
     await dbUpdate(id, { name });
   },
 
-  deleteCategory: async (id) => {
+  deleteCategory: async (id: string) => {
     set((s) => ({
       categories: s.categories.filter((c) => c.id !== id),
     }));
     await dbDelete(id);
   },
 
-  updateCategory: async (id, updates) => {
+  updateCategory: async (id: string, updates: Partial<Category>) => {
     set((s) => ({
       categories: s.categories.map((c) => (c.id === id ? { ...c, ...updates } : c)),
     }));
-    await dbUpdate(id, updates);
+    const dbUpdates: Record<string, unknown> = { ...updates };
+    if ("ruleIds" in dbUpdates) {
+      dbUpdates.ruleIds = JSON.stringify(dbUpdates.ruleIds);
+    }
+    await dbUpdate(id, dbUpdates);
+  },
+
+  setCategoryRules: async (id, ruleIds) => {
+    set((s) => ({
+      categories: s.categories.map((c) =>
+        c.id === id ? { ...c, ruleIds } : c
+      ),
+    }));
+    await dbUpdate(id, { ruleIds: JSON.stringify(ruleIds) });
   },
 }));

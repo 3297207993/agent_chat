@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
+import { useRuleStore } from "@/stores/ruleStore";
+import { useCategoryStore } from "@/stores/categoryStore";
 import { createAgentStream } from "@/lib/ai/agent";
 import type { Message, MessageContent } from "@/types/chat";
 import { Send, Paperclip, Image, Square } from "lucide-react";
@@ -109,7 +111,24 @@ export default function ChatInput() {
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    // 5. 调用 Agent 循环（支持工具调用 + maxSteps 多步交互）
+    // 5. 收集生效规则，拼装 system prompt
+    const currentConv = conversations.find((c) => c.id === currentConversationId);
+    const categoryId = currentConv?.categoryId;
+    const currentCategory = categoryId
+      ? useCategoryStore.getState().categories.find((c) => c.id === categoryId)
+      : undefined;
+    const effectiveRules = useRuleStore.getState().getEffectiveRules(
+      currentConv,
+      currentCategory,
+    );
+    const rulesPrompt = effectiveRules
+      .map((r) => r.content)
+      .join("\n\n");
+    const systemPrompt = [rulesPrompt, currentConv?.systemPrompt]
+      .filter(Boolean)
+      .join("\n\n");
+
+    // 6. 调用 Agent 循环（支持工具调用 + maxSteps 多步交互）
     createAgentStream(
       providerConfig,
       modelConfig.id,
@@ -141,6 +160,7 @@ export default function ChatInput() {
         },
       },
       abortController.signal,
+      systemPrompt || undefined,
       15, // maxSteps
     );
   };

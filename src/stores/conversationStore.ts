@@ -35,6 +35,7 @@ interface ConversationState {
   renameConversation: (id: string, title: string) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
   setCategory: (id: string, categoryId: string | undefined) => Promise<void>;
+  setConversationRules: (id: string, ruleIds: string[]) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
 
   // Messages
@@ -80,6 +81,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         modelId: r.modelId,
         providerId: r.providerId,
         systemPrompt: r.systemPrompt,
+        ruleIds: r.ruleIds ? JSON.parse(r.ruleIds) : [],
         pinned: r.pinned === 1,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
@@ -118,6 +120,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       title: title || "新对话",
       modelId: "",
       providerId: "",
+      ruleIds: [],
       pinned: false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -135,6 +138,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       title: conversation.title,
       modelId: conversation.modelId,
       providerId: conversation.providerId,
+      ruleIds: "[]",
       pinned: conversation.pinned ? 1 : 0,
       createdAt: conversation.createdAt,
       updatedAt: conversation.updatedAt,
@@ -175,6 +179,15 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       ),
     }));
     await dbUpdate(id, { categoryId });
+  },
+
+  setConversationRules: async (id, ruleIds) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === id ? { ...c, ruleIds, updatedAt: Date.now() } : c
+      ),
+    }));
+    await dbUpdate(id, { ruleIds: JSON.stringify(ruleIds) });
   },
 
   deleteConversation: async (id) => {

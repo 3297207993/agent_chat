@@ -62,6 +62,7 @@ export function createAgentStream(
   messages: Message[],
   callbacks: AgentCallbacks,
   abortSignal: AbortSignal,
+  systemPrompt?: string,
   maxStepCount = 15,
 ) {
   const provider = getProvider(providerConfig);
@@ -72,6 +73,7 @@ export function createAgentStream(
 
   const result = streamText({
     model,
+    system: systemPrompt,
     messages: convertToAISDKMessages(messages),
     tools: {
       ...builtinTools,

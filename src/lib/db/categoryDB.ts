@@ -10,6 +10,7 @@ export async function createCategory(data: Omit<CategoryRow, "id"> & { id?: stri
   const id = data.id || crypto.randomUUID();
   await db.categories.add({
     ...data,
+    ruleIds: data.ruleIds ?? "[]",
     id,
     createdAt: data.createdAt || Date.now(),
   } as CategoryRow);
@@ -34,6 +35,7 @@ export function toCategory(row: CategoryRow): Category {
     color: row.color,
     icon: row.icon,
     sortOrder: row.sortOrder,
+    ruleIds: row.ruleIds ? JSON.parse(row.ruleIds) : [],
     createdAt: row.createdAt,
   };
 }

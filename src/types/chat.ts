@@ -4,6 +4,7 @@ export interface Category {
   color: string;
   icon: string;
   sortOrder: number;
+  ruleIds: string[];
   createdAt: number;
 }
 
@@ -14,6 +15,7 @@ export interface Conversation {
   modelId: string;
   providerId: string;
   systemPrompt?: string;
+  ruleIds: string[];
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
