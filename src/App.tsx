@@ -10,6 +10,7 @@ import MemoryPage from "@/pages/MemoryPage";
 import DebugPage from "@/pages/DebugPage";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useCategoryStore } from "@/stores/categoryStore";
+import { useMcpStore } from "@/stores/mcpStore";
 
 function App() {
   const loadConversations = useConversationStore((s) => s.loadFromDB);
@@ -18,6 +19,10 @@ function App() {
   useEffect(() => {
     loadConversations();
     loadCategories();
+    // 初始化 MCP：从 DB 加载 Server 配置 → 自动连接已启用的
+    useMcpStore.getState().initialize().then(() => {
+      useMcpStore.getState().connectAllEnabled();
+    });
   }, [loadConversations, loadCategories]);
 
   return (
