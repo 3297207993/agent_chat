@@ -33,10 +33,24 @@ export interface CategoryRow {
   createdAt: number;
 }
 
+export interface McpServerRow {
+  id: string;
+  name: string;
+  transport: "stdio" | "sse";
+  command?: string;
+  args?: string; // JSON.stringify(string[])
+  url?: string;
+  env?: string; // JSON.stringify(Record<string, string>)
+  enabled: number; // 0/1
+  createdAt: number;
+  updatedAt: number;
+}
+
 class AgentChatDB extends Dexie {
   conversations!: EntityTable<ConversationRow, "id">;
   messages!: EntityTable<MessageRow, "id">;
   categories!: EntityTable<CategoryRow, "id">;
+  mcpServers!: EntityTable<McpServerRow, "id">;
 
   constructor() {
     super("AgentChat");
@@ -45,6 +59,10 @@ class AgentChatDB extends Dexie {
       conversations: "id, categoryId, updatedAt, pinned",
       messages: "++id, conversationId, createdAt",
       categories: "id, name",
+    });
+    // 版本 3：新增 mcpServers 表
+    this.version(3).stores({
+      mcpServers: "id, name, transport, enabled",
     });
   }
 }

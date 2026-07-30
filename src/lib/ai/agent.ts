@@ -1,6 +1,7 @@
 import { streamText, isStepCount } from "ai";
 import { builtinTools } from "./tools";
 import { getProvider, getModel } from "./providers";
+import { useMcpStore } from "@/stores/mcpStore";
 import type { ProviderConfig } from "@/types/provider";
 import type { Message } from "@/types/chat";
 
@@ -66,10 +67,16 @@ export function createAgentStream(
   const provider = getProvider(providerConfig);
   const model = getModel(provider, modelId);
 
+  // 获取 MCP 工具（如果任何 MCP Server 已连接）
+  const mcpTools = useMcpStore.getState().getToolsForAI();
+
   const result = streamText({
     model,
     messages: convertToAISDKMessages(messages),
-    tools: builtinTools,
+    tools: {
+      ...builtinTools,
+      ...mcpTools,
+    },
     stopWhen: isStepCount(maxStepCount),
     abortSignal,
   });

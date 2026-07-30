@@ -5,7 +5,7 @@ import { useToolStore } from "@/stores/toolStore";
 
 // ── 权限检查辅助 ──
 
-async function requirePermission(
+export async function requirePermission(
   toolName: string,
   args: Record<string, unknown>,
   alwaysConfirm: boolean,

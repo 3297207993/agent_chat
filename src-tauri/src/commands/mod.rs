@@ -1,4 +1,5 @@
 pub mod file;
+pub mod mcp;
 pub mod search;
 pub mod security;
 pub mod shell;

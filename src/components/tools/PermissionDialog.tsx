@@ -30,7 +30,11 @@ export default function PermissionDialog() {
     preview_url: "打开链接",
   };
 
-  const displayName = toolNameDisplay[request.toolName] || request.toolName;
+  // MCP 工具名称格式: mcp:{serverId}:{toolName}
+  const isMcpTool = request.toolName.startsWith("mcp:");
+  const displayName = isMcpTool
+    ? `MCP · ${request.toolName.split(":").pop() ?? request.toolName}`
+    : toolNameDisplay[request.toolName] || request.toolName;
   const isCommandOrDelete =
     request.toolName === "execute_command" || request.toolName === "delete_file";
 
