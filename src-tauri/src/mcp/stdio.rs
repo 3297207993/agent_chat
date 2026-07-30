@@ -24,13 +24,9 @@ impl McpProcess {
         command: String,
         args: Vec<String>,
     ) -> Result<Self, String> {
-        let mut child = tokio::process::Command::new(&command)
-            .args(&args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("启动 MCP Server 失败: {}", e))?;
+        let mut child = Self::spawn_command(&command, &args).map_err(|e| {
+            format!("启动 MCP Server 失败: {}", e)
+        })?;
 
         let stdin = child.stdin.take().ok_or("无法获取 stdin")?;
         let stdout = child.stdout.take().ok_or("无法获取 stdout")?;
@@ -54,6 +50,34 @@ impl McpProcess {
             process: child,
             id,
         })
+    }
+
+    /// 尝试启动进程，Windows 上遇到 NotFound 时自动追加 .cmd 重试。
+    fn spawn_command(command: &str, args: &[String]) -> Result<Child, std::io::Error> {
+        let result = tokio::process::Command::new(command)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn();
+
+        #[cfg(target_os = "windows")]
+        if result.is_err()
+            && result.as_ref().unwrap_err().kind() == std::io::ErrorKind::NotFound
+        {
+            let cmd_ext = format!("{}.cmd", command);
+            let retry = tokio::process::Command::new(&cmd_ext)
+                .args(args)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn();
+            if retry.is_ok() {
+                return retry;
+            }
+        }
+
+        result
     }
 
     /// 向子进程的 stdin 写入一行数据。
