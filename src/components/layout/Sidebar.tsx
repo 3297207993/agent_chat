@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 export default function Sidebar() {
-  const { sidebarOpen, toggleSidebar } = useUIStore();
+  const { toggleSidebar } = useUIStore();
   const {
     conversations,
     currentConversationId,
@@ -209,10 +209,8 @@ export default function Sidebar() {
     [setCategory]
   );
 
-  if (!sidebarOpen) return null;
-
   return (
-    <aside className="w-64 bg-[#161b22] border-r border-[#30363d] flex flex-col flex-shrink-0 relative">
+    <aside className="h-full bg-[#161b22] border-r border-[#30363d] flex flex-col overflow-hidden relative">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#30363d]">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681]">
