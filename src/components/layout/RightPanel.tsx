@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useUIStore } from "@/stores/uiStore";
 import { useConversationStore } from "@/stores/conversationStore";
 import {
   FileText,
@@ -20,11 +19,8 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 ];
 
 export default function RightPanel() {
-  const { rightPanelOpen } = useUIStore();
   const [activeTab, setActiveTab] = useState<TabId>("context");
   const { currentConversationId, messages } = useConversationStore();
-
-  if (!rightPanelOpen) return null;
 
   const currentMessages = currentConversationId
     ? messages[currentConversationId] || []
@@ -39,7 +35,7 @@ export default function RightPanel() {
   }, 0);
 
   return (
-    <aside className="w-72 bg-[#161b22] border-l border-[#30363d] flex flex-col flex-shrink-0">
+    <aside className="h-full bg-[#161b22] border-l border-[#30363d] flex flex-col overflow-hidden">
       {/* Tabs */}
       <div className="flex border-b border-[#30363d]">
         {TABS.map((tab) => (
