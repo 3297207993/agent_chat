@@ -2,6 +2,12 @@ import { streamText, isStepCount } from "ai";
 import { builtinTools } from "./tools";
 import { convertToAISDKMessages } from "./messages";
 import { getProvider, getModel } from "./providers";
+import {
+  buildMessageWindow,
+  computeContextBudget,
+  estimateToolsTokens,
+  trimModelMessages,
+} from "./window";
 import { useMcpStore } from "@/stores/mcpStore";
 import type { ProviderConfig } from "@/types/provider";
 import type { Message } from "@/types/chat";
@@ -57,16 +63,61 @@ export function createAgentStream(
 
   // 获取 MCP 工具（如果任何 MCP Server 已连接）
   const mcpTools = useMcpStore.getState().getToolsForAI();
+  const tools = {
+    ...builtinTools,
+    ...mcpTools,
+  };
+
+  // ── 层 1：发送前滑动窗口（主防线） ──
+  // 用内部 Message 已维护好的 tokenCount 精确裁剪初始窗口（字段求和，零重算），
+  // 确保第 1 步的输入在预算内。滑出的消息仅影响发送视图，DB 完整保留。
+  const modelConfig = providerConfig.models.find((m) => m.id === modelId);
+  const budget = computeContextBudget({
+    modelConfig,
+    systemPrompt: systemPrompt ?? "",
+    toolsTokens: estimateToolsTokens(tools),
+  });
+  const {
+    messages: windowMessages,
+    droppedCount,
+    droppedTokens,
+  } = buildMessageWindow(messages, budget);
+
+  // 有滑出时告知模型，避免它误以为上下文丢失
+  let finalSystemPrompt = systemPrompt;
+  if (droppedCount > 0) {
+    const notice = `[上下文提示] 由于上下文窗口限制，较早的 ${droppedCount} 条消息（约 ${Math.max(1, Math.round(droppedTokens / 1000))}k tokens）未包含在本次请求中。请基于现有内容回答；如确需已省略的内容，可请用户提供。`;
+    finalSystemPrompt = systemPrompt
+      ? `${systemPrompt}\n\n${notice}`
+      : notice;
+  }
 
   const result = streamText({
     model,
-    system: systemPrompt,
-    messages: convertToAISDKMessages(messages),
-    tools: {
-      ...builtinTools,
-      ...mcpTools,
+    system: finalSystemPrompt,
+    messages: convertToAISDKMessages(windowMessages),
+    tools,
+    stopWhen: [
+      isStepCount(maxStepCount),
+      // ── 层 3：token 保险丝（兜底硬止损） ──
+      // 正常裁剪下上一步 inputTokens 应 ≈ budget；到 2 倍说明窗口已无法约束
+      // （如单条消息本身超限），此时停止循环，避免继续膨胀。
+      ({ steps }) => {
+        const lastInput = steps[steps.length - 1]?.usage.inputTokens;
+        return lastInput !== undefined && lastInput > budget * 2;
+      },
+    ],
+    // ── 层 2：prepareStep 增量检测（循环中防膨胀） ──
+    // 第 1 步由层 1 处理；后续步用 provider 真实 inputTokens（零成本）判断，
+    // 超预算时把该总量作为参考传入，trimModelMessages 只估被滑出的部分，不估全量。
+    prepareStep: ({ stepNumber, steps, messages }) => {
+      if (stepNumber === 0) return undefined;
+      const lastInput = steps[steps.length - 1]?.usage.inputTokens;
+      if (lastInput === undefined || lastInput <= budget) return undefined;
+      const trimmed = trimModelMessages(messages, budget, lastInput);
+      if (trimmed.length >= messages.length) return undefined;
+      return { messages: trimmed };
     },
-    stopWhen: isStepCount(maxStepCount),
     abortSignal,
   });
 
