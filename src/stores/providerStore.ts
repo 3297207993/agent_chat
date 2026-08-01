@@ -12,6 +12,11 @@ interface ProviderState {
   updateProvider: (id: string, updates: Partial<ProviderConfig>) => void;
   addModel: (providerId: string, model: Omit<ModelConfig, "providerId">) => void;
   removeModel: (providerId: string, modelId: string) => void;
+  updateModel: (
+    providerId: string,
+    modelId: string,
+    updates: Partial<ModelConfig>
+  ) => void;
   setActiveModel: (providerId: string, modelId: string) => void;
   getActiveModel: () => ModelConfig | undefined;
   getActiveProvider: () => ProviderConfig | undefined;
@@ -66,6 +71,21 @@ export const useProviderStore = create<ProviderState>()(
             state.activeProviderId === providerId && state.activeModelId === modelId
               ? null
               : state.activeModelId,
+        })),
+
+      updateModel: (providerId, modelId, updates) =>
+        set((state) => ({
+          providers: state.providers.map((p) =>
+            p.id === providerId
+              ? {
+                  ...p,
+                  models: p.models.map((m) =>
+                    m.id === modelId ? { ...m, ...updates, providerId } : m
+                  ),
+                  updatedAt: Date.now(),
+                }
+              : p
+          ),
         })),
 
       setActiveModel: (providerId, modelId) =>

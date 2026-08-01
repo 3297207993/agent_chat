@@ -4,6 +4,7 @@ import { useProviderStore } from "@/stores/providerStore";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { createAgentStream } from "@/lib/ai/agent";
+import { estimateTokens } from "@/lib/ai/tokenizer";
 import type { Message, MessageContent } from "@/types/chat";
 import { Send, Paperclip, Image, Square } from "lucide-react";
 
@@ -45,17 +46,13 @@ export default function ChatInput() {
     const modelConfig = getActiveModel();
 
     if (!providerConfig || !modelConfig) {
-      const errorMessage: MessageContent[] = [
-        {
-          type: "text",
-          text: "请先在设置中配置 API Key 并选择模型。",
-        },
-      ];
+      const errorText = "请先在设置中配置 API Key 并选择模型。";
+      const errorMessage: MessageContent[] = [{ type: "text", text: errorText }];
       addMessage(currentConversationId, {
         conversationId: currentConversationId,
         role: "assistant",
         content: errorMessage,
-        tokenCount: 0,
+        tokenCount: estimateTokens(errorText),
         createdAt: Date.now(),
         status: "error",
       });
@@ -69,7 +66,7 @@ export default function ChatInput() {
       conversationId: currentConversationId,
       role: "user",
       content: userContent,
-      tokenCount: Math.ceil(text.length / 4),
+      tokenCount: estimateTokens(text),
       createdAt: Date.now(),
       status: "done",
     };

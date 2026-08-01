@@ -47,6 +47,13 @@ export async function updateMessageStatus(
   await db.messages.update(messageId, { status });
 }
 
+export async function updateMessageTokenCount(
+  messageId: number,
+  tokenCount: number
+): Promise<void> {
+  await db.messages.update(messageId, { tokenCount });
+}
+
 export async function deleteMessagesByConversation(
   conversationId: string
 ): Promise<void> {

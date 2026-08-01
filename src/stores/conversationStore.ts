@@ -10,9 +10,11 @@ import {
   getMessagesByConversation as dbGetMessages,
   createMessage as dbCreateMessage,
   deleteMessagesByConversation as dbDeleteMessages,
+  updateMessageTokenCount as dbUpdateMessageTokenCount,
   toMessage,
 } from "@/lib/db/messageDB";
 import { resetDatabase } from "@/lib/db/database";
+import { estimateMessageTokens } from "@/lib/ai/tokenizer";
 
 // 自减计数器，生成运行时临时负 id，避免与 DB 自增 id 冲突
 let _msgIdCounter = 0;
@@ -104,8 +106,18 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       const { messages } = get();
       if (!messages[id]) {
         const msgRows = await dbGetMessages(id);
+        const loaded = msgRows.map(toMessage);
+        // 迁移：旧数据的 tokenCount 为 0 或旧算法（length/4，对中文严重低估）粗略值，
+        // 用 tokenizer 校正为真实估算值，并异步回写 DB（幂等，校正后相等不再写）
+        for (const m of loaded) {
+          const real = estimateMessageTokens(m);
+          if (real !== m.tokenCount) {
+            m.tokenCount = real;
+            void dbUpdateMessageTokenCount(m.id, real);
+          }
+        }
         set((state) => ({
-          messages: { ...state.messages, [id]: msgRows.map(toMessage) },
+          messages: { ...state.messages, [id]: loaded },
         }));
       }
     }
@@ -330,14 +342,21 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     if (idx < 0) return;
     const lastMsg = msgs[idx];
 
+    // 消息结束（done/error）时若 tokenCount 缺失（旧数据或流式生成中），用 tokenizer 补算真实值
+    const tokenCount =
+      (status === "done" || status === "error") && lastMsg.tokenCount <= 0
+        ? estimateMessageTokens(lastMsg)
+        : lastMsg.tokenCount;
+
+    const updatedMsg = { ...lastMsg, status, tokenCount };
     const updatedMsgs = [...msgs];
-    updatedMsgs[idx] = { ...lastMsg, status };
+    updatedMsgs[idx] = updatedMsg;
 
     set({ messages: { ...messages, [conversationId]: updatedMsgs } });
 
-    // 当消息变为 done/error 时持久化
+    // 当消息变为 done/error 时持久化（带真实 tokenCount）
     if (status === "done" || status === "error") {
-      dbCreateMessage(conversationId, { ...lastMsg, status });
+      dbCreateMessage(conversationId, updatedMsg);
     }
   },
 

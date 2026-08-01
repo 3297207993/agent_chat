@@ -3,6 +3,8 @@ import { useConversationStore } from "@/stores/conversationStore";
 import { useMcpStore } from "@/stores/mcpStore";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
+import { useProviderStore } from "@/stores/providerStore";
+import { estimateMessageTokens, getContextLength } from "@/lib/ai/tokenizer";
 import {
   FileText,
   Wrench,
@@ -29,18 +31,26 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 export default function RightPanel() {
   const [activeTab, setActiveTab] = useState<TabId>("context");
   const { currentConversationId, messages } = useConversationStore();
+  const modelConfig = useProviderStore((s) => s.getActiveModel());
 
   const currentMessages = currentConversationId
     ? messages[currentConversationId] || []
     : [];
 
+  // 优先使用每条消息持久化的 tokenCount（历史/流式缺失时用 tokenizer 实时估算兜底）
   const totalTokens = currentMessages.reduce((sum, m) => {
-    const text = m.content
-      .filter((c): c is { type: "text"; text: string } => c.type === "text")
-      .map((c) => c.text)
-      .join("");
-    return sum + Math.ceil(text.length / 4);
+    if (m.tokenCount > 0) return sum + m.tokenCount;
+    return sum + estimateMessageTokens(m);
   }, 0);
+
+  const contextLength = getContextLength(modelConfig);
+  const tokenPercent = Math.min((totalTokens / contextLength) * 100, 100);
+  const barColor =
+    tokenPercent < 70
+      ? "bg-[#58a6ff]"
+      : tokenPercent < 90
+        ? "bg-[#d2991d]"
+        : "bg-[#f85149]";
 
   return (
     <aside className="h-full bg-[#161b22] border-l border-[#30363d] flex flex-col overflow-hidden">
@@ -72,16 +82,22 @@ export default function RightPanel() {
               </h3>
               <div>
                 <div className="flex justify-between text-[11px] text-[#6e7681] mb-1">
-                  <span>上下文</span>
-                  <span>{totalTokens.toLocaleString()} / 128,000</span>
+                  <span className="truncate">
+                    上下文{modelConfig ? `（${modelConfig.name}）` : ""}
+                  </span>
+                  <span className="shrink-0 ml-2">
+                    {totalTokens.toLocaleString()} / {contextLength.toLocaleString()}
+                  </span>
                 </div>
                 <div className="h-1 bg-[#21262d] rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-[#58a6ff] rounded-full"
-                    style={{
-                      width: `${Math.min((totalTokens / 128000) * 100, 100)}%`,
-                    }}
+                    className={`h-full ${barColor} rounded-full transition-colors`}
+                    style={{ width: `${tokenPercent}%` }}
                   />
+                </div>
+                <div className="flex justify-between text-[10px] text-[#6e7681] mt-1">
+                  <span>{currentMessages.length} 条消息</span>
+                  <span>{Math.round(tokenPercent)}%</span>
                 </div>
               </div>
             </section>

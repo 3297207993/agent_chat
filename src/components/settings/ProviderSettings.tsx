@@ -10,7 +10,23 @@ import {
   ChevronDown,
   ChevronRight,
   X,
+  Pencil,
 } from "lucide-react";
+
+// 模型 token 量格式化：128000 → 128k，1000000 → 1M
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
+  }
+  if (n >= 1000) return `${Math.round(n / 1000)}k`;
+  return String(n);
+}
+
+function parseTokens(input: string): number {
+  const n = parseInt(input, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 export default function ProviderSettings() {
   const {
@@ -20,6 +36,7 @@ export default function ProviderSettings() {
     updateProvider,
     addModel,
     removeModel,
+    updateModel,
     activeProviderId,
     activeModelId,
     setActiveModel,
@@ -28,8 +45,30 @@ export default function ProviderSettings() {
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({});
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
   const [addingModelFor, setAddingModelFor] = useState<string | null>(null);
-  const [newModelForm, setNewModelForm] = useState({ id: "", name: "" });
+  const [newModelForm, setNewModelForm] = useState({
+    id: "",
+    name: "",
+    maxTokens: "128000",
+  });
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  // 正在内联编辑上下文 Tokens 的模型（providerId + modelId 拼接为 key）
+  const [editingTokensFor, setEditingTokensFor] = useState<string | null>(null);
+  const [tokensInput, setTokensInput] = useState("");
+
+  const startEditTokens = (providerId: string, model: ModelConfig) => {
+    setEditingTokensFor(`${providerId}:${model.id}`);
+    setTokensInput(String(model.capabilities.maxTokens || ""));
+  };
+
+  const commitTokens = (providerId: string, model: ModelConfig) => {
+    const n = parseTokens(tokensInput);
+    if (n > 0) {
+      updateModel(providerId, model.id, {
+        capabilities: { ...model.capabilities, maxTokens: n },
+      });
+    }
+    setEditingTokensFor(null);
+  };
 
   const handleAddProvider = (builtinId: string) => {
     const builtin = BUILTIN_PROVIDERS[builtinId];
@@ -58,16 +97,22 @@ export default function ProviderSettings() {
   };
 
   const handleAddModel = (providerId: string) => {
-    const { id, name } = newModelForm;
+    const { id, name, maxTokens } = newModelForm;
     if (!id.trim() || !name.trim()) return;
     addModel(providerId, {
       id: id.trim(),
       name: name.trim(),
-      capabilities: { vision: false, toolCalling: true, reasoning: false, streaming: true, maxTokens: 128000 },
+      capabilities: {
+        vision: false,
+        toolCalling: true,
+        reasoning: false,
+        streaming: true,
+        maxTokens: parseTokens(maxTokens) || 128000,
+      },
       isFavorite: false,
       sortOrder: 0,
     });
-    setNewModelForm({ id: "", name: "" });
+    setNewModelForm({ id: "", name: "", maxTokens: "128000" });
     setAddingModelFor(null);
   };
 
@@ -230,7 +275,7 @@ export default function ProviderSettings() {
                       <button
                         onClick={() => {
                           setAddingModelFor(addingModelFor === provider.id ? null : provider.id);
-                          setNewModelForm({ id: "", name: "" });
+                          setNewModelForm({ id: "", name: "", maxTokens: "128000" });
                         }}
                         className="flex items-center gap-1 text-[11px] text-[#58a6ff] hover:text-[#79c0ff]"
                       >
@@ -265,6 +310,22 @@ export default function ProviderSettings() {
                             if (e.key === "Escape") setAddingModelFor(null);
                           }}
                           placeholder="显示名称"
+                          className="w-28 px-2 py-1 bg-[#0d1117] border border-[#30363d] rounded-md text-[11px] text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          step="1000"
+                          value={newModelForm.maxTokens}
+                          onChange={(e) =>
+                            setNewModelForm((prev) => ({ ...prev, maxTokens: e.target.value }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleAddModel(provider.id);
+                            if (e.key === "Escape") setAddingModelFor(null);
+                          }}
+                          placeholder="上下文 Tokens"
+                          title="该模型可用的上下文 Token 量"
                           className="w-28 px-2 py-1 bg-[#0d1117] border border-[#30363d] rounded-md text-[11px] text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
                         />
                         <button
@@ -325,6 +386,37 @@ export default function ProviderSettings() {
                               </span>
                             )}
                           </div>
+                          {editingTokensFor === `${provider.id}:${model.id}` ? (
+                            <input
+                              type="number"
+                              min="1"
+                              autoFocus
+                              value={tokensInput}
+                              onChange={(e) => setTokensInput(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") commitTokens(provider.id, model);
+                                if (e.key === "Escape") setEditingTokensFor(null);
+                              }}
+                              onBlur={() => commitTokens(provider.id, model)}
+                              className="w-24 px-1.5 py-0.5 bg-[#0d1117] border border-[#58a6ff] rounded text-[10px] text-[#e6edf3] outline-none"
+                            />
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditTokens(provider.id, model);
+                              }}
+                              title={`上下文 Tokens（${model.capabilities.maxTokens?.toLocaleString() ?? "未设置"}），点击修改`}
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#21262d] text-[10px] text-[#8b949e] hover:text-[#58a6ff] hover:bg-[#1c2128]"
+                            >
+                              {model.capabilities.maxTokens
+                                ? formatTokens(model.capabilities.maxTokens)
+                                : "未设置"}
+                              <Pencil size={9} />
+                            </button>
+                          )}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
