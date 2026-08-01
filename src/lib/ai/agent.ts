@@ -1,23 +1,10 @@
 import { streamText, isStepCount } from "ai";
 import { builtinTools } from "./tools";
+import { convertToAISDKMessages } from "./messages";
 import { getProvider, getModel } from "./providers";
 import { useMcpStore } from "@/stores/mcpStore";
 import type { ProviderConfig } from "@/types/provider";
 import type { Message } from "@/types/chat";
-
-// ── 消息转换 ──
-
-type Role = "user" | "assistant" | "system";
-
-function convertToAISDKMessages(messages: Message[]) {
-  return messages.map((msg) => ({
-    role: msg.role as Role,
-    content: msg.content
-      .filter((c) => c.type === "text")
-      .map((c) => c.text)
-      .join("\n"),
-  }));
-}
 
 // ── Agent 回调 ──
 

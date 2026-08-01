@@ -1,17 +1,8 @@
 import { streamText } from "ai";
+import { convertToAISDKMessages } from "./messages";
 import { getProvider, getModel } from "./providers";
 import type { ProviderConfig } from "@/types/provider";
 import type { Message } from "@/types/chat";
-
-function convertToAISDKMessages(messages: Message[]) {
-  return messages.map((msg) => ({
-    role: msg.role as "user" | "assistant" | "system",
-    content: msg.content
-      .filter((c) => c.type === "text")
-      .map((c) => c.text)
-      .join("\n"),
-  }));
-}
 
 interface StreamCallbacks {
   onToken: (text: string) => void;
