@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Message, MessageContent } from "@/types/chat";
 import ReasoningBlock from "./ReasoningBlock";
 import ToolCallCard from "./ToolCallCard";
@@ -77,7 +78,7 @@ function MessageContentRenderer({ content }: { content: MessageContent[] }) {
   );
 }
 
-export default function ChatMessage({ message }: Props) {
+function ChatMessage({ message }: Props) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
 
@@ -137,3 +138,6 @@ export default function ChatMessage({ message }: Props) {
     </div>
   );
 }
+
+// memo：store 更新时只有最后一条消息的对象引用变化，历史消息引用不变直接跳过重渲染
+export default memo(ChatMessage);
