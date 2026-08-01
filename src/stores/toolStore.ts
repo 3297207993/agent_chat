@@ -1,9 +1,5 @@
 import { create } from "zustand";
-import type {
-  PermissionMode,
-  ApprovalRequest,
-  ToolExecution,
-} from "@/types/tool";
+import type { PermissionMode, ApprovalRequest } from "@/types/tool";
 
 interface ToolStore {
   // ── 权限设置 ──
@@ -29,13 +25,6 @@ interface ToolStore {
     args: Record<string, unknown>,
   ) => Promise<boolean>;
 
-  // ── 执行记录（右侧面板展示） ──
-  executions: ToolExecution[];
-  addExecution: (exec: ToolExecution) => void;
-  updateExecution: (
-    toolCallId: string,
-    updates: Partial<ToolExecution>,
-  ) => void;
 }
 
 export const useToolStore = create<ToolStore>((set) => ({
@@ -73,17 +62,4 @@ export const useToolStore = create<ToolStore>((set) => ({
       }));
     });
   },
-
-  // ── 执行记录 ──
-  executions: [],
-  addExecution: (exec) =>
-    set((state) => ({
-      executions: [...state.executions, exec],
-    })),
-  updateExecution: (toolCallId, updates) =>
-    set((state) => ({
-      executions: state.executions.map((e) =>
-        e.toolCallId === toolCallId ? { ...e, ...updates } : e,
-      ),
-    })),
 }));
