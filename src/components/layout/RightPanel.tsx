@@ -4,7 +4,7 @@ import { useMcpStore } from "@/stores/mcpStore";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { useProviderStore } from "@/stores/providerStore";
-import { estimateMessageTokens, getContextLength } from "@/lib/ai/tokenizer";
+import { getContextLength } from "@/lib/ai/tokenizer";
 import {
   FileText,
   Wrench,
@@ -37,11 +37,11 @@ export default function RightPanel() {
     ? messages[currentConversationId] || []
     : [];
 
-  // 优先使用每条消息持久化的 tokenCount（历史/流式缺失时用 tokenizer 实时估算兜底）
-  const totalTokens = currentMessages.reduce((sum, m) => {
-    if (m.tokenCount > 0) return sum + m.tokenCount;
-    return sum + estimateMessageTokens(m);
-  }, 0);
+  // 只累加已有 tokenCount 的消息（流式中的消息还没有 tokenCount，跳过，避免频繁实时估算）
+  const totalTokens = currentMessages.reduce(
+    (sum, m) => sum + (m.tokenCount > 0 ? m.tokenCount : 0),
+    0,
+  );
 
   const contextLength = getContextLength(modelConfig);
   const tokenPercent = Math.min((totalTokens / contextLength) * 100, 100);
