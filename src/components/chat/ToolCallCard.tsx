@@ -1,24 +1,45 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Wrench, CheckCircle, Loader2, XCircle } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Wrench,
+  CheckCircle,
+  Loader2,
+  XCircle,
+  ShieldAlert,
+} from "lucide-react";
 
 interface Props {
   toolName: string;
   args: Record<string, unknown>;
   result?: string;
-  status: "running" | "done" | "error";
+  status: "running" | "done" | "error" | "waiting";
+  /** 待审批时提供：允许 */
+  onApprove?: () => void;
+  /** 待审批时提供：拒绝 */
+  onReject?: () => void;
 }
 
-export default function ToolCallCard({ toolName, args, result, status }: Props) {
+export default function ToolCallCard({
+  toolName,
+  args,
+  result,
+  status,
+  onApprove,
+  onReject,
+}: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
   const statusIcon = {
     running: <Loader2 size={13} className="animate-spin text-[#d2991d]" />,
+    waiting: <ShieldAlert size={13} className="text-[#d2991d]" />,
     done: <CheckCircle size={13} className="text-[#3fb950]" />,
     error: <XCircle size={13} className="text-[#f85149]" />,
   };
 
   const statusLabel = {
     running: "执行中...",
+    waiting: "等待确认",
     done: "已完成",
     error: "失败",
   };
@@ -52,6 +73,28 @@ export default function ToolCallCard({ toolName, args, result, status }: Props) 
               <span className="whitespace-pre-wrap">{result}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* 审批操作 */}
+      {status === "waiting" && onApprove && onReject && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-[#1c2333] border-t border-[#30363d]">
+          <ShieldAlert size={13} className="text-[#d2991d] shrink-0" />
+          <span className="text-[11px] text-[#8b949e] flex-1 truncate">
+            等待你的确认后执行
+          </span>
+          <button
+            onClick={onReject}
+            className="px-3 py-1 text-[11px] text-[#8b949e] bg-[#21262d] border border-[#30363d] rounded-md hover:bg-[#30363d]"
+          >
+            拒绝
+          </button>
+          <button
+            onClick={onApprove}
+            className="px-3 py-1 text-[11px] text-white bg-[#238636] rounded-md hover:bg-[#2ea043]"
+          >
+            允许执行
+          </button>
         </div>
       )}
     </div>

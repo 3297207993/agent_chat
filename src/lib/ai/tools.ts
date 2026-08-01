@@ -6,6 +6,7 @@ import { useToolStore } from "@/stores/toolStore";
 // ── 权限检查辅助 ──
 
 export async function requirePermission(
+  toolCallId: string,
   toolName: string,
   args: Record<string, unknown>,
   alwaysConfirm: boolean,
@@ -14,7 +15,7 @@ export async function requirePermission(
   const mode = store.permissionMode;
 
   if (alwaysConfirm) {
-    const approved = await store.waitForApproval(toolName, args);
+    const approved = await store.waitForApproval(toolCallId, toolName, args);
     if (!approved) throw new Error(`用户拒绝了 ${toolName} 调用`);
     return;
   }
@@ -25,7 +26,7 @@ export async function requirePermission(
       if (mode === "first_time" && store.firstTimeApproved.has(toolName)) {
         return;
       }
-      const approved = await store.waitForApproval(toolName, args);
+      const approved = await store.waitForApproval(toolCallId, toolName, args);
       if (!approved) throw new Error(`用户拒绝了 ${toolName} 调用`);
       useToolStore.setState({
         firstTimeApproved: new Set(store.firstTimeApproved).add(toolName),
@@ -47,8 +48,8 @@ export const builtinTools = {
     inputSchema: z.object({
       path: z.string().describe("文件的绝对路径"),
     }),
-    execute: async ({ path }) => {
-      await requirePermission("read_file", { path }, false);
+    execute: async ({ path }, options) => {
+      await requirePermission(options.toolCallId, "read_file", { path }, false);
       try {
         const result = await invoke<{ success: boolean; content: string }>(
           "read_file",
@@ -69,8 +70,8 @@ export const builtinTools = {
       path: z.string().describe("文件的绝对路径"),
       content: z.string().describe("要写入的文件内容"),
     }),
-    execute: async ({ path, content }) => {
-      await requirePermission("write_file", { path }, false);
+    execute: async ({ path, content }, options) => {
+      await requirePermission(options.toolCallId, "write_file", { path }, false);
       try {
         const result = await invoke<{ success: boolean; content: string }>(
           "write_file",
@@ -94,8 +95,13 @@ export const builtinTools = {
         .describe("被替换的旧文本（必须是文件中存在的且唯一的字符串）"),
       new_string: z.string().describe("替换后的新文本"),
     }),
-    execute: async ({ path, old_string, new_string }) => {
-      await requirePermission("edit_file", { path }, false);
+    execute: async ({ path, old_string, new_string }, options) => {
+      await requirePermission(
+        options.toolCallId,
+        "edit_file",
+        { path },
+        false,
+      );
       try {
         const result = await invoke<{ success: boolean; content: string }>(
           "edit_file",
@@ -115,8 +121,8 @@ export const builtinTools = {
     inputSchema: z.object({
       path: z.string().describe("要删除的文件绝对路径"),
     }),
-    execute: async ({ path }) => {
-      await requirePermission("delete_file", { path }, true);
+    execute: async ({ path }, options) => {
+      await requirePermission(options.toolCallId, "delete_file", { path }, true);
       try {
         const result = await invoke<{ success: boolean; content: string }>(
           "delete_file",
@@ -140,8 +146,13 @@ export const builtinTools = {
         .optional()
         .describe("可选，glob 过滤模式，如 '**/*.ts'"),
     }),
-    execute: async ({ path, glob }) => {
-      await requirePermission("list_directory", { path }, false);
+    execute: async ({ path, glob }, options) => {
+      await requirePermission(
+        options.toolCallId,
+        "list_directory",
+        { path },
+        false,
+      );
       try {
         const result = await invoke<{ success: boolean; content: string }>(
           "list_directory",
@@ -165,8 +176,13 @@ export const builtinTools = {
         .optional()
         .describe("可选，搜索起始目录，默认为工作区根目录"),
     }),
-    execute: async ({ pattern, path }) => {
-      await requirePermission("search_file", { pattern, path }, false);
+    execute: async ({ pattern, path }, options) => {
+      await requirePermission(
+        options.toolCallId,
+        "search_file",
+        { pattern, path },
+        false,
+      );
       try {
         const result = await invoke<{ success: boolean; content: string }>(
           "search_file",
@@ -191,8 +207,13 @@ export const builtinTools = {
         .describe("可选，搜索起始目录，默认为工作区根目录"),
       glob: z.string().optional().describe("可选，文件过滤模式，如 '*.ts'"),
     }),
-    execute: async ({ pattern, path, glob }) => {
-      await requirePermission("search_content", { pattern, path }, false);
+    execute: async ({ pattern, path, glob }, options) => {
+      await requirePermission(
+        options.toolCallId,
+        "search_content",
+        { pattern, path },
+        false,
+      );
       try {
         const result = await invoke<{ success: boolean; content: string }>(
           "search_content",
@@ -220,8 +241,13 @@ export const builtinTools = {
         .optional()
         .describe("可选，超时秒数（默认 30s）"),
     }),
-    execute: async ({ command, cwd, timeout }) => {
-      await requirePermission("execute_command", { command, cwd }, true);
+    execute: async ({ command, cwd, timeout }, options) => {
+      await requirePermission(
+        options.toolCallId,
+        "execute_command",
+        { command, cwd },
+        true,
+      );
       try {
         const result = await invoke<{
           success: boolean;
@@ -245,8 +271,8 @@ export const builtinTools = {
     inputSchema: z.object({
       url: z.string().describe("要打开的 URL，如 'http://localhost:5173'"),
     }),
-    execute: async ({ url }) => {
-      await requirePermission("preview_url", { url }, false);
+    execute: async ({ url }, options) => {
+      await requirePermission(options.toolCallId, "preview_url", { url }, false);
       try {
         const result = await invoke<{ success: boolean; content: string }>(
           "preview_url",

@@ -119,9 +119,13 @@ export function mcpToolToAISDK(
     [toolName]: (tool as any)({
       description: mcpTool.description ?? `MCP 工具: ${mcpTool.name}`,
       parameters: jsonSchemaToZod(mcpTool.inputSchema),
-      execute: async (args: unknown) => {
+      execute: async (
+        args: unknown,
+        options: { toolCallId: string },
+      ) => {
         // 复用现有权限审批系统
         await requirePermission(
+          options.toolCallId,
           `mcp:${mcpTool.serverId}:${mcpTool.name}`,
           { toolName: mcpTool.name, args } as Record<string, unknown>,
           false,

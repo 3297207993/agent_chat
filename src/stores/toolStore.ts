@@ -17,17 +17,20 @@ interface ToolStore {
 
   /**
    * 等待用户审批。
-   * 创建一个 Promise 存入队列，UI 层监听队列变化弹出对话框。
+   * 创建一个 Promise 存入队列，UI 层监听队列变化弹出内联确认按钮。
    * 用户点击后 Promise resolve，execute() 继续执行。
    */
   waitForApproval: (
+    toolCallId: string,
     toolName: string,
     args: Record<string, unknown>,
   ) => Promise<boolean>;
 
+  /** 统一处理审批结果：resolve 对应 Promise 并从队列移除 */
+  resolveApproval: (id: string, approved: boolean) => void;
 }
 
-export const useToolStore = create<ToolStore>((set) => ({
+export const useToolStore = create<ToolStore>((set, get) => ({
   // ── 权限 ──
   permissionMode: "always_ask",
   setPermissionMode: (mode) => set({ permissionMode: mode }),
@@ -48,10 +51,11 @@ export const useToolStore = create<ToolStore>((set) => ({
       approvalQueue: state.approvalQueue.filter((r) => r.id !== id),
     })),
 
-  waitForApproval: (toolName, args) => {
+  waitForApproval: (toolCallId, toolName, args) => {
     return new Promise<boolean>((resolve) => {
       const request: ApprovalRequest = {
         id: crypto.randomUUID(),
+        toolCallId,
         toolName,
         args,
         resolve,
@@ -61,5 +65,14 @@ export const useToolStore = create<ToolStore>((set) => ({
         approvalQueue: [...state.approvalQueue, request],
       }));
     });
+  },
+
+  resolveApproval: (id, approved) => {
+    const { approvalQueue, removeApprovalRequest } = get();
+    const req = approvalQueue.find((r) => r.id === id);
+    if (req) {
+      req.resolve(approved);
+      removeApprovalRequest(id);
+    }
   },
 }));

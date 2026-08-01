@@ -1,5 +1,7 @@
 import { memo } from "react";
 import type { Message, MessageContent } from "@/types/chat";
+import type { ApprovalRequest } from "@/types/tool";
+import { useToolStore } from "@/stores/toolStore";
 import ReasoningBlock from "./ReasoningBlock";
 import ToolCallCard from "./ToolCallCard";
 import CodeBlock from "./CodeBlock";
@@ -12,7 +14,15 @@ interface Props {
   message: Message;
 }
 
-function MessageContentRenderer({ content }: { content: MessageContent[] }) {
+function MessageContentRenderer({
+  content,
+  approvalQueue,
+  resolveApproval,
+}: {
+  content: MessageContent[];
+  approvalQueue: ApprovalRequest[];
+  resolveApproval: (id: string, approved: boolean) => void;
+}) {
   return (
     <>
       {content.map((block, i) => {
@@ -50,16 +60,32 @@ function MessageContentRenderer({ content }: { content: MessageContent[] }) {
             );
           case "reasoning":
             return <ReasoningBlock key={i} text={block.text} />;
-          case "tool_call":
+          case "tool_call": {
+            const approval = approvalQueue.find(
+              (a) => a.toolCallId === block.toolCallId,
+            );
             return (
               <ToolCallCard
                 key={i}
                 toolName={block.toolName}
                 args={block.args}
                 result={block.result}
-                status={block.result ? "done" : "running"}
+                status={
+                  approval ? "waiting" : block.result ? "done" : "running"
+                }
+                onApprove={
+                  approval
+                    ? () => resolveApproval(approval.id, true)
+                    : undefined
+                }
+                onReject={
+                  approval
+                    ? () => resolveApproval(approval.id, false)
+                    : undefined
+                }
               />
             );
+          }
           default:
             return null;
         }
@@ -69,6 +95,8 @@ function MessageContentRenderer({ content }: { content: MessageContent[] }) {
 }
 
 function ChatMessage({ message }: Props) {
+  const approvalQueue = useToolStore((s) => s.approvalQueue);
+  const resolveApproval = useToolStore((s) => s.resolveApproval);
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
 
@@ -103,7 +131,11 @@ function ChatMessage({ message }: Props) {
         </div>
 
         <div className="message-content">
-          <MessageContentRenderer content={message.content} />
+          <MessageContentRenderer
+            content={message.content}
+            approvalQueue={approvalQueue}
+            resolveApproval={resolveApproval}
+          />
         </div>
 
         {/* Actions */}

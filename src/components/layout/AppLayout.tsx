@@ -9,7 +9,6 @@ import {
 import TopBar from "./TopBar";
 import Sidebar from "./Sidebar";
 import RightPanel from "./RightPanel";
-import PermissionDialog from "@/components/tools/PermissionDialog";
 
 import { useUIStore, type PanelLayout } from "@/stores/uiStore";
 
@@ -123,8 +122,6 @@ export default function AppLayout() {
           </Panel>
         </Group>
       </div>
-      {/* 全局工具调用审批弹窗 */}
-      <PermissionDialog />
     </div>
   );
 }
