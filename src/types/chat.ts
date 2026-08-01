@@ -25,7 +25,7 @@ export interface Conversation {
 export interface Message {
   id: number;
   conversationId: string;
-  role: "user" | "assistant" | "system" | "tool";
+  role: "user" | "assistant" | "system";
   content: MessageContent[];
   parentId?: string;
   tokenCount: number;
@@ -36,5 +36,4 @@ export interface Message {
 export type MessageContent =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
-  | { type: "tool_call"; toolCallId: string; toolName: string; args: Record<string, unknown>; result?: string }
-  | { type: "tool_result"; toolCallId: string; toolName: string; result: string };
+  | { type: "tool_call"; toolCallId: string; toolName: string; args: Record<string, unknown>; result?: string };

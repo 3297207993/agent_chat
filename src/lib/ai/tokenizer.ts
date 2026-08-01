@@ -28,7 +28,6 @@ export function estimateTokens(text: string): number {
  * 估算单条消息的 token 数（完整体积，保守上限）：
  * - text / reasoning：按原文估算
  * - tool_call：工具名 + args（JSON 序列化）+ 已回填的 result
- * - tool_result：工具名 + result
  */
 export function estimateMessageTokens(msg: Message): number {
   let total = 0;
@@ -46,9 +45,6 @@ export function estimateMessageTokens(msg: Message): number {
         total += estimateTokens(`${c.toolName} ${argsText}${resultText}`);
         break;
       }
-      case "tool_result":
-        total += estimateTokens(`${c.toolName} ${c.result}`);
-        break;
     }
   }
   return total;

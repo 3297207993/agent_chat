@@ -27,8 +27,8 @@ function parseToolResultOutput(
  * 内部消息的 content 块与 AI SDK 的消息模型不同：
  * - text        → TextPart
  * - reasoning   → ReasoningPart（仅 assistant）
- * - tool_call   → ToolCallPart（assistant），其附带 result 会被拆出回注
- * - tool_result → ToolResultPart，合并为独立的 role: "tool" 消息
+ * - tool_call   → ToolCallPart（assistant），其内联的 result 会被拆出回注
+ *   为独立的 role: "tool" 消息
  *
  * 处理原则：
  * 1. tool-call 必须与 tool-result 配对：result 以 role: "tool" 消息的形式
@@ -112,21 +112,6 @@ export function convertToAISDKMessages(messages: Message[]): ModelMessage[] {
         }
         if (parts.length > 0) {
           result.push({ role: "assistant", content: parts });
-        }
-        break;
-      }
-
-      case "tool": {
-        // 内部模型通常把 tool_result 挂在 assistant 的 tool_call 上，
-        // 这里兜底处理独立的 role: "tool" 消息
-        for (const c of msg.content) {
-          if (c.type === "tool_result") {
-            pendingResults.push({
-              toolCallId: c.toolCallId,
-              toolName: c.toolName,
-              result: c.result,
-            });
-          }
         }
         break;
       }

@@ -60,16 +60,6 @@ function MessageContentRenderer({ content }: { content: MessageContent[] }) {
                 status={block.result ? "done" : "running"}
               />
             );
-          case "tool_result":
-            return (
-              <ToolCallCard
-                key={i}
-                toolName={block.toolName}
-                args={{}}
-                result={block.result}
-                status="done"
-              />
-            );
           default:
             return null;
         }

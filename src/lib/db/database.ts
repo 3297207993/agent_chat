@@ -17,7 +17,7 @@ export interface ConversationRow {
 export interface MessageRow {
   id?: number; // Dexie 自增主键，新增时不传
   conversationId: string;
-  role: "user" | "assistant" | "system" | "tool";
+  role: "user" | "assistant" | "system";
   content: string; // JSON.stringify(MessageContent[])
   parentId?: string;
   tokenCount: number;
