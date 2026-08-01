@@ -13,6 +13,8 @@ interface UIState {
   fontSize: number;
   /** 上次保存的面板布局（含折叠状态），用于重启后恢复 */
   layout: PanelLayout;
+  /** 侧边栏当前选中的分组：分类 id，或 "all" 表示全部 */
+  activeCategory: string;
 
   setTheme: (theme: Theme) => void;
   setSidebarOpen: (open: boolean) => void;
@@ -21,6 +23,7 @@ interface UIState {
   toggleRightPanel: () => void;
   setFontSize: (size: number) => void;
   setLayout: (layout: PanelLayout) => void;
+  setActiveCategory: (categoryId: string) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -31,6 +34,7 @@ export const useUIStore = create<UIState>()(
       rightPanelOpen: false,
       fontSize: 14,
       layout: {},
+      activeCategory: "all",
 
       setTheme: (theme) => {
         set({ theme });
@@ -53,6 +57,8 @@ export const useUIStore = create<UIState>()(
       toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
       setFontSize: (fontSize) => set({ fontSize }),
       setLayout: (layout) => set({ layout }),
+      setActiveCategory: (categoryId) =>
+        set((s) => (s.activeCategory === categoryId ? s : { activeCategory: categoryId })),
     }),
     { name: "ui-store" }
   )

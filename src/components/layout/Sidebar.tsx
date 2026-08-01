@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 export default function Sidebar() {
-  const { toggleSidebar } = useUIStore();
+  const { toggleSidebar, activeCategory, setActiveCategory } = useUIStore();
   const {
     conversations,
     currentConversationId,
@@ -37,7 +37,6 @@ export default function Sidebar() {
   } = useCategoryStore();
 
   const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("all");
   const [editingCategories, setEditingCategories] = useState(false);
 
   // Context menu state

@@ -7,6 +7,7 @@ import {
   deleteCategory as dbDelete,
   toCategory,
 } from "@/lib/db/categoryDB";
+import { useUIStore } from "@/stores/uiStore";
 
 const DEFAULT_COLORS = ["#58a6ff", "#3fb950", "#d2991d", "#a371f7", "#f85149", "#db6d28", "#1f6feb", "#6e7681"];
 
@@ -63,6 +64,10 @@ export const useCategoryStore = create<CategoryState>((set, get) => ({
     set((s) => ({
       categories: s.categories.filter((c) => c.id !== id),
     }));
+    // 若当前选中的分组正是被删除的分类，重置回"全部"，避免新建对话落到失效分组
+    if (useUIStore.getState().activeCategory === id) {
+      useUIStore.getState().setActiveCategory("all");
+    }
     await dbDelete(id);
   },
 

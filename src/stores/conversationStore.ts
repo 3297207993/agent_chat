@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/messageDB";
 import { resetDatabase } from "@/lib/db/database";
 import { estimateMessageTokens } from "@/lib/ai/tokenizer";
+import { useUIStore } from "@/stores/uiStore";
 
 // 自减计数器，生成运行时临时负 id，避免与 DB 自增 id 冲突
 let _msgIdCounter = 0;
@@ -33,7 +34,7 @@ interface ConversationState {
   setCurrentConversation: (id: string | null) => Promise<void>;
 
   // CRUD
-  createConversation: (title?: string) => string;
+  createConversation: (title?: string, categoryId?: string) => string;
   renameConversation: (id: string, title: string) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
   setCategory: (id: string, categoryId: string | undefined) => Promise<void>;
@@ -125,11 +126,20 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   // ── CRUD ──
 
-  createConversation: (title) => {
+  createConversation: (title, categoryId) => {
     const id = crypto.randomUUID();
+    // 人性化设定：新建对话时，若当前侧边栏选中了某个分组（非"全部"），
+    // 自动把新对话归入该分组；显式传入的 categoryId 优先
+    const resolvedCategoryId =
+      categoryId ??
+      (() => {
+        const active = useUIStore.getState().activeCategory;
+        return active && active !== "all" ? active : undefined;
+      })();
     const conversation: Conversation = {
       id,
       title: title || "新对话",
+      categoryId: resolvedCategoryId,
       modelId: "",
       providerId: "",
       ruleIds: [],
@@ -148,6 +158,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     dbCreate({
       id,
       title: conversation.title,
+      categoryId: conversation.categoryId,
       modelId: conversation.modelId,
       providerId: conversation.providerId,
       ruleIds: "[]",
