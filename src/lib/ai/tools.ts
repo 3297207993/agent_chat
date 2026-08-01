@@ -12,14 +12,28 @@ export async function requirePermission(
   alwaysConfirm: boolean,
 ): Promise<void> {
   const store = useToolStore.getState();
-  const mode = store.permissionMode;
 
+  // 1) 危险操作（execute_command / delete_file）：无论全局模式与工具覆盖，始终强制确认
   if (alwaysConfirm) {
     const approved = await store.waitForApproval(toolCallId, toolName, args);
     if (!approved) throw new Error(`用户拒绝了 ${toolName} 调用`);
     return;
   }
 
+  // 2) 按工具覆盖（优先级高于全局模式）
+  const override = store.toolOverrides[toolName] ?? "default";
+  if (override === "allow") return;
+  if (override === "deny") {
+    throw new Error(`工具 ${toolName} 已被用户禁用`);
+  }
+  if (override === "always_ask") {
+    const approved = await store.waitForApproval(toolCallId, toolName, args);
+    if (!approved) throw new Error(`用户拒绝了 ${toolName} 调用`);
+    return;
+  }
+
+  // 3) 全局模式
+  const mode = store.permissionMode;
   switch (mode) {
     case "always_ask":
     case "first_time": {
@@ -33,7 +47,7 @@ export async function requirePermission(
       });
       return;
     }
-    case "workspace_trust":
+    case "trust_all":
       return;
   }
 }
