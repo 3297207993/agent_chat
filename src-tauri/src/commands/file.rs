@@ -91,6 +91,68 @@ pub async fn delete_file(path: String) -> Result<CommandResult, String> {
     })
 }
 
+/// 递归复制文件或目录到目标位置。
+///
+/// - src 为文件时：复制到 dst（dst 为完整目标文件路径）
+/// - src 为目录时：递归复制整棵树到 dst（dst 为目标目录，不存在则创建）
+/// - dst 已存在时：先删除再复制（覆盖语义，用于 skill 导入/导出更新）
+#[tauri::command]
+pub async fn copy_directory(
+    src: String,
+    dst: String,
+) -> Result<CommandResult, String> {
+    security::check_path(&src)?;
+    security::check_path(&dst)?;
+
+    if src == dst {
+        return Err("源路径与目标路径相同".to_string());
+    }
+
+    let src_meta = std::fs::metadata(&src).map_err(|e| format!("访问源路径失败: {}", e))?;
+
+    if src_meta.is_dir() {
+        // 覆盖语义：目标已存在先删除
+        if Path::new(&dst).exists() {
+            std::fs::remove_dir_all(&dst).map_err(|e| format!("清理目标目录失败: {}", e))?;
+        }
+        std::fs::create_dir_all(&dst).map_err(|e| format!("创建目标目录失败: {}", e))?;
+        copy_tree(Path::new(&src), Path::new(&dst))?;
+    } else {
+        if let Some(parent) = Path::new(&dst).parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("创建父目录失败: {}", e))?;
+            }
+        }
+        std::fs::copy(&src, &dst).map_err(|e| format!("复制文件失败: {}", e))?;
+    }
+
+    Ok(CommandResult {
+        success: true,
+        content: format!("已复制到: {}", dst),
+        error: None,
+    })
+}
+
+/// 递归复制目录树（内部函数）。
+fn copy_tree(src: &Path, dst: &Path) -> Result<(), String> {
+    for entry in std::fs::read_dir(src).map_err(|e| format!("读取目录失败: {}", e))? {
+        let entry = entry.map_err(|e| format!("读取目录项失败: {}", e))?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if src_path.is_dir() {
+            std::fs::create_dir_all(&dst_path)
+                .map_err(|e| format!("创建目录失败: {}", e))?;
+            copy_tree(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path)
+                .map_err(|e| format!("复制文件失败: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
 /// 列出目录内容，支持可选的 glob 过滤。
 #[tauri::command]
 pub async fn list_directory(

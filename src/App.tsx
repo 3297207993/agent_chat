@@ -12,6 +12,7 @@ import { useConversationStore } from "@/stores/conversationStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { useMcpStore } from "@/stores/mcpStore";
 import { useRuleStore } from "@/stores/ruleStore";
+import { useSkillStore } from "@/stores/skillStore";
 
 function App() {
   const loadConversations = useConversationStore((s) => s.loadFromDB);
@@ -22,6 +23,8 @@ function App() {
     loadConversations();
     loadCategories();
     loadRules();
+    // 扫描 skills 目录，生成 Discovery 索引
+    useSkillStore.getState().loadSkills();
     // 初始化 MCP：从 DB 加载 Server 配置 → 自动连接已启用的
     useMcpStore.getState().initialize().then(() => {
       useMcpStore.getState().connectAllEnabled();
