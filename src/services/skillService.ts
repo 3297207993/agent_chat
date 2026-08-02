@@ -101,6 +101,66 @@ export async function loadSkillRaw(name: string): Promise<string> {
   return res.content;
 }
 
+/**
+ * 递归列出 skill 目录内所有文件（相对路径，不含目录本身）。
+ * 用于 read_skill 工具返回"全貌清单"，让模型知道有哪些配套资源可读。
+ */
+export async function listSkillFiles(name: string): Promise<string[]> {
+  if (!isValidSkillName(name)) throw new Error(`非法 skill 名称: ${name}`);
+  const files: string[] = [];
+
+  const walk = async (rel: string) => {
+    const dir = rel
+      ? `${await getSkillsDir()}/${name}/${rel}`
+      : `${await getSkillsDir()}/${name}`;
+    const res = await invoke<{ success: boolean; content: string; error: string | null }>(
+      "list_directory",
+      { path: dir, glob: null },
+    );
+    if (!res.success) return; // 目录不存在等：按空处理
+    for (const entry of res.content.split("\n").map((l) => l.trim()).filter(Boolean)) {
+      if (entry.endsWith("/")) {
+        // 子目录：递归
+        const sub = entry.slice(0, -1);
+        await walk(rel ? `${rel}/${sub}` : sub);
+      } else {
+        files.push(rel ? `${rel}/${entry}` : entry);
+      }
+    }
+  };
+
+  await walk("");
+  return files.sort();
+}
+
+/**
+ * 校验 skill 内相对路径（read_skill 的 file 参数）：
+ * 必须是相对路径、不能越出 skill 目录（禁 ..、.、空段、绝对路径、盘符）。
+ */
+function isSafeSkillRelPath(relPath: string): boolean {
+  const p = relPath.trim();
+  if (!p) return false;
+  const normalized = p.replace(/\\/g, "/");
+  if (normalized.startsWith("/")) return false;
+  if (/^[a-zA-Z]:/.test(normalized)) return false;
+  const parts = normalized.split("/");
+  return parts.every((part) => part !== ".." && part !== "." && part !== "");
+}
+
+/** 读取 skill 目录内相对路径文件（配合 listSkillFiles 使用，防目录穿越） */
+export async function readSkillFile(name: string, relPath: string): Promise<string> {
+  if (!isValidSkillName(name)) throw new Error(`非法 skill 名称: ${name}`);
+  if (!isSafeSkillRelPath(relPath)) {
+    throw new Error("非法文件路径（仅允许 skill 内的相对路径）");
+  }
+  const res = await invoke<{ success: boolean; content: string; error: string | null }>(
+    "read_file",
+    { path: `${await getSkillsDir()}/${name}/${relPath}` },
+  );
+  if (!res.success) throw new Error(res.error || "读取文件失败");
+  return res.content;
+}
+
 /** 保存 skill（写入 SKILL.md，覆盖） */
 export async function saveSkill(name: string, raw: string): Promise<void> {
   if (!isValidSkillName(name)) throw new Error(`非法 skill 名称: ${name}`);

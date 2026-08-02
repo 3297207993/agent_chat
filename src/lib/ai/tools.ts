@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { invoke } from "@tauri-apps/api/core";
 import { useToolStore } from "@/stores/toolStore";
-import { loadSkillRaw } from "@/services/skillService";
+import { loadSkillRaw, listSkillFiles, readSkillFile } from "@/services/skillService";
 import { parseSkillFile } from "@/lib/skills/parser";
 
 // ── 权限检查辅助 ──
@@ -306,19 +306,38 @@ export const builtinTools = {
   // 读取应用自己的 skills 目录（路径由 name 推导并受 isValidSkillName 约束），无需用户确认。
   read_skill: tool({
     description:
-      "读取指定 Skill 的完整指令（SKILL.md 正文）。当用户任务与可用技能列表中的某个技能匹配时，调用此工具获取该技能的详细指令，然后严格按照指令执行。",
+      "读取指定 Skill 的完整指令（SKILL.md 正文）及其配套文件清单。当用户任务与可用技能列表中的某个技能匹配时，调用此工具（不传 file）获取该技能的详细指令，然后严格按照指令执行；指令中引用的配套资源（如 references/xxx.md、scripts/xxx.py），用 file 参数按相对路径再次调用本工具读取。",
     inputSchema: z.object({
       name: z.string().describe("技能名称，与可用技能列表中的 name 完全一致"),
+      file: z
+        .string()
+        .optional()
+        .describe(
+          "可选：skill 内的相对文件路径（如 references/REFERENCE.md）。不传时返回指令正文 + 文件清单；传入时返回该文件内容",
+        ),
     }),
-    execute: async ({ name }) => {
+    execute: async ({ name, file }) => {
       try {
+        if (file) {
+          // 读取配套资源文件（受控入口，仅限 skill 目录内相对路径）
+          const content = await readSkillFile(name, file);
+          return content;
+        }
+
+        // 默认：SKILL.md 正文 + 配套文件清单（渐进式披露：先看全貌，再按需读）
         const raw = await loadSkillRaw(name);
         const { skill, error } = parseSkillFile(raw, name);
         if (error || !skill) {
           throw new Error(error || "解析失败");
         }
-        // 只返回正文（元信息已在 Discovery 提供），减少 token 开销
-        return skill.content || "（该技能正文为空）";
+        const files = await listSkillFiles(name);
+        const listing =
+          files.length > 0
+            ? `\n\n该技能配套文件清单（可用 file 参数按相对路径读取）：\n${files
+                .map((f) => `- ${f}`)
+                .join("\n")}`
+            : "";
+        return (skill.content || "（该技能正文为空）") + listing;
       } catch (e) {
         throw new Error(`读取技能失败: ${e instanceof Error ? e.message : String(e)}`);
       }
