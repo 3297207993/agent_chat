@@ -2,6 +2,8 @@ import { tool } from "ai";
 import { z } from "zod";
 import { invoke } from "@tauri-apps/api/core";
 import { useToolStore } from "@/stores/toolStore";
+import { loadSkillRaw } from "@/services/skillService";
+import { parseSkillFile } from "@/lib/skills/parser";
 
 // ── 权限检查辅助 ──
 
@@ -295,6 +297,30 @@ export const builtinTools = {
         return JSON.stringify(result);
       } catch (e) {
         throw new Error(`打开 URL 失败: ${e}`);
+      }
+    },
+  }),
+
+  // ── Skill 读取（渐进式披露的 Activation 阶段） ──
+  // 模型在 [可用技能] Discovery 列表中匹配到任务后，调用此工具获取完整指令。
+  // 读取应用自己的 skills 目录（路径由 name 推导并受 isValidSkillName 约束），无需用户确认。
+  read_skill: tool({
+    description:
+      "读取指定 Skill 的完整指令（SKILL.md 正文）。当用户任务与可用技能列表中的某个技能匹配时，调用此工具获取该技能的详细指令，然后严格按照指令执行。",
+    inputSchema: z.object({
+      name: z.string().describe("技能名称，与可用技能列表中的 name 完全一致"),
+    }),
+    execute: async ({ name }) => {
+      try {
+        const raw = await loadSkillRaw(name);
+        const { skill, error } = parseSkillFile(raw, name);
+        if (error || !skill) {
+          throw new Error(error || "解析失败");
+        }
+        // 只返回正文（元信息已在 Discovery 提供），减少 token 开销
+        return skill.content || "（该技能正文为空）";
+      } catch (e) {
+        throw new Error(`读取技能失败: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
   }),

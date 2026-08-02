@@ -5,50 +5,51 @@ import { Zap, X } from "lucide-react";
 
 /**
  * 右侧面板「技能」标签页：
- * 展示当前对话已激活的 Skill（自动 @ 声明 / 手动 / 命令激活），可取消激活。
+ * 展示当前对话使用过的 Skill（模型调用 read_skill 工具时记录）。
+ * 纯展示记录，不影响上下文注入。
  */
 export default function SkillsTab() {
   const currentConversationId = useConversationStore((s) => s.currentConversationId);
   // 订阅稳定的数组引用，避免每次 store 更新重建数组导致多余重渲染
-  const activeNames = useSkillStore((s) =>
-    currentConversationId ? s.activeSkillIds[currentConversationId] : undefined,
+  const usedNames = useSkillStore((s) =>
+    currentConversationId ? s.usedSkillIds[currentConversationId] : undefined,
   );
   const allSkills = useSkillStore((s) => s.skills);
-  const deactivateSkill = useSkillStore((s) => s.deactivateSkill);
-  const clearActiveSkills = useSkillStore((s) => s.clearActiveSkills);
+  const removeSkillUse = useSkillStore((s) => s.removeSkillUse);
+  const clearUsedSkills = useSkillStore((s) => s.clearUsedSkills);
 
-  const activeSkills = useMemo(() => {
-    if (!activeNames) return [];
-    return activeNames
+  const usedSkills = useMemo(() => {
+    if (!usedNames) return [];
+    return usedNames
       .map((n) => allSkills.find((s) => s.name === n))
       .filter((s): s is NonNullable<typeof s> => s !== undefined);
-  }, [activeNames, allSkills]);
+  }, [usedNames, allSkills]);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="text-[11px] font-semibold text-[#8b949e] uppercase tracking-wide">
-          已激活技能
+          使用过的技能
         </h4>
-        {activeSkills.length > 0 && (
+        {usedSkills.length > 0 && (
           <button
-            onClick={() => currentConversationId && clearActiveSkills(currentConversationId)}
+            onClick={() => currentConversationId && clearUsedSkills(currentConversationId)}
             className="text-[10px] text-[#6e7681] hover:text-[#f85149]"
           >
-            全部取消
+            清空记录
           </button>
         )}
       </div>
 
-      {activeSkills.length === 0 ? (
+      {usedSkills.length === 0 ? (
         <p className="text-xs text-[#6e7681] leading-relaxed">
-          当前对话未激活任何技能。
+          当前对话尚未使用技能。
           <br />
-          模型会在任务匹配时以 @技能名 自动激活，也可输入 /技能名 手动激活。
+          模型会在任务匹配时调用 read_skill 工具读取并执行，也可输入 /技能名 指定使用。
         </p>
       ) : (
         <div className="space-y-2">
-          {activeSkills.map((s) => (
+          {usedSkills.map((s) => (
             <div
               key={s.name}
               className="flex items-start gap-2 bg-[#0d1117] border border-[#30363d] rounded-lg p-2.5"
@@ -61,8 +62,8 @@ export default function SkillsTab() {
                 </p>
               </div>
               <button
-                onClick={() => currentConversationId && deactivateSkill(currentConversationId, s.name)}
-                title="取消激活"
+                onClick={() => currentConversationId && removeSkillUse(currentConversationId, s.name)}
+                title="移除记录"
                 className="text-[#6e7681] hover:text-[#f85149] shrink-0"
               >
                 <X size={13} />

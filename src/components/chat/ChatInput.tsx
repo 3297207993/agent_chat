@@ -4,7 +4,7 @@ import { useProviderStore } from "@/stores/providerStore";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { useUIStore } from "@/stores/uiStore";
-import { useSkillStore, loadSkillContent } from "@/stores/skillStore";
+import { useSkillStore } from "@/stores/skillStore";
 import { createAgentStream } from "@/lib/ai/agent";
 import { estimateTokens } from "@/lib/ai/tokenizer";
 import type { Message, MessageContent } from "@/types/chat";
@@ -44,28 +44,20 @@ export default function ChatInput() {
     let text = input.trim();
     if (!text || !currentConversationId || isStreaming) return;
 
-    // 0. 手动激活命令解析（行首 /skill-name，可多个）
-    //    命中 → 激活 skill 并从输入中移除命令；未命中（不存在/未启用）→ 原样保留
+    // 0. /name 前缀轻量翻译（非激活机制）：
+    //    用户明确指定技能 → 翻译成自然语言，模型自主决定调用 read_skill；
+    //    未知命令原样保留（可能只是普通文本）
     const skillStore = useSkillStore.getState();
-    const manualActivated: string[] = [];
-    let remaining = text;
-    for (;;) {
-      const m = remaining.match(/^\/[a-z0-9-]+(?=[\s\n]|$)/);
-      if (!m) break;
+    const m = text.match(/^\/[a-z0-9-]+(?=[\s\n]|$)/);
+    if (m) {
       const name = m[0].slice(1);
       const skill = skillStore.skills.find((s) => s.name === name);
       if (skill && skillStore.isEnabled(name)) {
-        skillStore.activateSkill(currentConversationId, name);
-        manualActivated.push(name);
-        remaining = remaining.slice(m[0].length).trimStart();
-      } else {
-        break; // 未知命令：保留原文
+        const rest = text.slice(m[0].length).trim();
+        text = rest
+          ? `请使用技能 ${name} 来完成：${rest}`
+          : `请使用技能 ${name} 来完成当前任务`;
       }
-    }
-    if (manualActivated.length > 0) {
-      text =
-        remaining ||
-        `已激活技能：${manualActivated.join("、")}。请按对应技能指令开始执行。`;
     }
 
     const providerConfig = getActiveProvider();
@@ -151,31 +143,17 @@ export default function ChatInput() {
       .join("\n\n");
     const globalSystemPrompt = useUIStore.getState().globalSystemPrompt;
 
-    // 5.5 Skill 注入（Discovery 列表 + 已激活技能全文，放最末占 recency 优势）
+    // 5.5 Skill 注入：仅 Discovery 列表（name + description），放最末占 recency 优势
+    //    全文由模型自主调用 read_skill 获取（渐进式披露），应用层不做全文注入
     const skillParts: string[] = [];
-
-    // ① Discovery：仅 name + description，够模型判断相关性
     const enabledSkills = skillStore.getEnabledSkills();
     if (enabledSkills.length > 0) {
       const list = enabledSkills
         .map((s) => `- ${s.name}: ${s.description}`)
         .join("\n");
       skillParts.push(
-        `[可用技能]\n${list}\n\n当任务与某个技能匹配时，在回复的第一行声明 @技能名 以激活该技能，然后按其指令执行。`,
+        `[可用技能]\n${list}\n\n当用户任务与某个技能匹配时，调用 read_skill 工具（参数 name 传入技能名）获取完整指令，然后严格按照指令执行。`,
       );
-    }
-
-    // ② Activation：已激活技能的完整 SKILL.md 正文（懒加载，磁盘读取）
-    const activeSkills = skillStore.getActiveSkills(currentConversationId);
-    if (activeSkills.length > 0) {
-      for (const s of activeSkills) {
-        const { content, error } = await loadSkillContent(s.name);
-        if (content) {
-          skillParts.push(`[已激活技能: ${s.name}]\n${content}`);
-        } else if (error) {
-          skillParts.push(`[已激活技能: ${s.name}]\n（加载失败：${error}）`);
-        }
-      }
     }
 
     const skillPrompt = skillParts.join("\n\n");
@@ -188,9 +166,6 @@ export default function ChatInput() {
       .filter(Boolean)
       .join("\n\n");
 
-    // 自动激活检测状态（每次发送独立；首行 @skill-name 声明只检测一次）
-    let activationChecked = false;
-
     // 6. 调用 Agent 循环（支持工具调用 + maxSteps 多步交互）
     createAgentStream(
       providerConfig,
@@ -199,36 +174,22 @@ export default function ChatInput() {
       {
         onToken: (token) => {
           appendToLastAssistantMessage(currentConversationId, token);
-
-          // ③ Activation：解析回复首行 @skill-name 自动激活声明
-          //    仅检查消息开头的第一个 token（名字完整后判定），随后停止检测
-          if (!activationChecked) {
-            const state = useConversationStore.getState();
-            const msgs = state.messages[currentConversationId] || [];
-            const last = msgs[msgs.length - 1];
-            const text =
-              last?.content
-                .map((c) => (c.type === "text" && c.text ? c.text : ""))
-                .join("") ?? "";
-            const m = text.match(/^@([a-z0-9-]+)(?:[\s\n]|$)/);
-            if (m) {
-              const name = m[1];
-              const skill = skillStore.skills.find((s) => s.name === name);
-              if (skill && skillStore.isEnabled(name)) {
-                skillStore.activateSkill(currentConversationId, name);
-              }
-              activationChecked = true;
-            } else if (!/^@[a-z0-9-]*$/.test(text)) {
-              // 开头不是（或不再是）@name 前缀：正常回复，停止检测
-              activationChecked = true;
-            }
-          }
         },
         onReasoning: (reasoning) => {
           appendReasoningToLastAssistantMessage(currentConversationId, reasoning);
         },
         onToolCall: (toolCallId, toolName, args) => {
           appendToolCallToMessage(currentConversationId, toolCallId, toolName, args);
+
+          // 模型调用 read_skill 即代表使用了该技能：
+          // 记录到 usedSkillIds 仅供右侧面板展示，不影响上下文
+          if (toolName === "read_skill") {
+            const name = String(args["name"] ?? "");
+            const skill = skillStore.skills.find((s) => s.name === name);
+            if (skill && skillStore.isEnabled(name)) {
+              skillStore.recordSkillUse(currentConversationId, name);
+            }
+          }
         },
         onToolResult: (toolCallId, toolName, result) => {
           updateToolResultInMessage(currentConversationId, toolCallId, toolName, result);
@@ -277,7 +238,7 @@ export default function ChatInput() {
             adjustHeight();
           }}
           onKeyDown={handleKeyDown}
-          placeholder="输入消息，/ 触发 Skill，@ 引用规则"
+          placeholder="输入消息，/技能名 指定使用某个技能"
           rows={1}
           className="w-full min-h-[48px] max-h-[200px] px-4 py-3 bg-transparent border-none text-sm text-[#e6edf3] placeholder-[#6e7681] resize-none outline-none leading-relaxed"
         />
@@ -301,13 +262,9 @@ export default function ChatInput() {
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#6e7681]">
               <kbd className="px-1 py-0.5 bg-[#21262d] border border-[#30363d] rounded-sm font-mono text-[10px]">
-                /
+                /技能名
               </kbd>{" "}
-              Skill &nbsp;
-              <kbd className="px-1 py-0.5 bg-[#21262d] border border-[#30363d] rounded-sm font-mono text-[10px]">
-                @
-              </kbd>{" "}
-              规则
+              指定使用技能
             </span>
 
             {isStreaming ? (

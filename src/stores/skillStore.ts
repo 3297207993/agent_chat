@@ -9,7 +9,7 @@ import {
   importSkill as svcImport,
   exportSkill as svcExport,
 } from "@/services/skillService";
-import { parseSkillFile, serializeSkill, isValidSkillName } from "@/lib/skills/parser";
+import { serializeSkill, isValidSkillName } from "@/lib/skills/parser";
 
 interface SkillState {
   // ── 运行时：Discovery 索引（启动扫描生成，不持久化） ──
@@ -22,8 +22,9 @@ interface SkillState {
   // ── 持久化：启用状态（缺省视为启用，不写进 SKILL.md） ──
   enabledMap: Record<string, boolean>;
 
-  // ── 持久化：激活状态（conversationId → 已激活 skill 名列表） ──
-  activeSkillIds: Record<string, string[]>;
+  // ── 持久化：本对话使用过的技能记录（纯 UI 展示用，不影响上下文注入） ──
+  // 模型每次自主调用 read_skill 时记录；上下文注入只依赖 Discovery 列表
+  usedSkillIds: Record<string, string[]>;
 
   // ── 扫描 ──
   loadSkills: () => Promise<void>;
@@ -58,11 +59,11 @@ interface SkillState {
   exportSkill: (name: string, dstDir: string) => Promise<{ ok: boolean; error?: string }>;
   getSkillRaw: (name: string) => Promise<string>;
 
-  // ── 激活状态（自动 @ 声明 + 手动 / 命令） ──
-  getActiveSkills: (conversationId: string) => SkillMeta[];
-  activateSkill: (conversationId: string, name: string) => void;
-  deactivateSkill: (conversationId: string, name: string) => void;
-  clearActiveSkills: (conversationId: string) => void;
+  // ── 使用记录（模型调用 read_skill / 用户指定时记录，仅 UI 展示） ──
+  getUsedSkills: (conversationId: string) => SkillMeta[];
+  recordSkillUse: (conversationId: string, name: string) => void;
+  removeSkillUse: (conversationId: string, name: string) => void;
+  clearUsedSkills: (conversationId: string) => void;
 }
 
 export const useSkillStore = create<SkillState>()(
@@ -73,7 +74,7 @@ export const useSkillStore = create<SkillState>()(
       scanErrors: [],
 
       enabledMap: {},
-      activeSkillIds: {},
+      usedSkillIds: {},
 
       // ── 扫描 ──
 
@@ -158,11 +159,11 @@ export const useSkillStore = create<SkillState>()(
           set((state) => {
             const enabledMap = { ...state.enabledMap };
             delete enabledMap[name];
-            const activeSkillIds: Record<string, string[]> = {};
-            for (const [cid, ids] of Object.entries(state.activeSkillIds)) {
-              activeSkillIds[cid] = ids.filter((n) => n !== name);
+            const usedSkillIds: Record<string, string[]> = {};
+            for (const [cid, ids] of Object.entries(state.usedSkillIds)) {
+              usedSkillIds[cid] = ids.filter((n) => n !== name);
             }
-            return { enabledMap, activeSkillIds };
+            return { enabledMap, usedSkillIds };
           });
           await get().loadSkills();
           return { ok: true };
@@ -195,39 +196,39 @@ export const useSkillStore = create<SkillState>()(
         return raw;
       },
 
-      // ── 激活状态 ──
+      // ── 使用记录 ──
 
-      getActiveSkills: (conversationId) => {
-        const names = get().activeSkillIds[conversationId] || [];
+      getUsedSkills: (conversationId) => {
+        const names = get().usedSkillIds[conversationId] || [];
         return names
           .map((n) => get().skills.find((s) => s.name === n))
           .filter((s): s is SkillMeta => s !== undefined);
       },
-      activateSkill: (conversationId, name) => {
-        const current = get().activeSkillIds[conversationId] || [];
+      recordSkillUse: (conversationId, name) => {
+        const current = get().usedSkillIds[conversationId] || [];
         if (current.includes(name)) return;
         set((state) => ({
-          activeSkillIds: {
-            ...state.activeSkillIds,
+          usedSkillIds: {
+            ...state.usedSkillIds,
             [conversationId]: [...current, name],
           },
         }));
       },
-      deactivateSkill: (conversationId, name) => {
+      removeSkillUse: (conversationId, name) => {
         set((state) => ({
-          activeSkillIds: {
-            ...state.activeSkillIds,
-            [conversationId]: (state.activeSkillIds[conversationId] || []).filter(
+          usedSkillIds: {
+            ...state.usedSkillIds,
+            [conversationId]: (state.usedSkillIds[conversationId] || []).filter(
               (n) => n !== name,
             ),
           },
         }));
       },
-      clearActiveSkills: (conversationId) => {
+      clearUsedSkills: (conversationId) => {
         set((state) => {
-          const next = { ...state.activeSkillIds };
+          const next = { ...state.usedSkillIds };
           delete next[conversationId];
-          return { activeSkillIds: next };
+          return { usedSkillIds: next };
         });
       },
     }),
@@ -235,20 +236,8 @@ export const useSkillStore = create<SkillState>()(
       name: "skill-store",
       partialize: (state) => ({
         enabledMap: state.enabledMap,
-        activeSkillIds: state.activeSkillIds,
+        usedSkillIds: state.usedSkillIds,
       }),
     },
   ),
 );
-
-/** 解析 skill 全文（Activation 时懒加载，供注入管线使用） */
-export async function loadSkillContent(name: string): Promise<{ content: string; error?: string }> {
-  try {
-    const raw = await loadSkillRaw(name);
-    const { skill, error } = parseSkillFile(raw, name);
-    if (error || !skill) return { content: "", error: error || "解析失败" };
-    return { content: skill.content };
-  } catch (e) {
-    return { content: "", error: e instanceof Error ? e.message : String(e) };
-  }
-}
