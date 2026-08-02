@@ -15,6 +15,8 @@ interface UIState {
   layout: PanelLayout;
   /** 侧边栏当前选中的分组：分类 id，或 "all" 表示全部 */
   activeCategory: string;
+  /** 全局系统提示词：对所有对话生效（对话级 systemPrompt 优先级更高，拼接在末尾） */
+  globalSystemPrompt: string;
 
   setTheme: (theme: Theme) => void;
   setSidebarOpen: (open: boolean) => void;
@@ -24,6 +26,7 @@ interface UIState {
   setFontSize: (size: number) => void;
   setLayout: (layout: PanelLayout) => void;
   setActiveCategory: (categoryId: string) => void;
+  setGlobalSystemPrompt: (prompt: string) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -35,6 +38,7 @@ export const useUIStore = create<UIState>()(
       fontSize: 14,
       layout: {},
       activeCategory: "all",
+      globalSystemPrompt: "",
 
       setTheme: (theme) => {
         set({ theme });
@@ -59,6 +63,7 @@ export const useUIStore = create<UIState>()(
       setLayout: (layout) => set({ layout }),
       setActiveCategory: (categoryId) =>
         set((s) => (s.activeCategory === categoryId ? s : { activeCategory: categoryId })),
+      setGlobalSystemPrompt: (globalSystemPrompt) => set({ globalSystemPrompt }),
     }),
     { name: "ui-store" }
   )

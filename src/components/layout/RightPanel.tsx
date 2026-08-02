@@ -4,7 +4,8 @@ import { useMcpStore } from "@/stores/mcpStore";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { useProviderStore } from "@/stores/providerStore";
-import { getContextLength } from "@/lib/ai/tokenizer";
+import { useUIStore } from "@/stores/uiStore";
+import { getContextLength, estimateTokens } from "@/lib/ai/tokenizer";
 import { builtinTools } from "@/lib/ai/tools";
 import {
   FileText,
@@ -31,12 +32,18 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 
 export default function RightPanel() {
   const [activeTab, setActiveTab] = useState<TabId>("context");
-  const { currentConversationId, messages } = useConversationStore();
+  const { currentConversationId, messages, conversations } = useConversationStore();
+  const globalSystemPrompt = useUIStore((s) => s.globalSystemPrompt);
   const modelConfig = useProviderStore((s) => s.getActiveModel());
 
   const currentMessages = currentConversationId
     ? messages[currentConversationId] || []
     : [];
+
+  const currentConversation = currentConversationId
+    ? conversations.find((c) => c.id === currentConversationId)
+    : undefined;
+  const convSystemPrompt = currentConversation?.systemPrompt;
 
   // 只累加已有 tokenCount 的消息（流式中的消息还没有 tokenCount，跳过，避免频繁实时估算）
   const totalTokens = currentMessages.reduce(
@@ -120,8 +127,45 @@ export default function RightPanel() {
               <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681] mb-2">
                 系统提示词
               </h3>
-              <div className="text-[12px] text-[#6e7681] italic">
-                未设置系统提示词
+              <div className="space-y-2">
+                {/* 全局系统提示词 */}
+                <div className="bg-[#0d1117] border border-[#30363d] rounded-md p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-medium text-[#8b949e]">全局</span>
+                    <span className="text-[10px] text-[#6e7681]">
+                      {globalSystemPrompt
+                        ? `${estimateTokens(globalSystemPrompt).toLocaleString()} tokens`
+                        : ""}
+                    </span>
+                  </div>
+                  {globalSystemPrompt ? (
+                    <p className="text-[11px] text-[#e6edf3] whitespace-pre-wrap break-words line-clamp-3">
+                      {globalSystemPrompt}
+                    </p>
+                  ) : (
+                    <div className="text-[11px] text-[#6e7681] italic">未设置</div>
+                  )}
+                </div>
+                {/* 对话系统提示词 */}
+                <div className="bg-[#0d1117] border border-[#30363d] rounded-md p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-medium text-[#8b949e]">
+                      对话{currentConversation ? `（${currentConversation.title}）` : ""}
+                    </span>
+                    <span className="text-[10px] text-[#6e7681]">
+                      {convSystemPrompt
+                        ? `${estimateTokens(convSystemPrompt).toLocaleString()} tokens`
+                        : ""}
+                    </span>
+                  </div>
+                  {convSystemPrompt ? (
+                    <p className="text-[11px] text-[#e6edf3] whitespace-pre-wrap break-words line-clamp-3">
+                      {convSystemPrompt}
+                    </p>
+                  ) : (
+                    <div className="text-[11px] text-[#6e7681] italic">未设置，跟随全局</div>
+                  )}
+                </div>
               </div>
             </section>
           </div>

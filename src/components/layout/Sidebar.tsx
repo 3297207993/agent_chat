@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { useUIStore } from "@/stores/uiStore";
+import { estimateTokens } from "@/lib/ai/tokenizer";
 import {
   Plus,
   Search,
@@ -15,6 +16,7 @@ import {
   Check,
   X,
   Settings2,
+  TerminalSquare,
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -28,6 +30,7 @@ export default function Sidebar() {
     togglePin,
     setCategory,
     deleteConversation,
+    updateConversationMeta,
   } = useConversationStore();
   const {
     categories,
@@ -67,6 +70,10 @@ export default function Sidebar() {
 
   // Category change state (context menu)
   const [changingCategoryId, setChangingCategoryId] = useState<string | null>(null);
+
+  // Conversation system prompt editor state
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [promptDraft, setPromptDraft] = useState("");
 
   // Close context menu on click outside
   useEffect(() => {
@@ -207,6 +214,28 @@ export default function Sidebar() {
     },
     [setCategory]
   );
+
+  // ── Conversation system prompt ──
+
+  const handleEditPrompt = useCallback(
+    (id: string) => {
+      const conv = conversations.find((c) => c.id === id);
+      setPromptDraft(conv?.systemPrompt || "");
+      setEditingPromptId(id);
+      setContextMenu(null);
+    },
+    [conversations]
+  );
+
+  const handlePromptSave = useCallback(() => {
+    if (editingPromptId) {
+      const trimmed = promptDraft.trim();
+      updateConversationMeta(editingPromptId, {
+        systemPrompt: trimmed || undefined,
+      });
+    }
+    setEditingPromptId(null);
+  }, [editingPromptId, promptDraft, updateConversationMeta]);
 
   return (
     <aside className="h-full bg-[#161b22] border-r border-[#30363d] flex flex-col overflow-hidden relative">
@@ -479,6 +508,48 @@ export default function Sidebar() {
         </div>
       )}
 
+      {/* Conversation system prompt editor modal */}
+      {editingPromptId && (
+        <div className="absolute inset-0 bg-[rgba(0,0,0,0.5)] z-20 flex items-center justify-center">
+          <div
+            className="bg-[#161b22] border border-[#30363d] rounded-lg p-4 mx-3 w-[420px] shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-[#e6edf3]">对话系统提示词</p>
+              <span className="text-[11px] text-[#6e7681]">
+                约 {estimateTokens(promptDraft).toLocaleString()} tokens
+              </span>
+            </div>
+            <p className="text-xs text-[#8b949e] mb-3">
+              仅对当前对话生效，拼接在全局系统提示词之后（优先级更高）。留空则使用全局提示词。
+            </p>
+            <textarea
+              value={promptDraft}
+              onChange={(e) => setPromptDraft(e.target.value)}
+              autoFocus
+              placeholder="例如：请用英文回复，并给出示例代码。"
+              rows={8}
+              className="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff] resize-y font-mono text-[13px]"
+            />
+            <div className="flex gap-2 justify-end mt-3">
+              <button
+                onClick={() => setEditingPromptId(null)}
+                className="px-3 py-1 bg-[#21262d] border border-[#30363d] rounded-md text-xs text-[#8b949e] hover:text-[#e6edf3] cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                onClick={handlePromptSave}
+                className="px-3 py-1 bg-[#238636] rounded-md text-xs text-white hover:bg-[#2ea043] cursor-pointer"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Context Menu */}
       {contextMenu && (
         <div
@@ -508,6 +579,13 @@ export default function Sidebar() {
                 置顶
               </>
             )}
+          </button>
+          <button
+            onClick={() => handleEditPrompt(contextMenu.conversationId)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] cursor-pointer border-none text-left"
+          >
+            <TerminalSquare size={12} />
+            系统提示词
           </button>
           <div className="relative">
             <button

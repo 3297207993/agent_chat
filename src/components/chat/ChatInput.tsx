@@ -3,6 +3,7 @@ import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
+import { useUIStore } from "@/stores/uiStore";
 import { createAgentStream } from "@/lib/ai/agent";
 import { estimateTokens } from "@/lib/ai/tokenizer";
 import type { Message, MessageContent } from "@/types/chat";
@@ -108,7 +109,9 @@ export default function ChatInput() {
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    // 5. 收集生效规则，拼装 system prompt
+    // 5. 收集生效规则与各级系统提示词，拼装 system prompt
+    //    优先级（后者更具体，拼接在末尾占 recency 优势）：
+    //    规则 > 全局系统提示词 > 对话系统提示词
     const currentConv = conversations.find((c) => c.id === currentConversationId);
     const categoryId = currentConv?.categoryId;
     const currentCategory = categoryId
@@ -121,7 +124,8 @@ export default function ChatInput() {
     const rulesPrompt = effectiveRules
       .map((r) => r.content)
       .join("\n\n");
-    const systemPrompt = [rulesPrompt, currentConv?.systemPrompt]
+    const globalSystemPrompt = useUIStore.getState().globalSystemPrompt;
+    const systemPrompt = [rulesPrompt, globalSystemPrompt, currentConv?.systemPrompt]
       .filter(Boolean)
       .join("\n\n");
 
