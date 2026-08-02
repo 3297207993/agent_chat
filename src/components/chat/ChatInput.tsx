@@ -180,16 +180,6 @@ export default function ChatInput() {
         },
         onToolCall: (toolCallId, toolName, args) => {
           appendToolCallToMessage(currentConversationId, toolCallId, toolName, args);
-
-          // 模型调用 read_skill 即代表使用了该技能：
-          // 记录到 usedSkillIds 仅供右侧面板展示，不影响上下文
-          if (toolName === "read_skill") {
-            const name = String(args["name"] ?? "");
-            const skill = skillStore.skills.find((s) => s.name === name);
-            if (skill && skillStore.isEnabled(name)) {
-              skillStore.recordSkillUse(currentConversationId, name);
-            }
-          }
         },
         onToolResult: (toolCallId, toolName, result) => {
           updateToolResultInMessage(currentConversationId, toolCallId, toolName, result);

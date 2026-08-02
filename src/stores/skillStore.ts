@@ -22,10 +22,6 @@ interface SkillState {
   // ── 持久化：启用状态（缺省视为启用，不写进 SKILL.md） ──
   enabledMap: Record<string, boolean>;
 
-  // ── 持久化：本对话使用过的技能记录（纯 UI 展示用，不影响上下文注入） ──
-  // 模型每次自主调用 read_skill 时记录；上下文注入只依赖 Discovery 列表
-  usedSkillIds: Record<string, string[]>;
-
   // ── 扫描 ──
   loadSkills: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -58,12 +54,6 @@ interface SkillState {
   importSkill: (srcPath: string) => Promise<{ ok: boolean; error?: string }>;
   exportSkill: (name: string, dstDir: string) => Promise<{ ok: boolean; error?: string }>;
   getSkillRaw: (name: string) => Promise<string>;
-
-  // ── 使用记录（模型调用 read_skill / 用户指定时记录，仅 UI 展示） ──
-  getUsedSkills: (conversationId: string) => SkillMeta[];
-  recordSkillUse: (conversationId: string, name: string) => void;
-  removeSkillUse: (conversationId: string, name: string) => void;
-  clearUsedSkills: (conversationId: string) => void;
 }
 
 export const useSkillStore = create<SkillState>()(
@@ -74,7 +64,6 @@ export const useSkillStore = create<SkillState>()(
       scanErrors: [],
 
       enabledMap: {},
-      usedSkillIds: {},
 
       // ── 扫描 ──
 
@@ -155,15 +144,11 @@ export const useSkillStore = create<SkillState>()(
       deleteSkill: async (name) => {
         try {
           await svcDelete(name);
-          // 清理运行时状态
+          // 清理启用状态
           set((state) => {
             const enabledMap = { ...state.enabledMap };
             delete enabledMap[name];
-            const usedSkillIds: Record<string, string[]> = {};
-            for (const [cid, ids] of Object.entries(state.usedSkillIds)) {
-              usedSkillIds[cid] = ids.filter((n) => n !== name);
-            }
-            return { enabledMap, usedSkillIds };
+            return { enabledMap };
           });
           await get().loadSkills();
           return { ok: true };
@@ -196,47 +181,13 @@ export const useSkillStore = create<SkillState>()(
         return raw;
       },
 
-      // ── 使用记录 ──
-
-      getUsedSkills: (conversationId) => {
-        const names = get().usedSkillIds[conversationId] || [];
-        return names
-          .map((n) => get().skills.find((s) => s.name === n))
-          .filter((s): s is SkillMeta => s !== undefined);
-      },
-      recordSkillUse: (conversationId, name) => {
-        const current = get().usedSkillIds[conversationId] || [];
-        if (current.includes(name)) return;
-        set((state) => ({
-          usedSkillIds: {
-            ...state.usedSkillIds,
-            [conversationId]: [...current, name],
-          },
-        }));
-      },
-      removeSkillUse: (conversationId, name) => {
-        set((state) => ({
-          usedSkillIds: {
-            ...state.usedSkillIds,
-            [conversationId]: (state.usedSkillIds[conversationId] || []).filter(
-              (n) => n !== name,
-            ),
-          },
-        }));
-      },
-      clearUsedSkills: (conversationId) => {
-        set((state) => {
-          const next = { ...state.usedSkillIds };
-          delete next[conversationId];
-          return { usedSkillIds: next };
-        });
-      },
+      // ── 使用记录已移除（2026-08-02）：模型调用过什么工具由对话内 ToolCallCard 展示，
+      //    面板只展示可用技能列表，无需额外存储 ──
     }),
     {
       name: "skill-store",
       partialize: (state) => ({
         enabledMap: state.enabledMap,
-        usedSkillIds: state.usedSkillIds,
       }),
     },
   ),
