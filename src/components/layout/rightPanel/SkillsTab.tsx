@@ -7,8 +7,9 @@ import { Zap, ToggleLeft, ToggleRight } from "lucide-react";
  * 模型调用过什么工具由对话内 ToolCallCard 展示，此处不做记录。
  */
 export default function SkillsTab() {
+  // 订阅 skills 数组引用（扫描/增删后重渲染）与 enabledMap 引用（开关状态变化后重渲染）
   const skills = useSkillStore((s) => s.skills);
-  const isEnabled = useSkillStore((s) => s.isEnabled);
+  const enabledMap = useSkillStore((s) => s.enabledMap);
   const setEnabled = useSkillStore((s) => s.setEnabled);
 
   return (
@@ -28,7 +29,8 @@ export default function SkillsTab() {
       ) : (
         <div className="space-y-2">
           {skills.map((s) => {
-            const enabled = isEnabled(s.name);
+            // 与 store 的 isEnabled 语义一致：缺省视为启用
+            const enabled = enabledMap[s.name] !== false;
             return (
               <div
                 key={s.name}

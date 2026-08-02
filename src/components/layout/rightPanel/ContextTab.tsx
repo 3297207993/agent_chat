@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -6,7 +7,14 @@ import { getContextLength, estimateTokens } from "@/lib/ai/tokenizer";
 export default function ContextTab() {
   const { currentConversationId, messages, conversations } = useConversationStore();
   const globalSystemPrompt = useUIStore((s) => s.globalSystemPrompt);
-  const modelConfig = useProviderStore((s) => s.getActiveModel());
+  // 订阅数据而非 getActiveModel 函数（函数引用稳定，模型切换不会触发重渲染）
+  const providers = useProviderStore((s) => s.providers);
+  const activeProviderId = useProviderStore((s) => s.activeProviderId);
+  const activeModelId = useProviderStore((s) => s.activeModelId);
+  const modelConfig = useMemo(() => {
+    const provider = providers.find((p) => p.id === activeProviderId);
+    return provider?.models.find((m) => m.id === activeModelId);
+  }, [providers, activeProviderId, activeModelId]);
 
   const currentMessages = currentConversationId
     ? messages[currentConversationId] || []
