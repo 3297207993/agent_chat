@@ -50,7 +50,7 @@ export function buildSystemPrompt(conversationId: string): string | undefined {
       .map((s) => `- ${s.name}: ${s.description}`)
       .join("\n");
     skillParts.push(
-      `[可用技能]\n${list}\n\n当用户任务与某个技能匹配时，调用 read_skill 工具（参数 name 传入技能名）获取完整指令，然后严格按照指令执行。指令中引用的配套文件，用 read_skill 的 file 参数按相对路径读取。`,
+      `[可用技能]\n${list}\n\n当用户任务与某个技能匹配时，调用 read_skill 工具（参数 name 传入技能名）获取完整指令，然后严格按照指令执行。指令中引用的配套文件，用 read_skill 的 file 参数按相对路径读取；需要运行配套脚本时，调用 run_skill_script 工具（script 传相对路径，必要时 interpreter 传解释器）。`,
     );
   }
 

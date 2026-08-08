@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { invoke } from "@tauri-apps/api/core";
 import { useToolStore } from "@/stores/toolStore";
-import { loadSkillRaw, listSkillFiles, readSkillFile } from "@/services/skillService";
+import { loadSkillRaw, listSkillFiles, readSkillFile, runSkillScript } from "@/services/skillService";
 import { parseSkillFile } from "@/lib/skills/parser";
 
 // ── 权限检查辅助 ──
@@ -340,6 +340,43 @@ export const builtinTools = {
         return (skill.content || "（该技能正文为空）") + listing;
       } catch (e) {
         throw new Error(`读取技能失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+  }),
+
+  // ── Skill 脚本执行（渐进式披露的 Activation 阶段） ──
+  // 模型在 read_skill 拿到指令后，如需运行配套脚本（如 scripts/xxx.py），
+  // 调用此工具。工作目录自动设为该 skill 目录，脚本路径必须为 skill 内相对路径。
+  // 属于代码执行，始终需要用户确认（与 execute_command 同级）。
+  run_skill_script: tool({
+    description:
+      "执行指定 Skill 目录内的配套脚本（如 scripts/xxx.py、scripts/xxx.sh）。工作目录自动设为该 Skill 目录，脚本路径用相对路径。脚本通常无法直接执行，需通过 interpreter 传入解释器（如 python / node / bash）。返回 stdout、stderr、exitCode。",
+    inputSchema: z.object({
+      name: z.string().describe("技能名称，与可用技能列表中的 name 完全一致"),
+      script: z
+        .string()
+        .describe("Skill 内的相对脚本路径，如 scripts/xxx.py（必须是具体文件，不能是目录）"),
+      interpreter: z
+        .string()
+        .optional()
+        .describe("可选，脚本解释器，如 python / node / bash。脚本可自执行（.exe/.bat/带 shebang）时不传"),
+      args: z
+        .array(z.string())
+        .optional()
+        .describe("可选，传给脚本自身的命令行参数"),
+    }),
+    execute: async ({ name, script, interpreter, args = [] }, options) => {
+      await requirePermission(
+        options.toolCallId,
+        "run_skill_script",
+        { name, script, interpreter, args },
+        true,
+      );
+      try {
+        const result = await runSkillScript(name, script, interpreter, args);
+        return JSON.stringify(result);
+      } catch (e) {
+        throw new Error(`执行脚本失败: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
   }),

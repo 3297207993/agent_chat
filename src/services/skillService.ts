@@ -137,7 +137,7 @@ export async function listSkillFiles(name: string): Promise<string[]> {
  * 校验 skill 内相对路径（read_skill 的 file 参数）：
  * 必须是相对路径、不能越出 skill 目录（禁 ..、.、空段、绝对路径、盘符）。
  */
-function isSafeSkillRelPath(relPath: string): boolean {
+export function isSafeSkillRelPath(relPath: string): boolean {
   const p = relPath.trim();
   if (!p) return false;
   const normalized = p.replace(/\\/g, "/");
@@ -161,6 +161,54 @@ export async function readSkillFile(name: string, relPath: string): Promise<stri
   return res.content;
 }
 
+/**
+ * 执行 skill 配套脚本（run_skill_script 工具的后端逻辑）。
+ *
+ * - name 走 isValidSkillName 校验，script 走 isSafeSkillRelPath 校验
+ * - 工作目录固定为 skill 目录
+ * - argv 由 interpreter（可选）+ 脚本绝对路径 + args 拼成，无 shell 拼接
+ */
+export interface ScriptRunResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+}
+
+export async function runSkillScript(
+  name: string,
+  script: string,
+  interpreter?: string,
+  args: string[] = [],
+): Promise<ScriptRunResult> {
+  if (!isValidSkillName(name)) throw new Error(`非法 skill 名称: ${name}`);
+  if (!isSafeSkillRelPath(script)) {
+    throw new Error("非法脚本路径（仅允许 skill 内的相对路径）");
+  }
+
+  const absScript = `${await getSkillsDir()}/${name}/${script}`;
+  const argv = interpreter
+    ? [interpreter, absScript, ...args]
+    : [absScript, ...args];
+
+  const res = await invoke<{
+    stdout: string;
+    stderr: string;
+    exit_code: number;
+    timed_out: boolean;
+  }>("execute_script", {
+    argv,
+    cwd: `${await getSkillsDir()}/${name}`,
+    timeout: 60,
+  });
+  return {
+    stdout: res.stdout,
+    stderr: res.stderr,
+    exitCode: res.exit_code,
+    timedOut: res.timed_out,
+  };
+}
+
 /** 保存 skill（写入 SKILL.md，覆盖） */
 export async function saveSkill(name: string, raw: string): Promise<void> {
   if (!isValidSkillName(name)) throw new Error(`非法 skill 名称: ${name}`);
@@ -170,7 +218,6 @@ export async function saveSkill(name: string, raw: string): Promise<void> {
   });
   if (!res.success) throw new Error(res.error || "保存 skill 失败");
 }
-
 /** 删除 skill 文件夹（递归，不经过回收站） */
 export async function deleteSkill(name: string): Promise<void> {
   if (!isValidSkillName(name)) throw new Error(`非法 skill 名称: ${name}`);

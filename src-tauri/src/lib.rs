@@ -4,7 +4,7 @@ mod mcp;
 use commands::file::{copy_directory, delete_file, edit_file, list_directory, read_file, write_file};
 use commands::mcp::{mcp_connect_stdio, mcp_disconnect, mcp_list_connections, mcp_stdin_write};
 use commands::search::{search_content, search_file};
-use commands::shell::execute_command;
+use commands::shell::{execute_command, execute_script};
 use commands::system::{get_app_data_dir, preview_url};
 use mcp::pool::McpPool;
 use tokio::sync::Mutex;
@@ -31,6 +31,7 @@ pub fn run() {
             search_content,
             // Shell
             execute_command,
+            execute_script,
             // MCP
             mcp_connect_stdio,
             mcp_stdin_write,
