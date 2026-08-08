@@ -10,6 +10,8 @@ import {
   getMessagesByConversation as dbGetMessages,
   createMessage as dbCreateMessage,
   deleteMessagesByConversation as dbDeleteMessages,
+  deleteMessageById as dbDeleteMessageById,
+  getLatestMessage as dbGetLatestMessage,
   updateMessageTokenCount as dbUpdateMessageTokenCount,
   toMessage,
 } from "@/lib/db/messageDB";
@@ -40,6 +42,7 @@ interface ConversationState {
   setCategory: (id: string, categoryId: string | undefined) => Promise<void>;
   setConversationRules: (id: string, ruleIds: string[]) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  removeMessage: (conversationId: string, messageId: number) => Promise<void>;
 
   // Messages
   addMessage: (conversationId: string, message: Omit<Message, "id">) => void;
@@ -226,6 +229,34 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     await Promise.all([dbDelete(id), dbDeleteMessages(id)]);
   },
 
+  removeMessage: async (conversationId, messageId) => {
+    const { messages } = get();
+    const msgs = messages[conversationId] || [];
+    if (!msgs.some((m) => m.id === messageId)) return;
+
+    // 从内存移除
+    set({
+      messages: {
+        ...messages,
+        [conversationId]: msgs.filter((m) => m.id !== messageId),
+      },
+    });
+
+    // 从 DB 移除（尽力而为）
+    try {
+      if (messageId > 0) {
+        await dbDeleteMessageById(messageId);
+      } else {
+        // 临时负 id（流式结束后持久化回填尚未完成的极端时序）：
+        // 此时该消息正是 DB 中最新插入的一条
+        const latest = await dbGetLatestMessage(conversationId);
+        if (latest?.id != null) await dbDeleteMessageById(latest.id);
+      }
+    } catch {
+      // DB 删除失败不阻塞重新生成
+    }
+  },
+
   // ── Messages ──
 
   addMessage: (conversationId, message) => {
@@ -240,7 +271,19 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }));
     // 持久化消息到 IndexedDB（done/error 立即持久化，streaming 等 finish 再持久化）
     if (msg.status !== "pending" && msg.status !== "streaming") {
-      dbCreateMessage(conversationId, msg);
+      // 持久化后把临时负 id 回填为 DB 自增 id，保证内存 id 与 DB 一致
+      //（removeMessage / 重新生成等操作需要按 id 精确删除）
+      void dbCreateMessage(conversationId, msg).then((dbId) => {
+        set((state) => ({
+          messages: {
+            ...state.messages,
+            [conversationId]:
+              state.messages[conversationId]?.map((m) =>
+                m.id === id ? { ...m, id: dbId } : m
+              ) || [],
+          },
+        }));
+      });
     }
   },
 
@@ -365,9 +408,19 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
     set({ messages: { ...messages, [conversationId]: updatedMsgs } });
 
-    // 当消息变为 done/error 时持久化（带真实 tokenCount）
+    // 当消息变为 done/error 时持久化（带真实 tokenCount），并把临时负 id 回填为 DB id
     if (status === "done" || status === "error") {
-      dbCreateMessage(conversationId, updatedMsg);
+      void dbCreateMessage(conversationId, updatedMsg).then((dbId) => {
+        set((state) => ({
+          messages: {
+            ...state.messages,
+            [conversationId]:
+              state.messages[conversationId]?.map((m) =>
+                m.id === updatedMsg.id ? { ...m, id: dbId } : m
+              ) || [],
+          },
+        }));
+      });
     }
   },
 

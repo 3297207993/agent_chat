@@ -6,9 +6,14 @@ import ChatMessage from "./ChatMessage";
 interface Props {
   messages: Message[];
   isStreaming: boolean;
+  onRegenerate?: (messageId: number) => void;
 }
 
-export default function MessageList({ messages, isStreaming }: Props) {
+export default function MessageList({
+  messages,
+  isStreaming,
+  onRegenerate,
+}: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,9 +36,19 @@ export default function MessageList({ messages, isStreaming }: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto py-6">
-      {messages.map((msg) => (
-        <ChatMessage key={msg.id} message={msg} />
-      ))}
+      {messages.map((msg, i) => {
+        const isLast = i === messages.length - 1;
+        return (
+          <ChatMessage
+            key={msg.id}
+            message={msg}
+            canRegenerate={
+              isLast && msg.role === "assistant" && !isStreaming
+            }
+            onRegenerate={isLast ? onRegenerate : undefined}
+          />
+        );
+      })}
       <div ref={bottomRef} />
     </div>
   );

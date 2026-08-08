@@ -12,6 +12,9 @@ import { User, Bot, Copy, RefreshCw } from "lucide-react";
 
 interface Props {
   message: Message;
+  /** 是否为最后一条助手消息（仅该消息可重新生成） */
+  canRegenerate?: boolean;
+  onRegenerate?: (messageId: number) => void;
 }
 
 function MessageContentRenderer({
@@ -94,7 +97,7 @@ function MessageContentRenderer({
   );
 }
 
-function ChatMessage({ message }: Props) {
+function ChatMessage({ message, canRegenerate, onRegenerate }: Props) {
   const approvalQueue = useToolStore((s) => s.approvalQueue);
   const resolveApproval = useToolStore((s) => s.resolveApproval);
   const isUser = message.role === "user";
@@ -147,8 +150,9 @@ function ChatMessage({ message }: Props) {
           >
             <Copy size={13} />
           </button>
-          {isAssistant && (
+          {isAssistant && canRegenerate && onRegenerate && (
             <button
+              onClick={() => onRegenerate(message.id)}
               className="w-6 h-6 flex items-center justify-center rounded text-[#6e7681] hover:text-[#8b949e] hover:bg-[#21262d]"
               title="重新生成"
             >

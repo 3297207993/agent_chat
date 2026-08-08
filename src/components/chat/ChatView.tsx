@@ -1,5 +1,7 @@
+import { useCallback } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
+import { regenerateAssistant } from "@/lib/ai/runAgent";
 import { APP_NAME } from "@/lib/constants";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
@@ -8,6 +10,15 @@ export default function ChatView() {
   const { currentConversationId, messages, isStreaming, createConversation } =
     useConversationStore();
   const { getActiveProvider } = useProviderStore();
+
+  const handleRegenerate = useCallback(
+    (messageId: number) => {
+      if (currentConversationId) {
+        void regenerateAssistant(currentConversationId, messageId);
+      }
+    },
+    [currentConversationId],
+  );
 
   const currentMessages = currentConversationId ? messages[currentConversationId] || [] : [];
   const activeProvider = getActiveProvider();
@@ -34,7 +45,11 @@ export default function ChatView() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#0d1117]">
-      <MessageList messages={currentMessages} isStreaming={isStreaming} />
+      <MessageList
+        messages={currentMessages}
+        isStreaming={isStreaming}
+        onRegenerate={handleRegenerate}
+      />
       {!activeProvider && currentMessages.length === 0 && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-2">

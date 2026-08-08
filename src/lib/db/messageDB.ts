@@ -60,6 +60,23 @@ export async function deleteMessagesByConversation(
   await db.messages.where("conversationId").equals(conversationId).delete();
 }
 
+export async function deleteMessageById(messageId: number): Promise<void> {
+  await db.messages.delete(messageId);
+}
+
+/** 返回某对话在 DB 中最新的（最后插入的）消息行，用于临时负 id 未回填时的兜底删除 */
+export async function getLatestMessage(
+  conversationId: string
+): Promise<MessageRow | undefined> {
+  const rows = await db.messages
+    .where("conversationId")
+    .equals(conversationId)
+    .reverse()
+    .limit(1)
+    .toArray();
+  return rows[0];
+}
+
 export function toMessage(row: MessageRow): Message {
   return {
     id: row.id!,

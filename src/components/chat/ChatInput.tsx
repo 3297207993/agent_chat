@@ -1,11 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
-import { useRuleStore } from "@/stores/ruleStore";
-import { useCategoryStore } from "@/stores/categoryStore";
-import { useUIStore } from "@/stores/uiStore";
 import { useSkillStore } from "@/stores/skillStore";
-import { createAgentStream } from "@/lib/ai/agent";
+import { startAgentRun, buildSystemPrompt, stopStreaming } from "@/lib/ai/runAgent";
 import { estimateTokens } from "@/lib/ai/tokenizer";
 import type { Message, MessageContent } from "@/types/chat";
 import { Send, Paperclip, Image, Square } from "lucide-react";
@@ -13,20 +10,13 @@ import { Send, Paperclip, Image, Square } from "lucide-react";
 export default function ChatInput() {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   const {
     currentConversationId,
     conversations,
     messages,
     addMessage,
-    appendToLastAssistantMessage,
-    appendReasoningToLastAssistantMessage,
-    appendToolCallToMessage,
-    updateToolResultInMessage,
-    setLastMessageStatus,
     isStreaming,
-    setStreaming,
     updateConversationMeta,
   } = useConversationStore();
 
@@ -105,109 +95,20 @@ export default function ChatInput() {
       messageCount: (conv?.messageCount || 0) + 1,
     });
 
-    // 2. 创建空的 assistant 消息，状态为 streaming
-    const assistantMessage: Message = {
-      id: 0,
-      conversationId: currentConversationId,
-      role: "assistant",
-      content: [],
-      tokenCount: 0,
-      createdAt: Date.now(),
-      status: "streaming",
-    };
-    addMessage(currentConversationId, assistantMessage);
-    setStreaming(true);
-
-    // 3. 构建消息历史（包含刚发送的用户消息）
+    // 2. 构建消息历史（包含刚发送的用户消息）
     const currentMessages = messages[currentConversationId] || [];
     const allMessages = [...currentMessages, userMessage];
 
-    // 4. 创建 AbortController
-    const abortController = new AbortController();
-    abortRef.current = abortController;
-
-    // 5. 收集生效规则与各级系统提示词，拼装 system prompt
-    //    优先级（后者更具体，拼接在末尾占 recency 优势）：
-    //    规则 > 全局系统提示词 > 对话系统提示词
-    const currentConv = conversations.find((c) => c.id === currentConversationId);
-    const categoryId = currentConv?.categoryId;
-    const currentCategory = categoryId
-      ? useCategoryStore.getState().categories.find((c) => c.id === categoryId)
-      : undefined;
-    const effectiveRules = useRuleStore.getState().getEffectiveRules(
-      currentConv,
-      currentCategory,
-    );
-    const rulesPrompt = effectiveRules
-      .map((r) => r.content)
-      .join("\n\n");
-    const globalSystemPrompt = useUIStore.getState().globalSystemPrompt;
-
-    // 5.5 Skill 注入：仅 Discovery 列表（name + description），放最末占 recency 优势
-    //    全文由模型自主调用 read_skill 获取（渐进式披露），应用层不做全文注入
-    const skillParts: string[] = [];
-    const enabledSkills = skillStore.getEnabledSkills();
-    if (enabledSkills.length > 0) {
-      const list = enabledSkills
-        .map((s) => `- ${s.name}: ${s.description}`)
-        .join("\n");
-      skillParts.push(
-        `[可用技能]\n${list}\n\n当用户任务与某个技能匹配时，调用 read_skill 工具（参数 name 传入技能名）获取完整指令，然后严格按照指令执行。指令中引用的配套文件，用 read_skill 的 file 参数按相对路径读取。`,
-      );
-    }
-
-    const skillPrompt = skillParts.join("\n\n");
-    const systemPrompt = [
-      rulesPrompt,
-      globalSystemPrompt,
-      currentConv?.systemPrompt,
-      skillPrompt,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-
-    // 6. 调用 Agent 循环（支持工具调用 + maxSteps 多步交互）
-    createAgentStream(
-      providerConfig,
-      modelConfig.id,
-      allMessages,
-      {
-        onToken: (token) => {
-          appendToLastAssistantMessage(currentConversationId, token);
-        },
-        onReasoning: (reasoning) => {
-          appendReasoningToLastAssistantMessage(currentConversationId, reasoning);
-        },
-        onToolCall: (toolCallId, toolName, args) => {
-          appendToolCallToMessage(currentConversationId, toolCallId, toolName, args);
-        },
-        onToolResult: (toolCallId, toolName, result) => {
-          updateToolResultInMessage(currentConversationId, toolCallId, toolName, result);
-        },
-        onError: (error) => {
-          const msg = `请求失败：${error.message || "未知错误"}`;
-          appendToLastAssistantMessage(currentConversationId, msg);
-          setLastMessageStatus(currentConversationId, "error");
-          setStreaming(false);
-          abortRef.current = null;
-        },
-        onFinish: () => {
-          setLastMessageStatus(currentConversationId, "done");
-          setStreaming(false);
-          abortRef.current = null;
-        },
-      },
-      abortController.signal,
-      systemPrompt || undefined,
-      15, // maxSteps
-    );
+    // 3. 调用 Agent 循环（支持工具调用 + maxSteps 多步交互）
+    startAgentRun({
+      conversationId: currentConversationId,
+      contextMessages: allMessages,
+      systemPrompt: buildSystemPrompt(currentConversationId),
+    });
   };
 
   const handleStop = () => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-    setStreaming(false);
+    stopStreaming();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
