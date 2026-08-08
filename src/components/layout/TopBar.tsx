@@ -120,7 +120,15 @@ export default function TopBar() {
           className="flex items-center gap-1.5 px-3 py-1 bg-[#21262d] border border-[#30363d] rounded-md text-xs text-[#e6edf3] cursor-pointer hover:border-[#58a6ff]"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
-          <span>{activeModel?.name || activeProvider?.name || "未选择模型"}</span>
+          {activeProvider && activeModel ? (
+            <>
+              <span className="text-[#6e7681]">{activeProvider.name}</span>
+              <span className="text-[#484f58]">/</span>
+              <span className="truncate max-w-[180px]">{activeModel.name}</span>
+            </>
+          ) : (
+            <span>{activeModel?.name || activeProvider?.name || "未选择模型"}</span>
+          )}
           <ChevronDown size={12} className="text-[#6e7681]" />
         </button>
 
@@ -140,14 +148,14 @@ export default function TopBar() {
               ) : (
                 providers.map((provider) => (
                   <div key={provider.id}>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium text-[#6e7681] uppercase tracking-wide">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c2128] text-[10px] font-semibold text-[#8b949e] uppercase tracking-wider">
                       {provider.name}
-                      <span className="text-[9px] px-1 py-px rounded bg-[#21262d] normal-case">
+                      <span className="text-[9px] px-1 py-px rounded bg-[#21262d] normal-case text-[#6e7681]">
                         {provider.type === "official" ? "官方" : "兼容"}
                       </span>
                     </div>
                     {provider.models.length === 0 ? (
-                      <div className="px-3 py-1.5 text-[11px] text-[#6e7681] italic">
+                      <div className="pl-6 pr-3 py-1.5 text-[11px] text-[#6e7681] italic">
                         暂无模型
                       </div>
                     ) : (
@@ -162,7 +170,7 @@ export default function TopBar() {
                               setActiveModel(provider.id, model.id);
                               setModelMenuOpen(false);
                             }}
-                            className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs cursor-pointer ${
+                            className={`w-full flex items-center gap-2 pl-6 pr-3 py-1.5 text-left text-xs cursor-pointer ${
                               isActive
                                 ? "bg-[#1a3a5c] text-[#e6edf3]"
                                 : "text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3]"
