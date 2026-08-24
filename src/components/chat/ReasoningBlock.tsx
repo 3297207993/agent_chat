@@ -6,7 +6,7 @@ interface Props {
 }
 
 export default function ReasoningBlock({ text }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   return (
     <div className="my-2 border-l-1 border-[#a371f7] bg-[rgba(163,113,247,0.04)] rounded-r-md text-sm text-[#8b949e]">
