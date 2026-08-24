@@ -28,7 +28,7 @@ export default function ToolCallCard({
   onApprove,
   onReject,
 }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const statusIcon = {
     running: <Loader2 size={13} className="animate-spin text-[#d2991d]" />,
