@@ -45,7 +45,7 @@ export default function ToolCallCard({
   };
 
   return (
-    <div className="my-2 border border-[#30363d] rounded-lg overflow-hidden text-sm">
+    <div className="my-2 border border-[#30363d] rounded-[2px] overflow-hidden text-sm">
       {/* Header */}
       <button
         onClick={() => setCollapsed(!collapsed)}
