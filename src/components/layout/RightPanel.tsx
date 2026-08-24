@@ -22,21 +22,22 @@ export default function RightPanel() {
   const [activeTab, setActiveTab] = useState<TabId>("context");
 
   return (
-    <aside className="h-full bg-[#161b22] border-l border-[#30363d] flex flex-col overflow-hidden">
+    <aside className="h-full bg-[#161b22] border-l border-[#30363d] flex flex-col overflow-hidden @container">
       {/* Tabs */}
       <div className="flex border-b border-[#30363d]">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-1 py-2 text-[11px] border-b-2 border-transparent cursor-pointer ${
+            title={tab.label}
+            className={`flex-1 flex items-center justify-center gap-1 py-2 text-[11px] border-b-2 border-transparent cursor-pointer whitespace-nowrap ${
               activeTab === tab.id
                 ? "text-[#58a6ff] border-b-[#58a6ff]"
                 : "text-[#8b949e] hover:text-[#e6edf3]"
             }`}
           >
             {tab.icon}
-            {tab.label}
+            <span className="hidden @min-[320px]:inline">{tab.label}</span>
           </button>
         ))}
       </div>
