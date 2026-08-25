@@ -25,6 +25,7 @@ fn truncate(s: String) -> String {
 /// 执行 Shell 命令。
 ///
 /// - Windows 平台使用 `cmd /C <command>`
+/// - macOS / Linux 平台使用 `sh -c <command>`
 /// - 可通过 `cwd` 指定工作目录
 /// - `timeout_secs` 指定超时秒数（默认 30s），超时后返回错误
 #[tauri::command]
@@ -39,9 +40,22 @@ pub async fn execute_command(
 
     let timeout_duration = Duration::from_secs(timeout_secs.unwrap_or(30));
 
-    let mut cmd = tokio::process::Command::new("cmd");
-    cmd.args(["/C", &command])
-        .stdout(std::process::Stdio::piped())
+    // Windows 使用 cmd /C，macOS / Linux 使用 sh -c
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = tokio::process::Command::new("cmd");
+        c.args(["/C", &command]);
+        c
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = {
+        let mut c = tokio::process::Command::new("sh");
+        c.arg("-c").arg(&command);
+        c
+    };
+
+    cmd.stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
     if let Some(dir) = &cwd {
