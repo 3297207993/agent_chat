@@ -1,6 +1,95 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
 
+/* ===== 颜色主题 Token ===== */
+/* 暗色为默认（沿用原 GitHub Dark 色值），.light 时覆盖为 GitHub Light 对应色 */
+:root {
+  color-scheme: dark;
+
+  --app-bg: #0d1117; /* 主背景 */
+  --app-surface: #161b22; /* 面板/卡片背景 */
+  --app-elevated: #21262d; /* 按钮等第三层级背景 */
+  --app-overlay: #1c2128; /* 更深层背景（代码块底等） */
+  --app-border: #30363d; /* 默认边框 */
+  --app-border-strong: #484f58; /* 边框 hover/滚动条 */
+  --app-text: #e6edf3; /* 主文字（标题/强调） */
+  --app-text-secondary: #c9d1d9; /* 正文文字 */
+  --app-text-muted: #8b949e; /* 次要文字 */
+  --app-text-faint: #6e7681; /* 弱文字/placeholder */
+  --app-accent: #58a6ff; /* 主题蓝 */
+  --app-accent-bg: #1a2a3a; /* 蓝色淡背景（选中态） */
+  --app-accent-badge: #1a3a5c; /* 蓝色徽章背景 */
+  --app-accent-deep: #1c2333; /* 蓝色深背景 */
+  --app-success: #3fb950; /* 成功文字 */
+  --app-success-btn: #238636; /* 成功按钮背景 */
+  --app-success-hover: #2ea043; /* 成功按钮 hover */
+  --app-success-bg: #1a3a2a; /* 绿色淡背景 */
+  --app-danger: #f85149; /* 危险文字 */
+  --app-danger-btn: #da3633; /* 危险按钮背景 */
+  --app-warning: #d2991d; /* 警告 */
+  --app-purple: #a371f7; /* 紫色（技能等） */
+  --app-purple-bg: #3a1a3a; /* 紫色淡背景 */
+  --app-info: #79c0ff; /* 信息亮蓝 */
+}
+
+.light {
+  color-scheme: light;
+
+  --app-bg: #ffffff;
+  --app-surface: #f6f8fa;
+  --app-elevated: #eaeef2;
+  --app-overlay: #f6f8fa;
+  --app-border: #d0d7de;
+  --app-border-strong: #8c959f;
+  --app-text: #1f2328;
+  --app-text-secondary: #424a53;
+  --app-text-muted: #59636e;
+  --app-text-faint: #6e7781;
+  --app-accent: #0969da;
+  --app-accent-bg: #ddf4ff;
+  --app-accent-badge: #ddf4ff;
+  --app-accent-deep: #ddf4ff;
+  --app-success: #1a7f37;
+  --app-success-btn: #1f883d;
+  --app-success-hover: #1a7f37;
+  --app-success-bg: #dafbe1;
+  --app-danger: #cf222e;
+  --app-danger-btn: #cf222e;
+  --app-warning: #9a6700;
+  --app-purple: #8250df;
+  --app-purple-bg: #fbefff;
+  --app-info: #0550ae;
+}
+
+/* Tailwind 4：将 CSS 变量映射为工具类（bg-app-bg、text-app-text-muted 等），
+   inline 引用变量使主题切换即时生效，透明度修饰符（/50）由 color-mix 支持 */
+@theme inline {
+  --color-app-bg: var(--app-bg);
+  --color-app-surface: var(--app-surface);
+  --color-app-elevated: var(--app-elevated);
+  --color-app-overlay: var(--app-overlay);
+  --color-app-border: var(--app-border);
+  --color-app-border-strong: var(--app-border-strong);
+  --color-app-text: var(--app-text);
+  --color-app-text-secondary: var(--app-text-secondary);
+  --color-app-text-muted: var(--app-text-muted);
+  --color-app-text-faint: var(--app-text-faint);
+  --color-app-accent: var(--app-accent);
+  --color-app-accent-bg: var(--app-accent-bg);
+  --color-app-accent-badge: var(--app-accent-badge);
+  --color-app-accent-deep: var(--app-accent-deep);
+  --color-app-success: var(--app-success);
+  --color-app-success-btn: var(--app-success-btn);
+  --color-app-success-hover: var(--app-success-hover);
+  --color-app-success-bg: var(--app-success-bg);
+  --color-app-danger: var(--app-danger);
+  --color-app-danger-btn: var(--app-danger-btn);
+  --color-app-warning: var(--app-warning);
+  --color-app-purple: var(--app-purple);
+  --color-app-purple-bg: var(--app-purple-bg);
+  --color-app-info: var(--app-info);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -11,12 +100,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #30363d;
+  background: var(--app-border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
+  background: var(--app-border-strong);
 }
 
 ::-webkit-scrollbar-corner {

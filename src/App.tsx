@@ -13,6 +13,7 @@ import { useCategoryStore } from "@/stores/categoryStore";
 import { useMcpStore } from "@/stores/mcpStore";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useSkillStore } from "@/stores/skillStore";
+import { useUIStore } from "@/stores/uiStore";
 
 function App() {
   const loadConversations = useConversationStore((s) => s.loadFromDB);
@@ -30,6 +31,24 @@ function App() {
       useMcpStore.getState().connectAllEnabled();
     });
   }, [loadConversations, loadCategories, loadRules]);
+
+  // 启动时把持久化的主题应用到 <html>（setTheme 仅在用户切换时触发，刷新后需补挂 class），
+  // 并在 system 模式下跟随系统偏好实时变化
+  useEffect(() => {
+    const apply = () => {
+      const theme = useUIStore.getState().theme;
+      const dark =
+        theme === "system"
+          ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          : theme !== "light";
+      document.documentElement.classList.toggle("dark", dark);
+      document.documentElement.classList.toggle("light", !dark);
+    };
+    apply();
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   return (
     <Routes>

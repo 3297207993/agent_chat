@@ -15,13 +15,13 @@ export default function SkillsTab() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-[11px] font-semibold text-[#8b949e] uppercase tracking-wide">
+        <h4 className="text-[11px] font-semibold text-app-text-muted uppercase tracking-wide">
           可用技能（{skills.length}）
         </h4>
       </div>
 
       {skills.length === 0 ? (
-        <p className="text-xs text-[#6e7681] leading-relaxed">
+        <p className="text-xs text-app-text-faint leading-relaxed">
           当前没有已安装的 Skill。
           <br />
           可到「Skill 管理」页新建或导入。
@@ -34,20 +34,20 @@ export default function SkillsTab() {
             return (
               <div
                 key={s.name}
-                className={`flex items-start gap-2 bg-[#0d1117] border rounded-lg p-2.5 ${
-                  enabled ? "border-[#30363d]" : "border-[#21262d] opacity-60"
+                className={`flex items-start gap-2 bg-app-bg border rounded-lg p-2.5 ${
+                  enabled ? "border-app-border" : "border-app-elevated opacity-60"
                 }`}
               >
-                <Zap size={13} className="text-[#58a6ff] mt-0.5 shrink-0" />
+                <Zap size={13} className="text-app-accent mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-mono text-[#58a6ff]">{s.name}</div>
-                  <p className="text-[11px] text-[#8b949e] line-clamp-2 mt-0.5">
+                  <div className="text-xs font-mono text-app-accent">{s.name}</div>
+                  <p className="text-[11px] text-app-text-muted line-clamp-2 mt-0.5">
                     {s.description}
                   </p>
                 </div>
                 <button
                   onClick={() => setEnabled(s.name, !enabled)}
-                  className={enabled ? "text-[#3fb950] shrink-0" : "text-[#6e7681] shrink-0"}
+                  className={enabled ? "text-app-success shrink-0" : "text-app-text-faint shrink-0"}
                   title={enabled ? "已启用，点击停用" : "已停用，点击启用"}
                 >
                   {enabled ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}

@@ -48,7 +48,7 @@ function MessageContentRenderer({
                       }
                       return (
                         <code
-                          className="px-1 py-0.5 bg-[#21262d] border border-[#30363d] rounded text-[13px] font-mono text-[#e6edf3]"
+                          className="px-1 py-0.5 bg-app-elevated border border-app-border rounded text-[13px] font-mono text-app-text"
                           {...props}
                         >
                           {children}
@@ -112,11 +112,11 @@ function ChatMessage({ message, canRegenerate, onRegenerate }: Props) {
   };
 
   return (
-    <div className={`flex gap-3.5 px-6 py-4 max-w-[860px] mx-auto w-full ${isUser ? "" : "bg-[#0d1117]"}`}>
+    <div className={`flex gap-3.5 px-6 py-4 max-w-[860px] mx-auto w-full ${isUser ? "" : "bg-app-bg"}`}>
       {/* Avatar */}
       <div
         className={`w-7 h-7 rounded-md flex items-center justify-center text-sm flex-shrink-0 ${
-          isUser ? "bg-[#21262d]" : "bg-[#1a3a5c]"
+          isUser ? "bg-app-elevated" : "bg-app-accent-badge"
         }`}
       >
         {isUser ? <User size={14} /> : <Bot size={14} />}
@@ -125,11 +125,11 @@ function ChatMessage({ message, canRegenerate, onRegenerate }: Props) {
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-medium text-[#8b949e]">
+          <span className="text-xs font-medium text-app-text-muted">
             {isUser ? "你" : "Assistant"}
           </span>
           {message.status === "streaming" && (
-            <span className="w-1.5 h-3 bg-[#58a6ff] animate-pulse rounded-sm" />
+            <span className="w-1.5 h-3 bg-app-accent animate-pulse rounded-sm" />
           )}
         </div>
 
@@ -145,7 +145,7 @@ function ChatMessage({ message, canRegenerate, onRegenerate }: Props) {
         <div className="flex items-center gap-1 mt-2 opacity-0 hover:opacity-100 transition-opacity">
           <button
             onClick={handleCopy}
-            className="w-6 h-6 flex items-center justify-center rounded text-[#6e7681] hover:text-[#8b949e] hover:bg-[#21262d]"
+            className="w-6 h-6 flex items-center justify-center rounded text-app-text-faint hover:text-app-text-muted hover:bg-app-elevated"
             title="复制"
           >
             <Copy size={13} />
@@ -153,7 +153,7 @@ function ChatMessage({ message, canRegenerate, onRegenerate }: Props) {
           {isAssistant && canRegenerate && onRegenerate && (
             <button
               onClick={() => onRegenerate(message.id)}
-              className="w-6 h-6 flex items-center justify-center rounded text-[#6e7681] hover:text-[#8b949e] hover:bg-[#21262d]"
+              className="w-6 h-6 flex items-center justify-center rounded text-app-text-faint hover:text-app-text-muted hover:bg-app-elevated"
               title="重新生成"
             >
               <RefreshCw size={13} />

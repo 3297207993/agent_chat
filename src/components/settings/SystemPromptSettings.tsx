@@ -24,15 +24,15 @@ export default function SystemPromptSettings() {
 
   return (
     <section className="mb-10">
-      <h2 className="text-sm font-semibold text-[#8b949e] uppercase tracking-wide mb-4">
+      <h2 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide mb-4">
         系统提示词
       </h2>
-      <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4 space-y-3">
+      <div className="bg-app-surface border border-app-border rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm">全局系统提示词</span>
-          <span className="text-[11px] text-[#6e7681]">约 {tokenCount.toLocaleString()} tokens</span>
+          <span className="text-[11px] text-app-text-faint">约 {tokenCount.toLocaleString()} tokens</span>
         </div>
-        <p className="text-xs text-[#6e7681]">
+        <p className="text-xs text-app-text-faint">
           对所有对话生效，自动注入系统提示词。对话级系统提示词拼接在其后（优先级更高）。
         </p>
         <textarea
@@ -40,7 +40,7 @@ export default function SystemPromptSettings() {
           onChange={(e) => setDraft(e.target.value)}
           placeholder="例如：你是一个乐于助人的编程助手，请始终用简体中文回复。"
           rows={6}
-          className="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff] resize-y font-mono text-[13px]"
+          className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent resize-y font-mono text-[13px]"
         />
         <div className="flex items-center gap-2">
           <button
@@ -48,8 +48,8 @@ export default function SystemPromptSettings() {
             disabled={!hasChanges}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-colors cursor-pointer ${
               hasChanges
-                ? "bg-[#238636] text-white hover:bg-[#2ea043]"
-                : "bg-[#21262d] text-[#6e7681] cursor-not-allowed"
+                ? "bg-app-success-btn text-white hover:bg-app-success-hover"
+                : "bg-app-elevated text-app-text-faint cursor-not-allowed"
             }`}
           >
             {saved ? (
@@ -64,7 +64,7 @@ export default function SystemPromptSettings() {
           {draft && (
             <button
               onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-[#21262d] text-[#8b949e] hover:text-[#e6edf3] hover:border-[#30363d] border border-transparent transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs bg-app-elevated text-app-text-muted hover:text-app-text hover:border-app-border border border-transparent transition-colors cursor-pointer"
             >
               <X size={12} />
               清空

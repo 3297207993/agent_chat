@@ -82,10 +82,10 @@ export default function ToolPermissionSettings() {
 
   return (
     <section className="mb-10">
-      <h2 className="text-sm font-semibold text-[#8b949e] uppercase tracking-wide mb-4">
+      <h2 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide mb-4">
         工具权限
       </h2>
-      <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4 space-y-5">
+      <div className="bg-app-surface border border-app-border rounded-lg p-4 space-y-5">
         {/* 全局模式 */}
         <div>
           <span className="text-sm block mb-2">全局模式</span>
@@ -96,29 +96,29 @@ export default function ToolPermissionSettings() {
                 onClick={() => setPermissionMode(opt.value)}
                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-colors ${
                   permissionMode === opt.value
-                    ? "border-[#58a6ff] bg-[#1a3a5c]/40"
-                    : "border-[#30363d] bg-[#0d1117] hover:border-[#8b949e]"
+                    ? "border-app-accent bg-app-accent-badge/40"
+                    : "border-app-border bg-app-bg hover:border-app-text-muted"
                 }`}
               >
                 <span
                   className={`shrink-0 ${
                     permissionMode === opt.value
-                      ? "text-[#58a6ff]"
-                      : "text-[#8b949e]"
+                      ? "text-app-accent"
+                      : "text-app-text-muted"
                   }`}
                 >
                   {opt.icon}
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm text-[#e6edf3]">
+                  <span className="block text-sm text-app-text">
                     {opt.label}
                   </span>
-                  <span className="block text-[11px] text-[#8b949e]">
+                  <span className="block text-[11px] text-app-text-muted">
                     {opt.description}
                   </span>
                 </span>
                 {permissionMode === opt.value && (
-                  <span className="text-[#58a6ff] text-xs shrink-0">✓</span>
+                  <span className="text-app-accent text-xs shrink-0">✓</span>
                 )}
               </button>
             ))}
@@ -127,8 +127,8 @@ export default function ToolPermissionSettings() {
 
         {/* 首次授权重置（仅首次授权模式下展示） */}
         {permissionMode === "first_time" && (
-          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#0d1117] border border-[#30363d]">
-            <div className="flex items-center gap-2 text-[12px] text-[#8b949e]">
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-app-bg border border-app-border">
+            <div className="flex items-center gap-2 text-[12px] text-app-text-muted">
               <ShieldCheck size={13} className="shrink-0" />
               <span>
                 本会话已授权 {firstTimeApproved.size} 个工具
@@ -136,7 +136,7 @@ export default function ToolPermissionSettings() {
             </div>
             <button
               onClick={resetFirstTimeApprovals}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-[#8b949e] bg-[#21262d] border border-[#30363d] rounded-md hover:text-[#e6edf3]"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-app-text-muted bg-app-elevated border border-app-border rounded-md hover:text-app-text"
             >
               <RotateCcw size={11} />
               重置授权
@@ -147,7 +147,7 @@ export default function ToolPermissionSettings() {
         {/* 按工具覆盖 */}
         <div>
           <span className="text-sm block mb-1">按工具覆盖</span>
-          <span className="text-[11px] text-[#6e7681] block mb-2">
+          <span className="text-[11px] text-app-text-faint block mb-2">
             对单个工具单独设置，优先级高于全局模式（危险操作不可覆盖）
           </span>
           <div className="space-y-1.5">
@@ -158,22 +158,22 @@ export default function ToolPermissionSettings() {
               return (
                 <div
                   key={tool.name}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#0d1117] border border-[#30363d]"
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg bg-app-bg border border-app-border"
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {tool.alwaysConfirm ? (
-                      <Lock size={13} className="text-[#d2991d] shrink-0" />
+                      <Lock size={13} className="text-app-warning shrink-0" />
                     ) : (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#58a6ff] shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-app-accent shrink-0" />
                     )}
-                    <span className="text-[12px] text-[#e6edf3] font-mono truncate">
+                    <span className="text-[12px] text-app-text font-mono truncate">
                       {tool.name}
                     </span>
-                    <span className="text-[11px] text-[#6e7681] truncate hidden sm:inline">
+                    <span className="text-[11px] text-app-text-faint truncate hidden sm:inline">
                       {tool.description}
                     </span>
                     {tool.alwaysConfirm && (
-                      <span className="text-[10px] text-[#d2991d] shrink-0">
+                      <span className="text-[10px] text-app-warning shrink-0">
                         始终确认
                       </span>
                     )}
@@ -188,7 +188,7 @@ export default function ToolPermissionSettings() {
                         e.target.value as ToolPermissionOverride,
                       )
                     }
-                    className="shrink-0 text-[11px] bg-[#21262d] border border-[#30363d] rounded-md px-2 py-1 text-[#8b949e] outline-none focus:border-[#58a6ff] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="shrink-0 text-[11px] bg-app-elevated border border-app-border rounded-md px-2 py-1 text-app-text-muted outline-none focus:border-app-accent disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {OVERRIDE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>

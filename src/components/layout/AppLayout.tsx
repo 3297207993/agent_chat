@@ -14,10 +14,10 @@ import { useUIStore, type PanelLayout } from "@/stores/uiStore";
 
 /** 拖拽分隔条：2px 细条，视觉上仅一条 1px 竖线，hover 时高亮 */
 const SEPARATOR_CLASS =
-  "group w-0.5 bg-[#161b22] hover:bg-[#58a6ff]/20 transition-colors flex items-center justify-center";
+  "group w-0.5 bg-app-surface hover:bg-app-accent/20 transition-colors flex items-center justify-center";
 
 function SeparatorLine() {
-  return <div className="w-px h-10 rounded bg-[#30363d] group-hover:bg-[#58a6ff]" />;
+  return <div className="w-px h-10 rounded bg-app-border group-hover:bg-app-accent" />;
 }
 
 /**
@@ -76,7 +76,7 @@ export default function AppLayout() {
   }, [rightPanelOpen]);
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d1117] text-[#e6edf3]">
+    <div className="flex flex-col h-screen bg-app-bg text-app-text">
       <TopBar />
       <div className="flex-1 flex overflow-hidden">
         <Group

@@ -120,7 +120,7 @@ export default function ChatInput() {
 
   return (
     <div className="px-6 pb-5 max-w-[860px] mx-auto w-full">
-      <div className="border border-[#30363d] rounded-xl bg-[#161b22] transition-colors focus-within:border-[#58a6ff]">
+      <div className="border border-app-border rounded-xl bg-app-surface transition-colors focus-within:border-app-accent">
         <textarea
           ref={textareaRef}
           value={input}
@@ -131,19 +131,19 @@ export default function ChatInput() {
           onKeyDown={handleKeyDown}
           placeholder="输入消息，/技能名 指定使用某个技能"
           rows={1}
-          className="w-full min-h-[48px] max-h-[200px] px-4 py-3 bg-transparent border-none text-sm text-[#e6edf3] placeholder-[#6e7681] resize-none outline-none leading-relaxed"
+          className="w-full min-h-[48px] max-h-[200px] px-4 py-3 bg-transparent border-none text-sm text-app-text placeholder-app-text-faint resize-none outline-none leading-relaxed"
         />
 
-        <div className="flex items-center justify-between px-3 py-1.5 border-t border-[#30363d]">
+        <div className="flex items-center justify-between px-3 py-1.5 border-t border-app-border">
           <div className="flex items-center gap-1">
             <button
-              className="w-7 h-7 flex items-center justify-center rounded-md text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3]"
+              className="w-7 h-7 flex items-center justify-center rounded-md text-app-text-muted hover:bg-app-elevated hover:text-app-text"
               title="上传文件"
             >
               <Paperclip size={14} />
             </button>
             <button
-              className="w-7 h-7 flex items-center justify-center rounded-md text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3]"
+              className="w-7 h-7 flex items-center justify-center rounded-md text-app-text-muted hover:bg-app-elevated hover:text-app-text"
               title="上传图片"
             >
               <Image size={14} />
@@ -151,8 +151,8 @@ export default function ChatInput() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#6e7681]">
-              <kbd className="px-1 py-0.5 bg-[#21262d] border border-[#30363d] rounded-sm font-mono text-[10px]">
+            <span className="text-[11px] text-app-text-faint">
+              <kbd className="px-1 py-0.5 bg-app-elevated border border-app-border rounded-sm font-mono text-[10px]">
                 /技能名
               </kbd>{" "}
               指定使用技能
@@ -161,7 +161,7 @@ export default function ChatInput() {
             {isStreaming ? (
               <button
                 onClick={handleStop}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#f85149] text-white hover:bg-[#da3633]"
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-app-danger text-white hover:bg-app-danger-btn"
                 title="停止生成"
               >
                 <Square size={13} />
@@ -170,7 +170,7 @@ export default function ChatInput() {
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || !currentConversationId}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#58a6ff] text-white hover:bg-[#79c0ff] disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-app-accent text-white hover:bg-app-info disabled:opacity-40 disabled:cursor-not-allowed"
                 title="发送"
               >
                 <Send size={13} />

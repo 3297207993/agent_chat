@@ -238,15 +238,15 @@ export default function Sidebar() {
   }, [editingPromptId, promptDraft, updateConversationMeta]);
 
   return (
-    <aside className="h-full bg-[#161b22] border-r border-[#30363d] flex flex-col overflow-hidden relative">
+    <aside className="h-full bg-app-surface border-r border-app-border flex flex-col overflow-hidden relative">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#30363d]">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-app-border">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-app-text-faint">
           对话
         </span>
         <button
           onClick={toggleSidebar}
-          className="w-7 h-7 flex items-center justify-center rounded-md text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3]"
+          className="w-7 h-7 flex items-center justify-center rounded-md text-app-text-muted hover:bg-app-elevated hover:text-app-text"
           title="收起侧边栏"
         >
           <ChevronLeft size={14} />
@@ -256,7 +256,7 @@ export default function Sidebar() {
       {/* New chat button */}
       <button
         onClick={handleNewChat}
-        className="flex items-center gap-1.5 mx-3 mt-2.5 mb-1 px-3 py-1.5 bg-[#21262d] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] hover:border-[#58a6ff] transition-colors cursor-pointer"
+        className="flex items-center gap-1.5 mx-3 mt-2.5 mb-1 px-3 py-1.5 bg-app-elevated border border-app-border rounded-lg text-sm text-app-text hover:border-app-accent transition-colors cursor-pointer"
       >
         <Plus size={14} />
         <span>新建对话</span>
@@ -264,14 +264,14 @@ export default function Sidebar() {
 
       {/* Search */}
       <div className="px-3 py-2">
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-[#6e7681]">
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-app-bg border border-app-border rounded-md text-xs text-app-text-faint">
           <Search size={13} />
           <input
             type="text"
             placeholder="搜索对话..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 bg-transparent border-none outline-none text-[#e6edf3] placeholder-[#6e7681]"
+            className="flex-1 bg-transparent border-none outline-none text-app-text placeholder-app-text-faint"
           />
         </div>
       </div>
@@ -279,7 +279,7 @@ export default function Sidebar() {
       {/* Category tabs */}
       <div className="group/cat px-3 pb-2">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6e7681]">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-app-text-faint">
             分类
           </span>
           <button
@@ -290,8 +290,8 @@ export default function Sidebar() {
             }}
             className={`w-5 h-5 flex items-center justify-center rounded text-[10px] ${
               editingCategories
-                ? "text-[#58a6ff]"
-                : "text-[#6e7681] opacity-0 group-hover/cat:opacity-100 hover:text-[#e6edf3]"
+                ? "text-app-accent"
+                : "text-app-text-faint opacity-0 group-hover/cat:opacity-100 hover:text-app-text"
             }`}
             title="编辑分类"
           >
@@ -304,8 +304,8 @@ export default function Sidebar() {
             onClick={() => setActiveCategory("all")}
             className={`px-2.5 py-0.5 rounded-full text-[11px] border-none cursor-pointer ${
               activeCategory === "all"
-                ? "bg-[#21262d] text-[#e6edf3]"
-                : "bg-transparent text-[#6e7681] hover:bg-[#21262d] hover:text-[#8b949e]"
+                ? "bg-app-elevated text-app-text"
+                : "bg-transparent text-app-text-faint hover:bg-app-elevated hover:text-app-text-muted"
             }`}
           >
             全部
@@ -325,7 +325,7 @@ export default function Sidebar() {
                       if (e.key === "Escape") setRenamingCatId(null);
                     }}
                     onBlur={handleCatRenameSubmit}
-                    className="w-16 px-1 py-0.5 bg-[#0d1117] border border-[#58a6ff] rounded text-[11px] text-[#e6edf3] outline-none"
+                    className="w-16 px-1 py-0.5 bg-app-bg border border-app-accent rounded text-[11px] text-app-text outline-none"
                   />
                 </div>
               ) : (
@@ -339,8 +339,8 @@ export default function Sidebar() {
                   }}
                   className={`px-2.5 py-0.5 rounded-full text-[11px] border-none cursor-pointer ${
                     activeCategory === cat.id && !editingCategories
-                      ? "bg-[#21262d] text-[#e6edf3]"
-                      : "bg-transparent text-[#6e7681] hover:bg-[#21262d] hover:text-[#8b949e]"
+                      ? "bg-app-elevated text-app-text"
+                      : "bg-transparent text-app-text-faint hover:bg-app-elevated hover:text-app-text-muted"
                   }`}
                   style={
                     activeCategory === cat.id && !editingCategories
@@ -354,7 +354,7 @@ export default function Sidebar() {
               {editingCategories && renamingCatId !== cat.id && (
                 <button
                   onClick={() => handleDelete(cat.id, "category")}
-                  className="absolute -top-1 -right-1 w-3.5 h-3.5 flex items-center justify-center rounded-full bg-[#f85149] text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-1 -right-1 w-3.5 h-3.5 flex items-center justify-center rounded-full bg-app-danger text-white opacity-0 group-hover:opacity-100 transition-opacity"
                   title="删除分类"
                 >
                   <X size={8} />
@@ -382,13 +382,13 @@ export default function Sidebar() {
                     }}
                     onBlur={handleAddCategory}
                     placeholder="分类名"
-                    className="w-16 px-1 py-0.5 bg-[#0d1117] border border-[#58a6ff] rounded text-[11px] text-[#e6edf3] outline-none placeholder-[#6e7681]"
+                    className="w-16 px-1 py-0.5 bg-app-bg border border-app-accent rounded text-[11px] text-app-text outline-none placeholder-app-text-faint"
                   />
                 </>
               ) : (
                 <button
                   onClick={() => setAddingCategory(true)}
-                  className="w-5 h-5 flex items-center justify-center rounded-full text-[#58a6ff] hover:bg-[#21262d]"
+                  className="w-5 h-5 flex items-center justify-center rounded-full text-app-accent hover:bg-app-elevated"
                   title="添加分类"
                 >
                   <Plus size={12} />
@@ -402,7 +402,7 @@ export default function Sidebar() {
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {filteredConversations.length === 0 ? (
-          <div className="text-center text-[#6e7681] text-xs py-8">
+          <div className="text-center text-app-text-faint text-xs py-8">
             {search ? "未找到匹配的对话" : "暂无对话，点击上方按钮创建"}
           </div>
         ) : (
@@ -413,12 +413,12 @@ export default function Sidebar() {
               onContextMenu={(e) => handleContextMenu(e, conv.id)}
               className={`flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer text-sm transition-colors group ${
                 currentConversationId === conv.id
-                  ? "bg-[#21262d] text-[#e6edf3]"
-                  : "text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3]"
+                  ? "bg-app-elevated text-app-text"
+                  : "text-app-text-muted hover:bg-app-elevated hover:text-app-text"
               }`}
             >
               {conv.pinned ? (
-                <Pin size={12} className="text-[#d2991d] flex-shrink-0" />
+                <Pin size={12} className="text-app-warning flex-shrink-0" />
               ) : (
                 <MessageSquare size={14} className="flex-shrink-0" />
               )}
@@ -436,14 +436,14 @@ export default function Sidebar() {
                     }}
                     onBlur={handleConvRenameSubmit}
                     onClick={(e) => e.stopPropagation()}
-                    className="flex-1 min-w-0 px-1 py-0.5 bg-[#0d1117] border border-[#58a6ff] rounded text-xs text-[#e6edf3] outline-none"
+                    className="flex-1 min-w-0 px-1 py-0.5 bg-app-bg border border-app-accent rounded text-xs text-app-text outline-none"
                   />
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleConvRenameSubmit();
                     }}
-                    className="w-5 h-5 flex items-center justify-center rounded text-[#3fb950] hover:bg-[#21262d] flex-shrink-0"
+                    className="w-5 h-5 flex items-center justify-center rounded text-app-success hover:bg-app-elevated flex-shrink-0"
                   >
                     <Check size={11} />
                   </button>
@@ -452,7 +452,7 @@ export default function Sidebar() {
                       e.stopPropagation();
                       setRenamingConvId(null);
                     }}
-                    className="w-5 h-5 flex items-center justify-center rounded text-[#f85149] hover:bg-[#21262d] flex-shrink-0"
+                    className="w-5 h-5 flex items-center justify-center rounded text-app-danger hover:bg-app-elevated flex-shrink-0"
                   >
                     <X size={11} />
                   </button>
@@ -463,7 +463,7 @@ export default function Sidebar() {
                 </span>
               )}
 
-              <span className="text-[11px] text-[#6e7681] flex-shrink-0">
+              <span className="text-[11px] text-app-text-faint flex-shrink-0">
                 {new Date(conv.updatedAt).toLocaleDateString("zh-CN", {
                   month: "short",
                   day: "numeric",
@@ -478,28 +478,28 @@ export default function Sidebar() {
       {deleteConfirmId && (
         <div className="absolute inset-0 bg-[rgba(0,0,0,0.5)] z-20 flex items-center justify-center">
           <div
-            className="bg-[#161b22] border border-[#30363d] rounded-lg p-4 mx-3 w-56 shadow-xl"
+            className="bg-app-surface border border-app-border rounded-lg p-4 mx-3 w-56 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-sm text-[#e6edf3] mb-3">
+            <p className="text-sm text-app-text mb-3">
               {deleteConfirmType === "conversation"
                 ? "确定要删除这个对话吗？"
                 : "确定要删除这个分类吗？"}
             </p>
-            <p className="text-xs text-[#8b949e] mb-4">此操作无法撤销。</p>
+            <p className="text-xs text-app-text-muted mb-4">此操作无法撤销。</p>
             {deleteConfirmType === "category" && (
-              <p className="text-xs text-[#d2991d] mb-4">删除分类不会删除该分类下的对话。</p>
+              <p className="text-xs text-app-warning mb-4">删除分类不会删除该分类下的对话。</p>
             )}
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setDeleteConfirmId(null)}
-                className="px-3 py-1 bg-[#21262d] border border-[#30363d] rounded-md text-xs text-[#8b949e] hover:text-[#e6edf3] cursor-pointer"
+                className="px-3 py-1 bg-app-elevated border border-app-border rounded-md text-xs text-app-text-muted hover:text-app-text cursor-pointer"
               >
                 取消
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="px-3 py-1 bg-[#da3633] rounded-md text-xs text-white hover:bg-[#f85149] cursor-pointer"
+                className="px-3 py-1 bg-app-danger-btn rounded-md text-xs text-white hover:bg-app-danger cursor-pointer"
               >
                 删除
               </button>
@@ -512,16 +512,16 @@ export default function Sidebar() {
       {editingPromptId && (
         <div className="absolute inset-0 bg-[rgba(0,0,0,0.5)] z-20 flex items-center justify-center">
           <div
-            className="bg-[#161b22] border border-[#30363d] rounded-lg p-4 mx-3 w-[420px] shadow-xl"
+            className="bg-app-surface border border-app-border rounded-lg p-4 mx-3 w-[420px] shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-[#e6edf3]">对话系统提示词</p>
-              <span className="text-[11px] text-[#6e7681]">
+              <p className="text-sm text-app-text">对话系统提示词</p>
+              <span className="text-[11px] text-app-text-faint">
                 约 {estimateTokens(promptDraft).toLocaleString()} tokens
               </span>
             </div>
-            <p className="text-xs text-[#8b949e] mb-3">
+            <p className="text-xs text-app-text-muted mb-3">
               仅对当前对话生效，拼接在全局系统提示词之后（优先级更高）。留空则使用全局提示词。
             </p>
             <textarea
@@ -530,18 +530,18 @@ export default function Sidebar() {
               autoFocus
               placeholder="例如：请用英文回复，并给出示例代码。"
               rows={8}
-              className="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-md text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff] resize-y font-mono text-[13px]"
+              className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-md text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent resize-y font-mono text-[13px]"
             />
             <div className="flex gap-2 justify-end mt-3">
               <button
                 onClick={() => setEditingPromptId(null)}
-                className="px-3 py-1 bg-[#21262d] border border-[#30363d] rounded-md text-xs text-[#8b949e] hover:text-[#e6edf3] cursor-pointer"
+                className="px-3 py-1 bg-app-elevated border border-app-border rounded-md text-xs text-app-text-muted hover:text-app-text cursor-pointer"
               >
                 取消
               </button>
               <button
                 onClick={handlePromptSave}
-                className="px-3 py-1 bg-[#238636] rounded-md text-xs text-white hover:bg-[#2ea043] cursor-pointer"
+                className="px-3 py-1 bg-app-success-btn rounded-md text-xs text-white hover:bg-app-success-hover cursor-pointer"
               >
                 保存
               </button>
@@ -553,20 +553,20 @@ export default function Sidebar() {
       {/* Context Menu */}
       {contextMenu && (
         <div
-          className="fixed z-50 w-44 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl py-1"
+          className="fixed z-50 w-44 bg-app-surface border border-app-border rounded-lg shadow-xl py-1"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={() => handleConvRename(contextMenu.conversationId)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] cursor-pointer border-none text-left"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-app-text-muted hover:bg-app-elevated hover:text-app-text cursor-pointer border-none text-left"
           >
             <Pencil size={12} />
             重命名
           </button>
           <button
             onClick={() => handleTogglePin(contextMenu.conversationId)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] cursor-pointer border-none text-left"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-app-text-muted hover:bg-app-elevated hover:text-app-text cursor-pointer border-none text-left"
           >
             {conversations.find((c) => c.id === contextMenu.conversationId)?.pinned ? (
               <>
@@ -582,7 +582,7 @@ export default function Sidebar() {
           </button>
           <button
             onClick={() => handleEditPrompt(contextMenu.conversationId)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] cursor-pointer border-none text-left"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-app-text-muted hover:bg-app-elevated hover:text-app-text cursor-pointer border-none text-left"
           >
             <TerminalSquare size={12} />
             系统提示词
@@ -590,18 +590,18 @@ export default function Sidebar() {
           <div className="relative">
             <button
               onClick={() => setChangingCategoryId(contextMenu.conversationId)}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] cursor-pointer border-none text-left"
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-app-text-muted hover:bg-app-elevated hover:text-app-text cursor-pointer border-none text-left"
             >
               <FolderInput size={12} />
               变更分类
             </button>
             {changingCategoryId === contextMenu.conversationId && (
-              <div className="absolute left-full top-0 ml-1 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl py-1 w-28 z-50 max-h-48 overflow-y-auto">
+              <div className="absolute left-full top-0 ml-1 bg-app-surface border border-app-border rounded-lg shadow-xl py-1 w-28 z-50 max-h-48 overflow-y-auto">
                 {categories.map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => handleCategoryChange(contextMenu.conversationId, cat.id)}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] cursor-pointer border-none text-left"
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-app-text-muted hover:bg-app-elevated hover:text-app-text cursor-pointer border-none text-left"
                   >
                     <span
                       className="w-2 h-2 rounded-full flex-shrink-0"
@@ -610,20 +610,20 @@ export default function Sidebar() {
                     {cat.name}
                   </button>
                 ))}
-                <div className="border-t border-[#30363d] my-1" />
+                <div className="border-t border-app-border my-1" />
                 <button
                   onClick={() => handleCategoryChange(contextMenu.conversationId, undefined)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] cursor-pointer border-none text-left"
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-app-text-muted hover:bg-app-elevated hover:text-app-text cursor-pointer border-none text-left"
                 >
                   清除分类
                 </button>
               </div>
             )}
           </div>
-          <div className="border-t border-[#30363d] my-1" />
+          <div className="border-t border-app-border my-1" />
           <button
             onClick={() => handleDelete(contextMenu.conversationId, "conversation")}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#f85149] hover:bg-[#21262d] cursor-pointer border-none text-left"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-app-danger hover:bg-app-elevated cursor-pointer border-none text-left"
           >
             <Trash2 size={12} />
             删除

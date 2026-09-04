@@ -46,14 +46,14 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 };
 
 function SkillIcon({ icon, size = 14 }: { icon?: string; size?: number }) {
-  if (size !== 14) return <Zap size={size} className="text-[#58a6ff]" />;
+  if (size !== 14) return <Zap size={size} className="text-app-accent" />;
   return ICON_MAP[icon || "zap"] || ICON_MAP.zap;
 }
 
 function CategoryBadge({ category }: { category?: string }) {
   if (!category) return null;
   return (
-    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1a3a5c] text-[#58a6ff]">
+    <span className="text-[10px] px-1.5 py-0.5 rounded bg-app-accent-badge text-app-accent">
       {category}
     </span>
   );
@@ -148,14 +148,14 @@ function SkillDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-[720px] max-h-[85vh] flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#30363d]">
+      <div className="w-[720px] max-h-[85vh] flex flex-col bg-app-surface border border-app-border rounded-xl shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-app-border">
           <h3 className="text-sm font-semibold">
             {editSkill ? `编辑 Skill: ${editSkill.meta.name}` : "新建 Skill"}
           </h3>
           <button
             onClick={onClose}
-            className="text-[#8b949e] hover:text-[#e6edf3]"
+            className="text-app-text-muted hover:text-app-text"
           >
             <X size={16} />
           </button>
@@ -165,26 +165,26 @@ function SkillDialog({
           {/* frontmatter 表单 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1">
-                name <span className="text-[#f85149]">*</span>
-                <span className="ml-1 text-[#6e7681]">（小写+连字符，与文件夹名一致）</span>
+              <label className="block text-[11px] text-app-text-muted mb-1">
+                name <span className="text-app-danger">*</span>
+                <span className="ml-1 text-app-text-faint">（小写+连字符，与文件夹名一致）</span>
               </label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={!!editSkill}
                 placeholder="code-review"
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff] disabled:opacity-50"
+                className="w-full px-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent disabled:opacity-50"
               />
             </div>
             <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1">
+              <label className="block text-[11px] text-app-text-muted mb-1">
                 UI 分类
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] outline-none focus:border-[#58a6ff]"
+                className="w-full px-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text outline-none focus:border-app-accent"
               >
                 {CATEGORY_OPTIONS.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -194,59 +194,59 @@ function SkillDialog({
               </select>
             </div>
             <div className="col-span-2">
-              <label className="block text-[11px] text-[#8b949e] mb-1">
-                description <span className="text-[#f85149]">*</span>
-                <span className="ml-1 text-[#6e7681]">（做什么 + 何时使用，模型匹配依据）</span>
+              <label className="block text-[11px] text-app-text-muted mb-1">
+                description <span className="text-app-danger">*</span>
+                <span className="ml-1 text-app-text-faint">（做什么 + 何时使用，模型匹配依据）</span>
               </label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={2}
                 placeholder="Review code for quality, security, and performance issues. Use when asked to review changes or PRs."
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff] resize-none"
+                className="w-full px-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent resize-none"
               />
             </div>
             <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1">license（可选）</label>
+              <label className="block text-[11px] text-app-text-muted mb-1">license（可选）</label>
               <input
                 value={license}
                 onChange={(e) => setLicense(e.target.value)}
                 placeholder="Apache-2.0"
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                className="w-full px-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
               />
             </div>
             <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1">compatibility（可选）</label>
+              <label className="block text-[11px] text-app-text-muted mb-1">compatibility（可选）</label>
               <input
                 value={compatibility}
                 onChange={(e) => setCompatibility(e.target.value)}
                 placeholder="Requires Python 3.14+ and uv"
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                className="w-full px-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
               />
             </div>
             <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1">trigger（可选，/别名）</label>
+              <label className="block text-[11px] text-app-text-muted mb-1">trigger（可选，/别名）</label>
               <input
                 value={trigger}
                 onChange={(e) => setTrigger(e.target.value)}
                 placeholder="/review"
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                className="w-full px-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
               />
             </div>
             <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1">icon（可选）</label>
+              <label className="block text-[11px] text-app-text-muted mb-1">icon（可选）</label>
               <input
                 value={icon}
                 onChange={(e) => setIcon(e.target.value)}
                 placeholder="zap"
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                className="w-full px-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
               />
             </div>
           </div>
 
           {/* 指令正文 */}
           <div>
-            <label className="block text-[11px] text-[#8b949e] mb-1">
+            <label className="block text-[11px] text-app-text-muted mb-1">
               指令正文（Activation 时注入上下文）
             </label>
             <textarea
@@ -254,29 +254,29 @@ function SkillDialog({
               onChange={(e) => setContent(e.target.value)}
               rows={10}
               placeholder={"# 指令\n\n描述该 skill 的执行步骤、规则与边界……"}
-              className="w-full px-3 py-2 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm font-mono text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff] resize-y leading-relaxed"
+              className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-lg text-sm font-mono text-app-text placeholder-app-text-faint outline-none focus:border-app-accent resize-y leading-relaxed"
             />
           </div>
 
           {error && (
-            <div className="flex items-center gap-1.5 text-xs text-[#f85149]">
+            <div className="flex items-center gap-1.5 text-xs text-app-danger">
               <AlertTriangle size={12} />
               {error}
             </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-[#30363d]">
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-app-border">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm text-[#8b949e] hover:text-[#e6edf3]"
+            className="px-3 py-1.5 rounded-lg text-sm text-app-text-muted hover:text-app-text"
           >
             取消
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#238636] text-white text-sm hover:bg-[#2ea043] disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-app-success-btn text-white text-sm hover:bg-app-success-hover disabled:opacity-50"
           >
             {saving && <Loader2 size={13} className="animate-spin" />}
             保存
@@ -333,36 +333,36 @@ function PathDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-[480px] bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#30363d]">
+      <div className="w-[480px] bg-app-surface border border-app-border rounded-xl shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-app-border">
           <h3 className="text-sm font-semibold">{title}</h3>
-          <button onClick={onClose} className="text-[#8b949e] hover:text-[#e6edf3]">
+          <button onClick={onClose} className="text-app-text-muted hover:text-app-text">
             <X size={16} />
           </button>
         </div>
         <div className="px-5 py-4">
-          <p className="text-xs text-[#8b949e] mb-3">{description}</p>
+          <p className="text-xs text-app-text-muted mb-3">{description}</p>
           <input
             value={path}
             onChange={(e) => setPath(e.target.value)}
             placeholder={placeholder}
-            className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+            className="w-full px-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
           />
           {error && (
-            <div className="flex items-center gap-1.5 mt-2 text-xs text-[#f85149]">
+            <div className="flex items-center gap-1.5 mt-2 text-xs text-app-danger">
               <AlertTriangle size={12} />
               {error}
             </div>
           )}
         </div>
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-[#30363d]">
-          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-sm text-[#8b949e] hover:text-[#e6edf3]">
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-app-border">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-sm text-app-text-muted hover:text-app-text">
             取消
           </button>
           <button
             onClick={handleConfirm}
             disabled={busy || !path.trim()}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#238636] text-white text-sm hover:bg-[#2ea043] disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-app-success-btn text-white text-sm hover:bg-app-success-hover disabled:opacity-50"
           >
             {busy && <Loader2 size={13} className="animate-spin" />}
             {confirmLabel}
@@ -466,14 +466,14 @@ export default function SkillPage() {
   return (
     <div className="flex flex-col h-full">
       {/* 顶部栏 */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#30363d]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-app-border">
         <div className="flex items-center gap-2">
-          <Zap size={18} className="text-[#58a6ff]" />
+          <Zap size={18} className="text-app-accent" />
           <h2 className="text-base font-semibold">Skill 管理</h2>
-          <span className="text-xs text-[#6e7681]">({skills.length})</span>
+          <span className="text-xs text-app-text-faint">({skills.length})</span>
           {scanErrors.length > 0 && (
             <span
-              className="text-[11px] text-[#d2991d] cursor-pointer"
+              className="text-[11px] text-app-warning cursor-pointer"
               title={scanErrors.map((e) => `${e.dir}: ${e.error}`).join("\n")}
             >
               {scanErrors.length} 个目录无效
@@ -483,7 +483,7 @@ export default function SkillPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate("/")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-app-text-muted hover:text-app-text hover:bg-app-elevated"
           >
             <ArrowLeft size={14} />
             返回对话
@@ -491,21 +491,21 @@ export default function SkillPage() {
           <button
             onClick={() => refresh()}
             title="重新扫描 skills 目录"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-[#e6edf3] bg-[#21262d] border border-[#30363d] hover:border-[#58a6ff]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-app-text bg-app-elevated border border-app-border hover:border-app-accent"
           >
             <RefreshCw size={13} />
             刷新
           </button>
           <button
             onClick={() => setImportOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-[#e6edf3] bg-[#21262d] border border-[#30363d] hover:border-[#58a6ff]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-app-text bg-app-elevated border border-app-border hover:border-app-accent"
           >
             <Upload size={13} />
             导入
           </button>
           <button
             onClick={() => setDialog("create")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-white bg-[#238636] hover:bg-[#2ea043]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-white bg-app-success-btn hover:bg-app-success-hover"
           >
             <Plus size={13} />
             新建
@@ -514,14 +514,14 @@ export default function SkillPage() {
       </div>
 
       {/* 工具栏 */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-[#30363d]">
+      <div className="flex items-center gap-3 px-6 py-3 border-b border-app-border">
         <div className="relative flex-1 max-w-xs">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6e7681]" />
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-app-text-faint" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="搜索 name / description"
-            className="w-full pl-8 pr-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-sm text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+            className="w-full pl-8 pr-3 py-1.5 bg-app-bg border border-app-border rounded-lg text-sm text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
           />
         </div>
         <div className="flex items-center gap-1">
@@ -531,8 +531,8 @@ export default function SkillPage() {
               onClick={() => setCategoryFilter(c)}
               className={`px-2.5 py-1 rounded-md text-xs border ${
                 categoryFilter === c
-                  ? "text-[#58a6ff] border-[#58a6ff]/40 bg-[#58a6ff]/10"
-                  : "text-[#8b949e] border-transparent hover:text-[#e6edf3]"
+                  ? "text-app-accent border-app-accent/40 bg-app-accent/10"
+                  : "text-app-text-muted border-transparent hover:text-app-text"
               }`}
             >
               {c === "all" ? "全部" : c}
@@ -544,9 +544,9 @@ export default function SkillPage() {
       {/* 主体：列表 + 详情 */}
       <div className="flex flex-1 overflow-hidden">
         {/* 列表 */}
-        <div className="w-80 border-r border-[#30363d] overflow-y-auto">
+        <div className="w-80 border-r border-app-border overflow-y-auto">
           {filtered.length === 0 && (
-            <div className="p-6 text-center text-xs text-[#6e7681] whitespace-pre-line">
+            <div className="p-6 text-center text-xs text-app-text-faint whitespace-pre-line">
               {skills.length === 0
                 ? "暂无 Skill。点击右上角「新建」创建，或「导入」本地 skill 文件夹。\n\n存储目录：{appDataDir}/skills/<name>/SKILL.md"
                 : "没有匹配的 Skill"}
@@ -556,20 +556,20 @@ export default function SkillPage() {
             <div
               key={s.name}
               onClick={() => setSelectedName(s.name)}
-              className={`px-4 py-3 border-b border-[#21262d] cursor-pointer transition-colors ${
+              className={`px-4 py-3 border-b border-app-elevated cursor-pointer transition-colors ${
                 selectedName === s.name
-                  ? "bg-[#161b22] border-l-2 border-l-[#58a6ff]"
-                  : "hover:bg-[#161b22]/60"
+                  ? "bg-app-surface border-l-2 border-l-app-accent"
+                  : "hover:bg-app-surface/60"
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
                 <SkillIcon icon={s.category} />
-                <span className="text-[11px] text-[#58a6ff] font-mono">{s.name}</span>
+                <span className="text-[11px] text-app-accent font-mono">{s.name}</span>
                 <CategoryBadge category={s.category} />
               </div>
-              <p className="text-xs text-[#8b949e] line-clamp-2 mb-2">{s.description}</p>
+              <p className="text-xs text-app-text-muted line-clamp-2 mb-2">{s.description}</p>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#6e7681]">
+                <span className="text-[10px] text-app-text-faint">
                   {s.trigger ? `/${s.trigger} 可手动激活` : ""}
                 </span>
                 <button
@@ -577,7 +577,7 @@ export default function SkillPage() {
                     e.stopPropagation();
                     setEnabled(s.name, !isEnabled(s.name));
                   }}
-                  className={isEnabled(s.name) ? "text-[#3fb950]" : "text-[#6e7681]"}
+                  className={isEnabled(s.name) ? "text-app-success" : "text-app-text-faint"}
                   title={isEnabled(s.name) ? "已启用，点击停用" : "已停用，点击启用"}
                 >
                   {isEnabled(s.name) ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
@@ -590,14 +590,14 @@ export default function SkillPage() {
         {/* 详情 */}
         <div className="flex-1 overflow-y-auto p-6">
           {!selectedName && (
-            <div className="h-full flex flex-col items-center justify-center text-center text-[#6e7681]">
+            <div className="h-full flex flex-col items-center justify-center text-center text-app-text-faint">
               <Zap size={40} className="mb-3" />
               <p className="text-sm mb-1">选择一个 Skill 查看详情</p>
               <p className="text-xs">支持 Agent Skills 开放标准（agentskills.io）</p>
             </div>
           )}
           {selectedName && detailError && (
-            <div className="text-sm text-[#f85149]">{detailError}</div>
+            <div className="text-sm text-app-danger">{detailError}</div>
           )}
           {detail && (
             <div className="space-y-4">
@@ -609,7 +609,7 @@ export default function SkillPage() {
                   <CategoryBadge category={detail.meta.category} />
                   <button
                     onClick={() => setEnabled(detail.meta.name, !isEnabled(detail.meta.name))}
-                    className={`text-xs ${isEnabled(detail.meta.name) ? "text-[#3fb950]" : "text-[#6e7681]"}`}
+                    className={`text-xs ${isEnabled(detail.meta.name) ? "text-app-success" : "text-app-text-faint"}`}
                   >
                     {isEnabled(detail.meta.name) ? "已启用" : "已停用"}
                   </button>
@@ -617,19 +617,19 @@ export default function SkillPage() {
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setDialog("edit")}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-app-text-muted hover:text-app-text hover:bg-app-elevated"
                   >
                     <Pencil size={12} /> 编辑
                   </button>
                   <button
                     onClick={() => handleExport(detail.meta.name)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#21262d]"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-app-text-muted hover:text-app-text hover:bg-app-elevated"
                   >
                     <Download size={12} /> 导出
                   </button>
                   <button
                     onClick={() => handleDelete(detail.meta)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-[#f85149] hover:bg-[#f85149]/10"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-app-danger hover:bg-app-danger/10"
                   >
                     <Trash2 size={12} /> 删除
                   </button>
@@ -637,34 +637,34 @@ export default function SkillPage() {
               </div>
 
               {/* 元信息 */}
-              <div className="bg-[#0d1117] border border-[#30363d] rounded-lg p-4 space-y-1.5 text-sm">
+              <div className="bg-app-bg border border-app-border rounded-lg p-4 space-y-1.5 text-sm">
                 <div>
-                  <span className="text-[11px] text-[#8b949e] mr-2">description</span>
+                  <span className="text-[11px] text-app-text-muted mr-2">description</span>
                   {detail.frontmatter.description}
                 </div>
                 {(detail.frontmatter.license ||
                   detail.frontmatter.compatibility ||
                   detail.frontmatter.allowedTools ||
                   detail.meta.trigger) && (
-                  <div className="pt-2 border-t border-[#21262d] text-xs text-[#8b949e]">
+                  <div className="pt-2 border-t border-app-elevated text-xs text-app-text-muted">
                     {detail.frontmatter.license && (
-                      <div><span className="text-[#6e7681]">license:</span> {detail.frontmatter.license}</div>
+                      <div><span className="text-app-text-faint">license:</span> {detail.frontmatter.license}</div>
                     )}
                     {detail.frontmatter.compatibility && (
-                      <div><span className="text-[#6e7681]">compatibility:</span> {detail.frontmatter.compatibility}</div>
+                      <div><span className="text-app-text-faint">compatibility:</span> {detail.frontmatter.compatibility}</div>
                     )}
                     {detail.frontmatter.allowedTools && detail.frontmatter.allowedTools.length > 0 && (
-                      <div><span className="text-[#6e7681]">allowed-tools:</span> {detail.frontmatter.allowedTools.join(" ")}</div>
+                      <div><span className="text-app-text-faint">allowed-tools:</span> {detail.frontmatter.allowedTools.join(" ")}</div>
                     )}
                     {detail.meta.trigger && (
-                      <div><span className="text-[#6e7681]">trigger:</span> /{detail.meta.trigger}</div>
+                      <div><span className="text-app-text-faint">trigger:</span> /{detail.meta.trigger}</div>
                     )}
                     {detail.frontmatter.metadata &&
                       Object.entries(detail.frontmatter.metadata)
                         .filter(([k]) => !["category", "trigger", "icon"].includes(k))
                         .map(([k, v]) => (
                           <div key={k}>
-                            <span className="text-[#6e7681]">metadata.{k}:</span> {v}
+                            <span className="text-app-text-faint">metadata.{k}:</span> {v}
                           </div>
                         ))}
                   </div>
@@ -672,12 +672,12 @@ export default function SkillPage() {
               </div>
 
               {/* 指令正文 */}
-              <div className="bg-[#0d1117] border border-[#30363d] rounded-lg p-4">
-                <div className="flex items-center gap-1.5 mb-2 text-[11px] text-[#8b949e]">
+              <div className="bg-app-bg border border-app-border rounded-lg p-4">
+                <div className="flex items-center gap-1.5 mb-2 text-[11px] text-app-text-muted">
                   <FileText size={12} />
                   指令正文（Activation 时注入）
                 </div>
-                <div className="skill-markdown text-sm text-[#e6edf3]">
+                <div className="skill-markdown text-sm text-app-text">
                   <ReactMarkdown>{detail.content || "_（空正文）_"}</ReactMarkdown>
                 </div>
               </div>

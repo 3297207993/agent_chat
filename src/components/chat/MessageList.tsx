@@ -28,7 +28,7 @@ export default function MessageList({
         <div className="text-center">
           <div className="text-3xl mb-3">💬</div>
           <h2 className="text-lg font-semibold mb-1">{APP_NAME}</h2>
-          <p className="text-sm text-[#8b949e]">选择一个对话或创建新对话开始</p>
+          <p className="text-sm text-app-text-muted">选择一个对话或创建新对话开始</p>
         </div>
       </div>
     );

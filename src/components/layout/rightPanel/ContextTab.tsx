@@ -35,19 +35,19 @@ export default function ContextTab() {
   const tokenPercent = Math.min((totalTokens / contextLength) * 100, 100);
   const barColor =
     tokenPercent < 70
-      ? "bg-[#58a6ff]"
+      ? "bg-app-accent"
       : tokenPercent < 90
-        ? "bg-[#d2991d]"
-        : "bg-[#f85149]";
+        ? "bg-app-warning"
+        : "bg-app-danger";
 
   return (
     <div className="space-y-4">
       <section>
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681] mb-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-app-text-faint mb-2">
           Token 用量
         </h3>
         <div>
-          <div className="flex justify-between text-[11px] text-[#6e7681] mb-1">
+          <div className="flex justify-between text-[11px] text-app-text-faint mb-1">
             <span className="truncate">
               上下文{modelConfig ? `（${modelConfig.name}）` : ""}
             </span>
@@ -55,13 +55,13 @@ export default function ContextTab() {
               {totalTokens.toLocaleString()} / {contextLength.toLocaleString()}
             </span>
           </div>
-          <div className="h-1 bg-[#21262d] rounded-full overflow-hidden">
+          <div className="h-1 bg-app-elevated rounded-full overflow-hidden">
             <div
               className={`h-full ${barColor} rounded-full transition-colors`}
               style={{ width: `${tokenPercent}%` }}
             />
           </div>
-          <div className="flex justify-between text-[10px] text-[#6e7681] mt-1">
+          <div className="flex justify-between text-[10px] text-app-text-faint mt-1">
             <span>{currentMessages.length} 条消息</span>
             <span>{Math.round(tokenPercent)}%</span>
           </div>
@@ -69,12 +69,12 @@ export default function ContextTab() {
       </section>
 
       <section>
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681] mb-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-app-text-faint mb-2">
           当前 Skill
         </h3>
-        <div className="text-[12px] text-[#6e7681] italic">
+        <div className="text-[12px] text-app-text-faint italic">
           无激活的 Skill，输入{" "}
-          <kbd className="px-1 py-0.5 bg-[#21262d] rounded text-[11px] not-italic">
+          <kbd className="px-1 py-0.5 bg-app-elevated rounded text-[11px] not-italic">
             /
           </kbd>{" "}
           触发
@@ -82,46 +82,46 @@ export default function ContextTab() {
       </section>
 
       <section>
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6e7681] mb-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-app-text-faint mb-2">
           系统提示词
         </h3>
         <div className="space-y-2">
           {/* 全局系统提示词 */}
-          <div className="bg-[#0d1117] border border-[#30363d] rounded-md p-2">
+          <div className="bg-app-bg border border-app-border rounded-md p-2">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-[#8b949e]">全局</span>
-              <span className="text-[10px] text-[#6e7681]">
+              <span className="text-[10px] font-medium text-app-text-muted">全局</span>
+              <span className="text-[10px] text-app-text-faint">
                 {globalSystemPrompt
                   ? `${estimateTokens(globalSystemPrompt).toLocaleString()} tokens`
                   : ""}
               </span>
             </div>
             {globalSystemPrompt ? (
-              <p className="text-[11px] text-[#e6edf3] whitespace-pre-wrap break-words line-clamp-3">
+              <p className="text-[11px] text-app-text whitespace-pre-wrap break-words line-clamp-3">
                 {globalSystemPrompt}
               </p>
             ) : (
-              <div className="text-[11px] text-[#6e7681] italic">未设置</div>
+              <div className="text-[11px] text-app-text-faint italic">未设置</div>
             )}
           </div>
           {/* 对话系统提示词 */}
-          <div className="bg-[#0d1117] border border-[#30363d] rounded-md p-2">
+          <div className="bg-app-bg border border-app-border rounded-md p-2">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-[#8b949e]">
+              <span className="text-[10px] font-medium text-app-text-muted">
                 对话{currentConversation ? `（${currentConversation.title}）` : ""}
               </span>
-              <span className="text-[10px] text-[#6e7681]">
+              <span className="text-[10px] text-app-text-faint">
                 {convSystemPrompt
                   ? `${estimateTokens(convSystemPrompt).toLocaleString()} tokens`
                   : ""}
               </span>
             </div>
             {convSystemPrompt ? (
-              <p className="text-[11px] text-[#e6edf3] whitespace-pre-wrap break-words line-clamp-3">
+              <p className="text-[11px] text-app-text whitespace-pre-wrap break-words line-clamp-3">
                 {convSystemPrompt}
               </p>
             ) : (
-              <div className="text-[11px] text-[#6e7681] italic">未设置，跟随全局</div>
+              <div className="text-[11px] text-app-text-faint italic">未设置，跟随全局</div>
             )}
           </div>
         </div>

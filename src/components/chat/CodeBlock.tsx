@@ -32,19 +32,19 @@ export default function CodeBlock({ language, code }: Props) {
   }, [code]);
 
   return (
-    <div className="my-3 rounded-lg overflow-hidden border border-[#30363d]">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#21262d] border-b border-[#30363d]">
-        <span className="text-[11px] text-[#8b949e] font-mono">
+    <div className="my-3 rounded-lg overflow-hidden border border-app-border">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-app-elevated border-b border-app-border">
+        <span className="text-[11px] text-app-text-muted font-mono">
           {language || "text"}
         </span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-[11px] text-[#8b949e] hover:text-[#e6edf3] transition-colors"
+          className="flex items-center gap-1 text-[11px] text-app-text-muted hover:text-app-text transition-colors"
         >
           {copied ? (
             <>
-              <Check size={12} className="text-[#3fb950]" />
-              <span className="text-[#3fb950]">已复制</span>
+              <Check size={12} className="text-app-success" />
+              <span className="text-app-success">已复制</span>
             </>
           ) : (
             <>
@@ -61,7 +61,7 @@ export default function CodeBlock({ language, code }: Props) {
             className="[&_pre]:!bg-transparent [&_pre]:!p-4 [&_pre]:!m-0 [&_code]:!text-[13px] [&_code]:!leading-relaxed"
           />
         ) : (
-          <pre className="p-4 m-0 text-[13px] leading-relaxed text-[#e6edf3] bg-[#0d1117]">
+          <pre className="p-4 m-0 text-[13px] leading-relaxed text-app-text bg-app-bg">
             <code>{code}</code>
           </pre>
         )}

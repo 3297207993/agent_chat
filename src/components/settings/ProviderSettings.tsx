@@ -121,13 +121,13 @@ export default function ProviderSettings() {
   return (
     <section className="mb-10">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-[#8b949e] uppercase tracking-wide">
+        <h2 className="text-sm font-semibold text-app-text-muted uppercase tracking-wide">
           LLM Provider
         </h2>
         <div className="relative">
           <button
             onClick={() => setDropdownOpen((prev) => !prev)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#238636] text-white text-xs rounded-md hover:bg-[#2ea043]"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-app-success-btn text-white text-xs rounded-md hover:bg-app-success-hover"
           >
             <Plus size={13} />
             添加 Provider
@@ -138,7 +138,7 @@ export default function ProviderSettings() {
                 className="fixed inset-0 z-[5]"
                 onClick={() => setDropdownOpen(false)}
               />
-              <div className="absolute right-0 top-full mt-1 w-52 bg-[#161b22] border border-[#30363d] rounded-lg shadow-lg z-10">
+              <div className="absolute right-0 top-full mt-1 w-52 bg-app-surface border border-app-border rounded-lg shadow-lg z-10">
                 {builtins.map((builtin) => (
                   <button
                     key={builtin.id}
@@ -146,7 +146,7 @@ export default function ProviderSettings() {
                       handleAddProvider(builtin.id);
                       setDropdownOpen(false);
                     }}
-                    className="w-full text-left px-3 py-2 text-xs text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] first:rounded-t-lg last:rounded-b-lg"
+                    className="w-full text-left px-3 py-2 text-xs text-app-text-muted hover:bg-app-elevated hover:text-app-text first:rounded-t-lg last:rounded-b-lg"
                   >
                     {builtin.name}
                   </button>
@@ -158,9 +158,9 @@ export default function ProviderSettings() {
       </div>
 
       {providers.length === 0 ? (
-        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-8 text-center">
-          <p className="text-sm text-[#8b949e] mb-3">尚未添加任何 Provider</p>
-          <p className="text-xs text-[#6e7681] mb-4">
+        <div className="bg-app-surface border border-app-border rounded-lg p-8 text-center">
+          <p className="text-sm text-app-text-muted mb-3">尚未添加任何 Provider</p>
+          <p className="text-xs text-app-text-faint mb-4">
             点击上方"添加 Provider"按钮，选择要添加的 LLM 厂商
           </p>
         </div>
@@ -169,7 +169,7 @@ export default function ProviderSettings() {
           {providers.map((provider) => (
             <div
               key={provider.id}
-              className="bg-[#161b22] border border-[#30363d] rounded-lg overflow-hidden"
+              className="bg-app-surface border border-app-border rounded-lg overflow-hidden"
             >
               <div
                 onClick={() =>
@@ -177,21 +177,21 @@ export default function ProviderSettings() {
                     expandedProvider === provider.id ? null : provider.id
                   )
                 }
-                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#1c2128]"
+                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-app-overlay"
               >
                 {expandedProvider === provider.id ? (
-                  <ChevronDown size={14} className="text-[#6e7681] flex-shrink-0" />
+                  <ChevronDown size={14} className="text-app-text-faint flex-shrink-0" />
                 ) : (
-                  <ChevronRight size={14} className="text-[#6e7681] flex-shrink-0" />
+                  <ChevronRight size={14} className="text-app-text-faint flex-shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{provider.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#21262d] text-[#6e7681]">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-app-elevated text-app-text-faint">
                       {provider.type === "official" ? "官方" : "兼容"}
                     </span>
                   </div>
-                  <div className="text-[11px] text-[#6e7681] mt-0.5">
+                  <div className="text-[11px] text-app-text-faint mt-0.5">
                     {provider.models.length} 个模型
                   </div>
                 </div>
@@ -200,7 +200,7 @@ export default function ProviderSettings() {
                     e.stopPropagation();
                     removeProvider(provider.id);
                   }}
-                  className="w-7 h-7 flex items-center justify-center rounded-md text-[#8b949e] hover:text-[#f85149] hover:bg-[#21262d]"
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-app-text-muted hover:text-app-danger hover:bg-app-elevated"
                   title="删除 Provider"
                 >
                   <Trash2 size={13} />
@@ -208,9 +208,9 @@ export default function ProviderSettings() {
               </div>
 
               {expandedProvider === provider.id && (
-                <div className="px-4 pb-4 border-t border-[#30363d] pt-3 space-y-3">
+                <div className="px-4 pb-4 border-t border-app-border pt-3 space-y-3">
                   <div>
-                    <label className="text-[11px] text-[#6e7681] block mb-1">
+                    <label className="text-[11px] text-app-text-faint block mb-1">
                       Provider 名称
                     </label>
                     <input
@@ -218,12 +218,12 @@ export default function ProviderSettings() {
                       value={provider.name}
                       onChange={(e) => updateProvider(provider.id, { name: e.target.value })}
                       placeholder="例如：DeepSeek-个人、智谱 AI、Ollama 本地"
-                      className="w-full px-2.5 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                      className="w-full px-2.5 py-1.5 bg-app-bg border border-app-border rounded-md text-xs text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-[#6e7681] block mb-1">
+                    <label className="text-[11px] text-app-text-faint block mb-1">
                       API Key
                     </label>
                     <div className="flex items-center gap-2">
@@ -232,7 +232,7 @@ export default function ProviderSettings() {
                         value={provider.apiKey}
                         placeholder="输入 API Key..."
                         onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
-                        className="flex-1 px-2.5 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                        className="flex-1 px-2.5 py-1.5 bg-app-bg border border-app-border rounded-md text-xs text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
                       />
                       <button
                         onClick={() =>
@@ -241,7 +241,7 @@ export default function ProviderSettings() {
                             [provider.id]: !prev[provider.id],
                           }))
                         }
-                        className="w-7 h-7 flex items-center justify-center rounded-md text-[#8b949e] hover:bg-[#21262d]"
+                        className="w-7 h-7 flex items-center justify-center rounded-md text-app-text-muted hover:bg-app-elevated"
                       >
                         {showApiKey[provider.id] ? (
                           <EyeOff size={13} />
@@ -254,7 +254,7 @@ export default function ProviderSettings() {
 
                   {provider.type === "openai-compatible" && (
                     <div>
-                      <label className="text-[11px] text-[#6e7681] block mb-1">
+                      <label className="text-[11px] text-app-text-faint block mb-1">
                         API Base URL
                       </label>
                       <input
@@ -262,14 +262,14 @@ export default function ProviderSettings() {
                         value={provider.baseURL || ""}
                         placeholder="https://api.example.com/v1"
                         onChange={(e) => updateProvider(provider.id, { baseURL: e.target.value })}
-                        className="w-full px-2.5 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-md text-xs text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                        className="w-full px-2.5 py-1.5 bg-app-bg border border-app-border rounded-md text-xs text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
                       />
                     </div>
                   )}
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] text-[#6e7681]">
+                      <label className="text-[11px] text-app-text-faint">
                         模型列表
                       </label>
                       <button
@@ -277,7 +277,7 @@ export default function ProviderSettings() {
                           setAddingModelFor(addingModelFor === provider.id ? null : provider.id);
                           setNewModelForm({ id: "", name: "", maxTokens: "128000" });
                         }}
-                        className="flex items-center gap-1 text-[11px] text-[#58a6ff] hover:text-[#79c0ff]"
+                        className="flex items-center gap-1 text-[11px] text-app-accent hover:text-app-info"
                       >
                         <Plus size={12} />
                         添加模型
@@ -297,7 +297,7 @@ export default function ProviderSettings() {
                             if (e.key === "Escape") setAddingModelFor(null);
                           }}
                           placeholder="模型 ID（如 gpt-4o）"
-                          className="flex-1 px-2 py-1 bg-[#0d1117] border border-[#30363d] rounded-md text-[11px] text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                          className="flex-1 px-2 py-1 bg-app-bg border border-app-border rounded-md text-[11px] text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
                         />
                         <input
                           type="text"
@@ -310,7 +310,7 @@ export default function ProviderSettings() {
                             if (e.key === "Escape") setAddingModelFor(null);
                           }}
                           placeholder="显示名称"
-                          className="w-28 px-2 py-1 bg-[#0d1117] border border-[#30363d] rounded-md text-[11px] text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                          className="w-28 px-2 py-1 bg-app-bg border border-app-border rounded-md text-[11px] text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
                         />
                         <input
                           type="number"
@@ -326,11 +326,11 @@ export default function ProviderSettings() {
                           }}
                           placeholder="上下文 Tokens"
                           title="该模型可用的上下文 Token 量"
-                          className="w-28 px-2 py-1 bg-[#0d1117] border border-[#30363d] rounded-md text-[11px] text-[#e6edf3] placeholder-[#6e7681] outline-none focus:border-[#58a6ff]"
+                          className="w-28 px-2 py-1 bg-app-bg border border-app-border rounded-md text-[11px] text-app-text placeholder-app-text-faint outline-none focus:border-app-accent"
                         />
                         <button
                           onClick={() => handleAddModel(provider.id)}
-                          className="px-2 py-1 bg-[#238636] text-white text-[11px] rounded-md hover:bg-[#2ea043]"
+                          className="px-2 py-1 bg-app-success-btn text-white text-[11px] rounded-md hover:bg-app-success-hover"
                         >
                           确认
                         </button>
@@ -339,7 +339,7 @@ export default function ProviderSettings() {
 
                     <div className="space-y-1">
                       {provider.models.length === 0 && (
-                        <div className="text-[11px] text-[#6e7681] italic py-2 text-center">
+                        <div className="text-[11px] text-app-text-faint italic py-2 text-center">
                           暂无模型，点击"添加模型"手动添加
                         </div>
                       )}
@@ -350,38 +350,38 @@ export default function ProviderSettings() {
                           className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs cursor-pointer group ${
                             activeProviderId === provider.id &&
                             activeModelId === model.id
-                              ? "bg-[#1a3a5c] text-[#e6edf3]"
-                              : "text-[#8b949e] hover:bg-[#21262d]"
+                              ? "bg-app-accent-badge text-app-text"
+                              : "text-app-text-muted hover:bg-app-elevated"
                           }`}
                         >
                           <div
                             className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
                               activeProviderId === provider.id &&
                               activeModelId === model.id
-                                ? "border-[#58a6ff]"
-                                : "border-[#30363d]"
+                                ? "border-app-accent"
+                                : "border-app-border"
                             }`}
                           >
                             {activeProviderId === provider.id &&
                               activeModelId === model.id && (
-                                <div className="w-2 h-2 rounded-full bg-[#58a6ff]" />
+                                <div className="w-2 h-2 rounded-full bg-app-accent" />
                               )}
                           </div>
                           <span className="flex-1">{model.name}</span>
-                          <span className="text-[10px] text-[#6e7681] mr-1">{model.id}</span>
+                          <span className="text-[10px] text-app-text-faint mr-1">{model.id}</span>
                           <div className="flex gap-1">
                             {model.capabilities.vision && (
-                              <span className="px-1 py-0.5 rounded bg-[#21262d] text-[10px] text-[#8b949e]">
+                              <span className="px-1 py-0.5 rounded bg-app-elevated text-[10px] text-app-text-muted">
                                 视觉
                               </span>
                             )}
                             {model.capabilities.toolCalling && (
-                              <span className="px-1 py-0.5 rounded bg-[#21262d] text-[10px] text-[#8b949e]">
+                              <span className="px-1 py-0.5 rounded bg-app-elevated text-[10px] text-app-text-muted">
                                 工具
                               </span>
                             )}
                             {model.capabilities.reasoning && (
-                              <span className="px-1 py-0.5 rounded bg-[#21262d] text-[10px] text-[#8b949e]">
+                              <span className="px-1 py-0.5 rounded bg-app-elevated text-[10px] text-app-text-muted">
                                 推理
                               </span>
                             )}
@@ -400,7 +400,7 @@ export default function ProviderSettings() {
                                 if (e.key === "Escape") setEditingTokensFor(null);
                               }}
                               onBlur={() => commitTokens(provider.id, model)}
-                              className="w-24 px-1.5 py-0.5 bg-[#0d1117] border border-[#58a6ff] rounded text-[10px] text-[#e6edf3] outline-none"
+                              className="w-24 px-1.5 py-0.5 bg-app-bg border border-app-accent rounded text-[10px] text-app-text outline-none"
                             />
                           ) : (
                             <button
@@ -409,7 +409,7 @@ export default function ProviderSettings() {
                                 startEditTokens(provider.id, model);
                               }}
                               title={`上下文 Tokens（${model.capabilities.maxTokens?.toLocaleString() ?? "未设置"}），点击修改`}
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#21262d] text-[10px] text-[#8b949e] hover:text-[#58a6ff] hover:bg-[#1c2128]"
+                              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-app-elevated text-[10px] text-app-text-muted hover:text-app-accent hover:bg-app-overlay"
                             >
                               {model.capabilities.maxTokens
                                 ? formatTokens(model.capabilities.maxTokens)
@@ -422,7 +422,7 @@ export default function ProviderSettings() {
                               e.stopPropagation();
                               removeModel(provider.id, model.id);
                             }}
-                            className="w-5 h-5 flex items-center justify-center rounded text-[#6e7681] hover:text-[#f85149] hover:bg-[#21262d] opacity-0 group-hover:opacity-100"
+                            className="w-5 h-5 flex items-center justify-center rounded text-app-text-faint hover:text-app-danger hover:bg-app-elevated opacity-0 group-hover:opacity-100"
                             title="删除模型"
                           >
                             <X size={11} />

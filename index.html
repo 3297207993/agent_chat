@@ -5,6 +5,21 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agent Chat</title>
+    <script>
+      // CSS 加载前挂主题 class，避免亮色用户刷新时闪暗色（与 uiStore 持久化的 theme 一致）
+      (function () {
+        try {
+          var t = JSON.parse(localStorage.getItem("ui-store")).state.theme;
+          var dark =
+            t === "system"
+              ? matchMedia("(prefers-color-scheme: dark)").matches
+              : t !== "light";
+          document.documentElement.classList.add(dark ? "dark" : "light");
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
     <style>
       /* 静态启动页：WebView 加载前端 bundle 期间显示，React 挂载后会被 #root 内容替换 */
       #splash {
@@ -15,8 +30,8 @@
         align-items: center;
         justify-content: center;
         gap: 16px;
-        background: #0d1117;
-        color: #e6edf3;
+        background: var(--app-bg, #0d1117);
+        color: var(--app-text, #e6edf3);
         font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
         z-index: 9999;
       }
@@ -28,8 +43,8 @@
         justify-content: center;
         font-size: 30px;
         border-radius: 14px;
-        background: #161b22;
-        border: 1px solid #30363d;
+        background: var(--app-surface, #161b22);
+        border: 1px solid var(--app-border, #30363d);
       }
       #splash-title {
         font-size: 15px;
@@ -39,8 +54,8 @@
       #splash-spinner {
         width: 22px;
         height: 22px;
-        border: 2.5px solid #21262d;
-        border-top-color: #58a6ff;
+        border: 2.5px solid var(--app-elevated, #21262d);
+        border-top-color: var(--app-accent, #58a6ff);
         border-radius: 50%;
         animation: splash-spin 0.8s linear infinite;
       }
