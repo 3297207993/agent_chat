@@ -60,7 +60,6 @@ export interface RuleRow {
   conversationId?: string;
   globs?: string; // JSON.stringify(string[])
   enabled: number; // 0/1
-  priority: number;
   createdAt: number;
   updatedAt: number;
 }

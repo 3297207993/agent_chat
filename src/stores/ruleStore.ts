@@ -28,8 +28,8 @@ interface RuleState {
   getRuleById: (id: string) => Rule | undefined;
 
   /**
-   * 获取当前对话所有生效规则，按优先级排序（高→低）
-   * 规则去重：如果同一条规则同时出现在多个层级，取最高优先级的那次
+   * 获取当前对话所有生效规则，按作用域具体程度排序（对话 > 引用 > 分类 > 全局）
+   * 规则去重：如果同一条规则同时出现在多个层级，取更具体的那次
    */
   getEffectiveRules: (
     conversation?: Conversation | null,
@@ -70,7 +70,6 @@ export const useRuleStore = create<RuleState>((set, get) => ({
       conversationId: rule.conversationId,
       globs: rule.globs ? JSON.stringify(rule.globs) : undefined,
       enabled: rule.enabled ? 1 : 0,
-      priority: rule.priority,
       createdAt: now,
       updatedAt: now,
     };
@@ -161,7 +160,7 @@ export const useRuleStore = create<RuleState>((set, get) => ({
       (r) => referencedRuleIds.includes(r.id) && !conversationRules.includes(r) && !categoryRules.includes(r)
     );
 
-    // 3. 合并并按优先级排序（高→低）
+    // 3. 合并（对话 > 引用 > 分类 > 全局，越具体越靠前）
     const all = [
       ...conversationRules,
       ...referencedRules,
@@ -169,12 +168,12 @@ export const useRuleStore = create<RuleState>((set, get) => ({
       ...globalRules,
     ];
 
-    // 4. 去重（按 id，保留第一次出现的，即最高优先级的）
+    // 4. 去重（按 id，保留第一次出现的，即作用域最具体的那次）
     const seen = new Set<string>();
     return all.filter((r) => {
       if (seen.has(r.id)) return false;
       seen.add(r.id);
       return true;
-    }).sort((a, b) => b.priority - a.priority);
+    });
   },
 }));

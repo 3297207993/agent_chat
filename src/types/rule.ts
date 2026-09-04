@@ -16,7 +16,6 @@ export interface Rule {
   conversationId?: string;      // 对话规则关联的对话 ID
   globs?: string[];             // 文件匹配模式
   enabled: boolean;
-  priority: number;             // 数字越大优先级越高
   createdAt: number;
   updatedAt: number;
 }

@@ -125,7 +125,6 @@ function RuleDialog({
         scope === "conversation" ? conversationId || undefined : undefined,
       globs: undefined,
       enabled,
-      priority: editRule?.priority ?? 100,
     };
 
     if (editRule) {

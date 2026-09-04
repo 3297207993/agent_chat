@@ -70,7 +70,6 @@ export function toRule(row: RuleRow): Rule {
     conversationId: row.conversationId,
     globs: row.globs ? JSON.parse(row.globs) : undefined,
     enabled: row.enabled === 1,
-    priority: row.priority,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
