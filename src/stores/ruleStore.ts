@@ -35,9 +35,6 @@ interface RuleState {
     conversation?: Conversation | null,
     category?: Category | null,
   ) => Rule[];
-
-  // 排序
-  reorderRules: (ids: string[]) => Promise<void>;
 }
 
 export const useRuleStore = create<RuleState>((set, get) => ({
@@ -179,31 +176,5 @@ export const useRuleStore = create<RuleState>((set, get) => ({
       seen.add(r.id);
       return true;
     }).sort((a, b) => b.priority - a.priority);
-  },
-
-  // ── 排序 ──
-
-  reorderRules: async (ids) => {
-    set((s) => {
-      const ruleMap = new Map(s.rules.map((r) => [r.id, r]));
-      const reordered: Rule[] = [];
-      ids.forEach((id, index) => {
-        const rule = ruleMap.get(id);
-        if (rule) {
-          reordered.push({ ...rule, priority: ids.length - index });
-        }
-      });
-      // 补上未在 ids 中的规则（容错）
-      s.rules.forEach((r) => {
-        if (!ids.includes(r.id)) reordered.push(r);
-      });
-      return { rules: reordered };
-    });
-
-    // 异步更新数据库
-    const { rules } = get();
-    for (const rule of rules) {
-      await dbUpdate(rule.id, { priority: rule.priority });
-    }
   },
 }));

@@ -54,7 +54,7 @@ export interface RuleRow {
   description: string;
   content: string;
   format: "markdown" | "yaml";
-  type: "always" | "manual" | "requested";
+  type: "always" | "manual";
   scope: "global" | "category" | "conversation";
   categoryId?: string;
   conversationId?: string;

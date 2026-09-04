@@ -70,19 +70,6 @@ export default function ContextTab() {
 
       <section>
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-app-text-faint mb-2">
-          当前 Skill
-        </h3>
-        <div className="text-[12px] text-app-text-faint italic">
-          无激活的 Skill，输入{" "}
-          <kbd className="px-1 py-0.5 bg-app-elevated rounded text-[11px] not-italic">
-            /
-          </kbd>{" "}
-          触发
-        </div>
-      </section>
-
-      <section>
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-app-text-faint mb-2">
           系统提示词
         </h3>
         <div className="space-y-2">

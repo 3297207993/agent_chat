@@ -1,7 +1,7 @@
 // ── 规则类型定义 ──
 
 export type RuleScope = "global" | "category" | "conversation";
-export type RuleType = "always" | "manual" | "requested";
+export type RuleType = "always" | "manual";
 export type RuleFormat = "markdown" | "yaml";
 
 export interface Rule {

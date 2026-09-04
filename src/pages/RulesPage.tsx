@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
+import { useConversationStore } from "@/stores/conversationStore";
 import type { Rule, RuleScope, RuleType, RuleFormat } from "@/types/rule";
 import {
   BookOpen,
@@ -53,7 +54,6 @@ function TypeBadge({ type }: { type: RuleType }) {
   const config: Record<RuleType, { label: string; color: string }> = {
     always: { label: "始终生效", color: "text-app-success" },
     manual: { label: "手动触发", color: "text-app-warning" },
-    requested: { label: "智能推荐", color: "text-app-accent" },
   };
   const c = config[type];
   return <span className={`text-[10px] ${c.color}`}>{c.label}</span>;
@@ -72,6 +72,7 @@ function RuleDialog({
 }) {
   const { addRule, updateRule } = useRuleStore();
   const { categories } = useCategoryStore();
+  const { conversations } = useConversationStore();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -80,7 +81,7 @@ function RuleDialog({
   const [scope, setScope] = useState<RuleScope>("global");
   const [type, setType] = useState<RuleType>("always");
   const [categoryId, setCategoryId] = useState("");
-  const [priority, setPriority] = useState(100);
+  const [conversationId, setConversationId] = useState("");
   const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
@@ -92,7 +93,7 @@ function RuleDialog({
       setScope(editRule.scope);
       setType(editRule.type);
       setCategoryId(editRule.categoryId || "");
-      setPriority(editRule.priority);
+      setConversationId(editRule.conversationId || "");
       setEnabled(editRule.enabled);
     } else {
       setName("");
@@ -102,7 +103,7 @@ function RuleDialog({
       setScope("global");
       setType("always");
       setCategoryId("");
-      setPriority(100);
+      setConversationId("");
       setEnabled(true);
     }
   }, [editRule, open]);
@@ -120,10 +121,11 @@ function RuleDialog({
       scope,
       type,
       categoryId: scope === "category" ? categoryId || undefined : undefined,
-      conversationId: editRule?.conversationId,
+      conversationId:
+        scope === "conversation" ? conversationId || undefined : undefined,
       globs: undefined,
       enabled,
-      priority,
+      priority: editRule?.priority ?? 100,
     };
 
     if (editRule) {
@@ -213,11 +215,30 @@ function RuleDialog({
             </div>
           )}
 
+          {/* 对话选择 */}
+          {scope === "conversation" && (
+            <div>
+              <label className="block text-xs text-app-text-muted mb-1">关联对话</label>
+              <select
+                value={conversationId}
+                onChange={(e) => setConversationId(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-lg text-sm text-app-text outline-none focus:border-app-accent"
+              >
+                <option value="">选择对话...</option>
+                {conversations.map((conv) => (
+                  <option key={conv.id} value={conv.id}>
+                    {conv.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* 规则类型 */}
           <div>
             <label className="block text-xs text-app-text-muted mb-1">触发方式</label>
             <div className="flex gap-2">
-              {(["always", "manual", "requested"] as RuleType[]).map((t) => (
+              {(["always", "manual"] as RuleType[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setType(t)}
@@ -229,7 +250,6 @@ function RuleDialog({
                 >
                   {t === "always" && "始终生效"}
                   {t === "manual" && "手动触发"}
-                  {t === "requested" && "智能推荐"}
                 </button>
               ))}
             </div>
@@ -271,29 +291,16 @@ function RuleDialog({
             />
           </div>
 
-          {/* 优先级 */}
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <label className="block text-xs text-app-text-muted mb-1">
-                优先级 <span className="text-app-text-faint">（数字越大优先级越高）</span>
-              </label>
-              <input
-                type="number"
-                value={priority}
-                onChange={(e) => setPriority(Number(e.target.value))}
-                className="w-24 px-3 py-2 bg-app-bg border border-app-border rounded-lg text-sm text-app-text outline-none focus:border-app-accent"
-              />
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer mt-4">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-app-border bg-app-bg accent-app-success-btn"
-              />
-              <span className="text-sm text-app-text">创建后启用</span>
-            </label>
-          </div>
+          {/* 启用 */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-app-border bg-app-bg accent-app-success-btn"
+            />
+            <span className="text-sm text-app-text">创建后启用</span>
+          </label>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-app-border bg-app-bg">
@@ -400,7 +407,6 @@ function RuleCard({
             </pre>
           </div>
           <div className="flex items-center gap-4 text-[10px] text-app-text-faint">
-            <span>优先级: {rule.priority}</span>
             <span>格式: {rule.format.toUpperCase()}</span>
           </div>
         </div>
