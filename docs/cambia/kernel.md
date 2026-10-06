@@ -141,9 +141,13 @@ const result = ctx.waterfall('tools/pre-execute', call, () => defaultExecute(cal
   "activationEvents": ["onCommand:web-search"],    // 懒激活；"always" = 随应用启动
   "parts": {
     "frontend": { "main": "frontend/main.js" },    // 同进程 Cordis 插件（单文件 bundle，导出 apply(ctx, config)）
-    "backend":  {                                  // 进程外可执行文件，每平台一份（见 3.3）
-      "dir": "backend",                            // 约定子目录 <os>-<arch>/<可执行文件>
-      "protocol": "jsonrpc-stdio"                  // 宿主 spawn 后走 stdin/stdout
+    "backend":  {                                  // 进程外后端：按平台直指可执行文件或一条命令（见 3.3）
+      "protocol": "jsonrpc-stdio",                 // 宿主 spawn 后走 stdin/stdout
+      "bin": {                                     // 键 = 平台，值 = 可执行文件路径（相对 .tap 根）或 argv 数组
+        "win-x64":   "backend/win-x64/app.exe",
+        "mac-arm64": "backend/mac-arm64/app",
+        "linux-x64": ["python3", "backend/app.py"] // 数组 = argv：系统解释器 + 自带脚本
+      }                                            // 未列出的平台 = 不支持（宿主报错，不猜路径）
     },
     "view":     { "entry": "view.html" }           // 独立文档 iframe（无同源，DOM 隔离而非安全边界）
   }
@@ -177,19 +181,25 @@ export function apply(ctx, config) { /* 注册服务 / 监听事件 / 声明视�
 
 同进程装载正因为这个形状而简单：宿主只需 `await ctx.plugin(module.default ?? module, config)`，**不需要任何 API shim**。
 
-### 3.3 后端部分：进程外可执行文件
+### 3.3 后端部分：进程外程序（每平台一条路径或命令）
 
-插件的"完全能力"由**插件自带的原生程序**提供：宿主以子进程方式启动它。插件因此**不受宿主 API 限制**——它就是一个普通进程，能力等于操作系统给它的权限（读写文件、连网、起子进程、调用原生库，随它）。
+插件的"完全能力"由**插件自带的程序**提供（原生二进制，或"系统解释器 + 自带脚本"）：宿主以子进程方式启动它。插件因此**不受宿主 API 限制**——它就是一个普通进程，能力等于操作系统给它的权限（读写文件、连网、起子进程、调用原生库，随它）。
 
+平台**在 manifest 里直指**，不在目录名里约定：`backend.bin` 的键是平台，值要么是**可执行文件路径**（相对 `.tap` 根；`..` 越界由宿主拒绝），要么是一个 **argv 数组**（`argv[0]` 走 `PATH` 查找）。宿主只读这张表，不猜路径：
+
+```jsonc
+"bin": {
+  "win-x64":   "backend/win-x64/app.exe",      // 原生二进制：每平台一份
+  "mac-arm64": "backend/mac-arm64/app",
+  "mac-x64":   "backend/mac-x64/app",
+  "linux-x64": ["python3", "backend/app.py"],  // 或一条指令：系统解释器 + 自带脚本
+  "*":         ["node", "backend/app.mjs"]     // 平台无关兜底：一份脚本通吃
+}
 ```
-backend/
-├── win-x64/app.exe
-├── mac-arm64/app
-├── mac-x64/app
-└── linux-x64/app
-```
 
-- **挑选与启动**：宿主按 `<os>-<arch>` 选对应可执行文件 spawn；不支持的平台由插件在 manifest 中声明
+- **平台键词汇**：`<os>` ∈ `win` / `mac` / `linux`，`<arch>` ∈ `x64` / `arm64`；匹配顺序 `<os>-<arch>` → `<os>` → `*`
+- **挑选与启动**：宿主按匹配到的键取值 spawn；值只决定"怎么起"，协议与代理 Service 的语义不变。命令形式的 `argv[0]` 只是在 `PATH` 里查找，不是限制机制（见 4）
+- **不支持的平台**：没有任何键命中即为"不支持"——宿主报错并只禁用该插件的后端，不降级到别的形态；`backend` 存在时 `bin` 与 `protocol` 均为必填（K2 的 manifest 校验项）
 - **通信**：控制面走 **stdin/stdout + JSON-RPC**（照 LSP / MCP 范式），日志走 stderr；大块数据走共享内存或临时文件，不塞进协议
 - **对内核透明**：宿主为后端认领的键位挂一个**代理 Service**，其他插件按 `ctx.<key>` 调用，与内置服务无差别（这正是原先为 Worker 设计的代理 Service，边界从线程换成进程）
 - **生命周期**：spawn / 超时 / 重启 / 退出由宿主托管，宿主退出时必须回收子进程——这是 K2 的验收项之一
@@ -301,7 +311,7 @@ Cordis 自身 API 未稳定（README 明言，4.0 长期停在 rc），因此**�
 | 插件作者 CLI | `@cambia/kit` |
 | 插件包 | `.tap`（manifest: `cambia.json`） |
 | 插件 entry 约定 | `apply(ctx, config)`（Cordis 原生形状；Cordis 与 `@cambia/core` 一律 external） |
-| 插件后端 | 进程外可执行文件，每平台一份（`backend/<os>-<arch>/…`），控制面走 stdio JSON-RPC |
+| 插件后端 | 进程外可执行文件或命令，平台在 `backend.bin` 里直指（`<os>-<arch>` → `<os>` → `*`），控制面走 stdio JSON-RPC |
 | 事件声明合并目标 | `@cambia/core`（不是 `cordis`） |
 
 > 重名核查（2026-10-06）：npm / crates.io / PyPI 均未占用；GitHub 存在一个同名仓库（rokkhonorg/cambia，CD 抓轨日志校验工具，70★，领域无关）。发布前建议注册 npm `@cambia` scope 占住命名空间。
