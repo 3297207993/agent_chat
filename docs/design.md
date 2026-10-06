@@ -201,7 +201,8 @@ agent_chat/
 
 ├── docs/                         # 文档
 │   ├── requirements.md
-│   └── design.md
+│   ├── design.md
+│   └── cambia/                   # 插件内核（Cambia）规范与本项目插件化文档
 │
 ├── package.json
 ├── tsconfig.json
@@ -834,49 +835,15 @@ Tauri invoke → Rust 后端执行
 
 ### 2.8 插件系统
 
-> 本节描述本项目当前的插件系统设计。项目侧"一切皆插件"的目标与迁移规划见 [pluginization.md](./pluginization.md)；底层插件内核（Cambia）的能力描述见 [cambia.md](./cambia.md)。
->
-> 已定案的调整：插件内核的 JS 侧直接使用 Cordis，第三方插件与宿主**同进程、同 `ctx`**（全信任，无隔离）。**插件不受能力限制**：manifest 无 `permissions` / `capabilities` 字段，不做门控也不做审批，防线是"只装可信插件"；唯一真实边界由宿主自己在 Rust 侧决定。详见 [cambia.md](./cambia.md) 1.7 / 4。
+插件系统的设计分两处：
 
-#### 2.8.1 插件接口
+- [pluginization.md](./pluginization.md) — 本项目插件化目标与迁移规划（服务键位、事件域、迁移路线）
+- [cambia/kernel.md](./cambia/kernel.md) — 插件内核（Cambia）规范，文档集见 [cambia/](./cambia/)
 
-```typescript
-// src/types/plugin.ts
+本项目侧的定案结论：
 
-interface Plugin {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  author: string;
-  // 扩展点
-  providers?: CustomProvider[];
-  tools?: CustomTool[];
-  uiComponents?: UIComponentInjection[];
-  hooks?: PluginHooks;
-}
-
-interface PluginHooks {
-  onConversationStart?: (context: ConversationContext) => Promise<void>;
-  onConversationEnd?: (context: ConversationContext) => Promise<void>;
-  onMessageSend?: (message: Message) => Promise<Message>;
-  onMessageReceive?: (message: Message) => Promise<Message>;
-  onToolCall?: (toolCall: ToolCall) => Promise<ToolCall>;
-}
-
-// 权限
-// 无：插件不受能力限制（全信任同进程，不做门控/审批），见 cambia.md 4
-```
-
-#### 2.8.2 插件加载机制
-
-```
-1. 用户安装插件（本地文件 / URL 下载）
-2. 插件文件解压到 plugins/ 目录
-3. 读取 cambia.json 解析元信息（无能力声明字段，见 cambia.md 4）
-4. 注册扩展点
-5. 插件激活
-```
+- 插件内核的 JS 侧直接使用 Cordis；第三方插件与宿主**同进程、同 `ctx`**（全信任，无隔离）
+- **插件不受能力限制**：manifest 无 `permissions` / `capabilities` 字段，不做门控也不做审批，防线是"只装可信插件"；唯一真实边界由宿主自己在 Rust 侧决定（见 [cambia/kernel.md](./cambia/kernel.md) 1.7 / 4）
 
 ---
 
@@ -1100,7 +1067,7 @@ interface UIStore {
 
 ### 5.2 Tauri 权限配置
 
-> 这是宿主唯一真实的边界（webview 粒度）：同进程插件与宿主同 realm，JS 侧无法强制，插件也不受能力限制。若要收窄，做法是少开放命令、把危险能力留在宿主自己的代码里，而不是期待插件自我约束（见 [cambia.md](./cambia.md) 4）。
+> 这是宿主唯一真实的边界（webview 粒度）：同进程插件与宿主同 realm，JS 侧无法强制，插件也不受能力限制。若要收窄，做法是少开放命令、把危险能力留在宿主自己的代码里，而不是期待插件自我约束（见 [cambia/kernel.md](./cambia/kernel.md) 4）。
 
 ```json
 // src-tauri/tauri.conf.json (capabilities 部分)
