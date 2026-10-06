@@ -79,6 +79,8 @@ Cambia 作为通用库，严格区分"内核提供"与"宿主定义"：
 
 这条边界让 Cambia 可以被任何 Tauri 应用复用：换一个宿主，键位、事件、插槽全部换成该应用的领域词汇，内核一行不改。也正因如此，**插件化到什么程度是宿主的自由**——内核交付的是词汇表之下的机制。
 
+> **把宿主能力接进内核的那一层（宿主适配层）属于右列。** Cambia 为 Tauri 提供一个现成实现（`crates/tauri-plugin-cambia`，见 5.1）：它只做 Tauri 特有的接线（协议注册、路径、命令面、退出回收），不含内核语义；不选它、或为别的宿主另写一个，都不改变内核的任何承诺。
+
 ---
 
 ## 2. 内核语义（由 Cordis 实现，`@cambia/core` 冻结）
@@ -225,7 +227,7 @@ export function apply(ctx, config) { /* 注册服务 / 监听事件 / 声明视�
 
 ## 5. 仓库形态与路线
 
-> 本章只给形态与阶段；**每个部分用什么实现、复用什么现成方案、哪些必须自研**见 [implementation.md](./implementation.md)。
+> 本章只给形态与阶段；**每个部分用什么实现、复用什么现成方案、哪些必须自研**见 [implementation.md](./implementation.md)，**执行顺序、批次验收与 Gate** 见 [plan.md](./plan.md)。
 
 ### 5.1 仓库形态：独立通用库
 
@@ -238,12 +240,13 @@ cambia/
 │   ├── host/                  # @cambia/host：宿主侧装载与运行时（manifest/依赖图/激活/视图插槽）
 │   └── kit/                   # @cambia/kit：插件作者 CLI（脚手架/dev 热重载/打包 .tap）
 ├── crates/
-│   └── plugin-host/           # Rust crate：包解析/校验/安装/后端进程托管
+│   ├── plugin-host/           # Rust crate：包解析/校验/安装/后端进程托管（零 Tauri 依赖）
+│   └── tauri-plugin-cambia/   # 适配层：把 Tauri 的协议/路径/事件/进程接线进内核（独立 workspace 与 CI）
 ├── spec/                      # .tap 包规范 + manifest schema
 └── examples/                  # 参考插件（不依赖任何业务领域）
 ```
 
-宿主侧只需提供：宿主适配层（键位/事件/插槽的领域定义）+ 该宿主自己的功能插件。
+宿主侧只需提供：宿主适配层（键位/事件/插槽的领域定义）+ 该宿主自己的功能插件。适配层**可以复用现成实现**——Tauri 用 `crates/tauri-plugin-cambia`——但它属于宿主一侧：不用它、或为别的宿主另写一个，都不改变内核的任何承诺。适配层与 `plugin-host` 的纪律是单向的：**适配层可以依赖 `plugin-host`，反之绝不**（`plugin-host` 不出现任何 Tauri 符号，才能用纯 `cargo test` 覆盖，也才能被非 Tauri 宿主复用）。
 
 ### 5.2 实施路线
 
@@ -315,6 +318,9 @@ Cordis 自身 API 未稳定（README 明言，4.0 长期停在 rc），因此**�
 | 插件 entry 约定 | `apply(ctx, config)`（Cordis 原生形状；Cordis 与 `@cambia/core` 一律 external） |
 | 插件后端 | 进程外可执行文件或命令，平台在 `backend.bin` 里直指（`<os>-<arch>` → `<os>` → `*`），控制面走 stdio JSON-RPC |
 | 事件声明合并目标 | `@cambia/core`（不是 `cordis`） |
+| 宿主适配层（Tauri 现成实现） | crate `tauri-plugin-cambia`；npm `@cambia/plugin-cambia`（Tauri 惯例 `@scope/plugin-<name>`）；plugin 名 `cambia`（配置段 `plugins.cambia`） |
+
+> 适配层在 `[package.metadata.platforms.support]` 里把 `android` / `ios` 标为不支持：装任意包、起任意进程在移动端沙箱内不成立。它的 ACL 权限面只约束 **WebView 内**的调用（见 1.7），不构成对插件能力的限制（见 4）。
 
 > 重名核查（2026-10-06）：npm / crates.io / PyPI 均未占用；GitHub 存在一个同名仓库（rokkhonorg/cambia，CD 抓轨日志校验工具，70★，领域无关）。发布前建议注册 npm `@cambia` scope 占住命名空间。
 

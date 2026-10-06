@@ -26,7 +26,8 @@
 | `plugin-host` (crate) | 原子安装 / 回滚 / 卸载 | **自研** | staging + 同卷 rename + journal |
 | `plugin-host` (crate) | 后端子进程托管 | **复用 + 自研监督** | `tokio` + `process-wrap@10`（Job Object / 进程组）；**不用 `tauri-plugin-shell`** |
 | `plugin-host` (crate) | stdio JSON-RPC 控制面 | **自研（薄）** | JSONL 帧 + 请求关联 + 超时（约 300 行） |
-| `plugin-host` (crate) | 与 Tauri 的关系 | **解耦** | crate 不依赖 tauri；Tauri 只在宿主适配层 |
+| `plugin-host` (crate) | 与 Tauri 的关系 | **解耦** | crate 不出现任何 Tauri 符号；Tauri 接线单独成 crate |
+| `tauri-plugin-cambia`（适配层） | Tauri 接线（协议 / 路径 / 命令面 / 退出回收） | **复用形态 + 自研薄层** | 按 Tauri 官方插件形态；独立 workspace 与 CI 轨道（3.3(g)） |
 | `@cambia/kit` | 命令解析 / 交互 / 脚手架 | **复用** | `cac@7`、`@clack/prompts@1.8`、`giget@3.3` |
 | `@cambia/kit` | 构建与打包编排 | **复用 + 自研预设** | Vite（library mode）+ `@cambia/kit/vite` 预设 + 构建期断言 |
 | `spec` | schema / 协议 / 错误码 | **自研内容，生成物由代码产出** | zod → JSON Schema；CI diff 守卫 |
@@ -55,6 +56,7 @@
 | 9 | `tauri-plugin-shell` 的 `CommandChild::kill()` **不是树杀**（`shared_child` → `Child::kill`），且 **Rust 侧 spawn 的子进程不进入它的退出回收表**（只有 JS IPC spawn 的才被跟踪），也没有 process group / job object 选项 | `plugins-workspace` `v2` 分支源码 | 后端托管必须自持 job object / 进程组（3.3(e)） |
 | 10 | cordis 对"依赖等不到"**零信号**（Node 实跑确认）：互相 `inject` 的两个 fiber 都停在 `state=0`，**不发 `internal/status`**、不报错，且 `await ctx.plugin()` **立即 resolve**（`Fiber.await()` 只等 `inertia`，不等激活——实跑中 0ms 就 resolve，而插件 120ms 后才真正激活）；只有 `apply` 死等时 `state=1 (LOADING)` 且 then 永不 settle | Node 实跑 + `fiber.d.ts` / 运行时代码 | ① 装载成功**不能**用 `await ctx.plugin()` 判定（3.2(e)）；② 环与拼错键位**不被超时保险丝覆盖**，必须显式归因（3.2(d)）——这是它不能删的原因 |
 | 11 | 依赖到位的那一刻，等待中的 fiber 会**自己发 `internal/status`**（`0→1→2`），无需轮询；另：cordis 里 `provide(name, value)` 与 `ctx.set` 是两件事，未 `provide` 就 `set` 会得到 `cannot set property ... without provide` | Node 实跑 | 归因与"迟到激活"都靠 `internal/status` 就够；插件模板必须用对 `provide` / `set` 的分工（3.4） |
+| 12 | Tauri 官方插件形态恰好装得下适配层所需的全部接线：`tauri::plugin::Builder` 与 `Builder` 一样提供 `register_uri_scheme_protocol`；plugin 挂 `on_event` 能收 `RunEvent::Exit`（官方 `tauri-plugin-shell` 即以此回收子进程）；plugin 有独立配置段（`tauri.conf.json > plugins.<name>`）、`permissions/` 目录与 `[package.metadata.platforms.support]` 元数据；标识符限小写加连字符（`cambia` 合法），npm 惯例 `@scope/plugin-<name>` | Tauri 官方插件文档 + `tauri` 2.11.5 源码 | 适配层按官方插件形态做（可发现、可分发、接线只写一次）；但它**不改变内核语义**，也不构成安全边界（kernel 1.7 / 4） |
 
 ---
 
@@ -245,6 +247,21 @@ crate 是 Rust 侧唯一的包管理实现，也是"插件完全能力"的来源
 - 需要覆盖的能力（决定"薄"到哪）：双向调用（宿主→插件调用、插件→宿主通知）、请求 id 关联、超时、取消、错误码表（进 spec）、大块数据**不走协议**（临时文件或共享内存，kernel 3.3）、stderr 只作日志、写入背压。
 - 多语言 SDK：协议进 spec 后，v1 只提供 Node（零依赖）与 Python 两个最小实现放 `examples/`，作为"协议可被第二种语言实现"的活证据；其余语言后置。
 
+#### (g) 宿主适配层（Tauri 版）：`tauri-plugin-cambia`
+
+结论：**按 Tauri 官方插件形态做一个薄 crate**，放在 cambia 仓库、**独立 workspace + 独立 CI 轨道**；它只做四件事（事实 12）：
+
+1. **协议与 CSP 接线**：在 plugin 的 `Builder` 阶段注册自定义 scheme（若走 `asset:` 则改为运行期 `allow_directory`——路径选择见 (e)）；
+2. **把宿主的 I/O 接进机制层**：插件目录路径、KV 存储、宿主事件泵；
+3. **命令面 + ACL**：install / uninstall / list / enable / start-backend 等命令及其 `permissions/` 文件（供宿主 UI 调用）；
+4. **生命周期回收**：`RunEvent::ExitRequested` / `Exit` 时回收后端进程（与 3.3(e) 的 job object / 进程组双保险）。
+
+- **它不含任何内核语义**：装载、归因、保险丝、`.tap` 事务、进程监督都在 `plugin-host` 与 `@cambia/host` 里。检验标准很直白——**把适配层整个删掉，内核照旧成立**；做不到这一点就说明有语义漏进了适配层。
+- **为什么独立 workspace 与 CI 轨道**：Tauri 三平台构建很慢，混进核心流水线会拖垮机制层的迭代速度。做法：根 workspace `exclude` 该 crate（它自带 `[workspace]` 成为独立 workspace），CI 分两条——核心（无 tauri，快）与适配层（三平台，可挂 nightly / 发布前）。
+- **JS 侧**：`@cambia/host` 保持宿主无关，只依赖一个**薄接口**（读 bundle / 列已装 / 安装 / KV / 起后端，十来个方法），Tauri 实现放在 `@cambia/plugin-cambia`。**警告**：这个接口一旦开始为"假想的第二宿主"演化，就把它退回成 Tauri 直连——它存在的理由是隔离 Tauri，不是构建通用适配框架。
+- **分发**：crate 发 crates.io、guest-js 发 npm（`@cambia/plugin-cambia`）；`[package.metadata.platforms.support]` 标桌面三平台、移动端 `none`；Tauri 插件目录的提交是可选的分发动作（K3）。
+- **不承诺**：ACL 权限面**不是**插件能力的限制——它约束的是 WebView 内的调用，而插件与宿主同 realm（kernel 1.7 / 4）。
+
 ### 3.4 `@cambia/kit` —— 插件作者 CLI
 
 CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模板内容"。
@@ -276,6 +293,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 ### 3.6 仓库与工具链
 
 - **Monorepo**：pnpm workspace（cordis 生态惯例、严格依赖提升）；Node LTS 双版本 CI；Rust workspace + MSRV 策略。
+- **CI 分两条轨道**：核心（`packages/*` + `crates/plugin-host`，**不需要安装 tauri**，保持快）与适配层（`crates/tauri-plugin-cambia`，三平台 tauri 构建，可挂在 nightly / 发布前）。根 workspace `exclude` 适配层，保证核心流水线永远碰不到 tauri——这条不是优化，是让"机制层零 Tauri 依赖"变成**结构上的事实**而不是纪律上的希望。
 - **构建**：`tsup@8` 打 `@cambia/*`；`publint` + `@arethetypeswrong/cli` 卡发布前检查。
 - **测试**：`vitest@5`（单元 + happy-dom 渲染插槽）；`cargo test`（crate）。
 - **版本与发布**：`@changesets/cli@3` 以 fixed 模式统一 `@cambia/*` 版本，crate 版本与之对齐；`engines.cambia` 的兼容矩阵在代码里维护成常量表，随发布更新。
@@ -311,6 +329,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 11 | WKWebView 不允许注册 `http`/`https`，同一 scheme 也不能注册两次；Windows 上 WebView2 只对 http/https 触发资源拦截（wry 的 `http://<scheme>.localhost` 变通即由此而来） | 自定义 scheme 的命名与注册时机 | scheme 名唯一且避开 `http(s)`；**必须在 `Builder` 阶段注册**（app 级，无法按 webview） | **已收口** |
 | 12 | macOS 上不能靠 `tauri-driver` 做 E2E | CI 矩阵覆盖不到 macOS | 用 WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server） | **已收口** |
 | 13 | cordis 对"依赖等不到"零信号（事实 10：无事件、无报错、`await ctx.plugin()` 立即 resolve） | 若把它当装载成功信号，会漏掉整类"静默不生效"的插件 | 装载判定改为显式等 `ACTIVE`（3.2(e)）+ 未激活归因（3.2(d)）；两者都写进 K1 的语义回归测试 | **已收口** |
+| 14 | 适配层要跟 tauri 大版本走（2 → 3） | 适配层返工；一旦它长胖，返工就会蔓延进机制层 | 守住"删掉它内核仍成立"的薄度（四件事之外不放东西）+ 独立 workspace / CI 轨道；机制层不出现 Tauri 符号 | 设计内 |
 
 ### 3.9 里程碑映射
 
@@ -329,4 +348,5 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 - 依赖版本核查（2026-10-06）：npm registry 与 crates.io API；`process-wrap` 的 `job-object` / `process-group` / `kill-on-drop` / `tokio1` features
 - Tauri 侧事实按**源码**核实（2026-10-06）：`tauri` 2.11.5 / `tauri-utils` 2.9.3 / `wry` 0.55.1，以及 `tauri-apps/plugins-workspace`、`tauri-apps/tauri-docs` 的 `v2` 分支——`src/app.rs`（scheme 注册与平台寻址注释）、`src/protocol/asset.rs`（CORS / MIME / scope 校验）、`src/scope/fs.rs`（`allow_directory`）、`plugins/shell`（`CommandChild::kill` 与退出回收）、上游 `tauri-apps/plugins-workspace#1332` 与 `tauri-apps/plugins-workspace#3351`（shell 的 process group 选项，未发布）
 - [Tauri CSP 指南](https://v2.tauri.app/security/csp/) 与 [WebDriver 测试](https://v2.tauri.app/develop/tests/webdriver/)（`tauri-driver` 仅 Windows/Linux；[WebdriverIO Tauri service](https://webdriver.io/docs/desktop-testing/tauri) 覆盖三平台）
+- [Tauri 插件开发](https://v2.tauri.app/develop/plugins/) — 适配层的形态来源（crate + guest-js、配置段、`permissions/`、platforms 元数据、标识符规则）
 - [kernel.md](./kernel.md) 8 章的参考资源（DeepSeek Harness、Cordis、VS Code Extension API、Tauri 插件体系）
