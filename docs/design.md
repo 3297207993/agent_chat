@@ -835,6 +835,8 @@ Tauri invoke → Rust 后端执行
 ### 2.8 插件系统
 
 > 本节描述本项目当前的插件系统设计。项目侧"一切皆插件"的目标与迁移规划见 [pluginization.md](./pluginization.md)；底层插件内核（Cambia）的能力描述见 [cambia.md](./cambia.md)。
+>
+> 已定案的调整：插件内核的 JS 侧直接使用 Cordis，第三方插件与宿主**同进程、同 `ctx`**（全信任，无隔离）；manifest 的 `permissions` 字段改称 `capabilities`，定位为装机知情与审计，**不是安全机制**——强制点只有 Rust 侧 Tauri capabilities（webview 粒度）。详见 [cambia.md](./cambia.md) 1.7 / 4。
 
 #### 2.8.1 插件接口
 
@@ -852,8 +854,8 @@ interface Plugin {
   tools?: CustomTool[];
   uiComponents?: UIComponentInjection[];
   hooks?: PluginHooks;
-  // 权限
-  permissions: PluginPermission[];
+  // 能力声明（装机知情 + 审计，非运行时强制）
+  capabilities: PluginCapability[];
 }
 
 interface PluginHooks {
@@ -864,10 +866,11 @@ interface PluginHooks {
   onToolCall?: (toolCall: ToolCall) => Promise<ToolCall>;
 }
 
-interface PluginPermission {
+// 声明式能力（capabilities）：用于装机知情与审计，不是运行时强制
+interface PluginCapability {
   scope: 'file_system' | 'network' | 'shell' | 'system';
   level: 'read' | 'write' | 'execute';
-  paths?: string[];              // 限制路径
+  paths?: string[];              // 声明的范围
 }
 ```
 
@@ -876,8 +879,8 @@ interface PluginPermission {
 ```
 1. 用户安装插件（本地文件 / URL 下载）
 2. 插件文件解压到 plugins/ 目录
-3. 读取 plugin.json 解析元信息
-4. 权限审核（用户确认）
+3. 读取 cambia.json 解析元信息
+4. 展示能力声明（用户确认；可据此拒绝装载）
 5. 注册扩展点
 6. 插件激活
 ```
@@ -1103,6 +1106,8 @@ interface UIStore {
 ```
 
 ### 5.2 Tauri 权限配置
+
+> 这是**唯一**的能力强制点（webview 粒度）。同进程插件与宿主同 realm，JS 侧无法强制，因此危险命令应尽量收窄到单一入口以便审计（见 [cambia.md](./cambia.md) 4）。
 
 ```json
 // src-tauri/tauri.conf.json (capabilities 部分)
