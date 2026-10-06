@@ -99,6 +99,7 @@ Agent Chat 是一款基于 **Tauri v2** 构建的桌面 AI Agent 应用。前端
 
 ### 环境要求
 - [Node.js](https://nodejs.org/) 20+
+- [pnpm](https://pnpm.io/)（本项目的包管理器，版本见 `package.json` 的 `packageManager` 字段）
 - [Rust](https://www.rust-lang.org/) stable（安装 tauri CLI 依赖）
 - 对应平台的系统依赖：Windows 需 [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)、Linux 需 `libwebkit2gtk-4.1-dev` 等（参考 [Tauri 官方文档](https://tauri.app/start/prerequisites/)）
 
@@ -106,23 +107,23 @@ Agent Chat 是一款基于 **Tauri v2** 构建的桌面 AI Agent 应用。前端
 
 ```bash
 # 安装依赖
-npm install
+pnpm install
 
 # 启动前端（仅浏览器预览，无 Tauri 能力）
-npm run dev
+pnpm dev
 
 # 启动完整桌面应用（Tauri + 前端热更新）
-npm run tauri dev
+pnpm tauri dev
 ```
 
 ### 构建打包
 
 ```bash
 # 构建前端产物（tsc 类型检查 + vite build）
-npm run build
+pnpm build
 
 # 打包桌面应用（生成安装包，Windows: NSIS/MSI，macOS: dmg，Linux: AppImage/deb/rpm）
-npm run tauri build
+pnpm tauri build
 ```
 
 ### 发布
