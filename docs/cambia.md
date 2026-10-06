@@ -72,10 +72,10 @@ Cambia 作为通用库，严格区分"内核提供"与"宿主定义"：
 | Context / 服务仓库 / inject 解析 | 服务键位词汇表（`ctx.<domain>`…） |
 | 五种事件派发 + 类型化事件机制 | 事件名与负载契约（`<domain>/<event>`…） |
 | effect 可逆注册与反卷绕 | 插槽位置与渲染器（React 组件、iframe 容器） |
-| 插件装载、生命周期、激活事件 | 能力声名词汇表与装载策略 |
-| 装载器（manifest 规范化、依赖图、激活事件）与插件 entry 约定 | 宿主向插件暴露的能力面 |
+| 插件装载、生命周期、激活事件 | 装载策略（装哪些、何时装、可否禁用） |
+| 插件 entry 约定与模块 external 规则 | 宿主向插件暴露的能力面与领域服务实现 |
 
-这条边界让 Cambia 可以被任何 Tauri 应用复用：换一个宿主，键位、事件、插槽、能力声明全部换成该应用的领域词汇，内核一行不改。也正因如此，**插件化到什么程度是宿主的自由**——内核交付的是词汇表之下的机制。
+这条边界让 Cambia 可以被任何 Tauri 应用复用：换一个宿主，键位、事件、插槽全部换成该应用的领域词汇，内核一行不改。也正因如此，**插件化到什么程度是宿主的自由**——内核交付的是词汇表之下的机制。
 
 ---
 
@@ -137,10 +137,6 @@ const result = ctx.waterfall('tools/pre-execute', call, () => defaultExecute(cal
   "version": "0.1.0",
   "engines": { "cambia": "^0.1", "host": "example-app@^0.4" },  // 内核版本 + 宿主版本双约束
   "activationEvents": ["onCommand:web-search"],    // 懒激活；"always" = 随应用启动
-  "capabilities": [
-    { "scope": "network", "hosts": ["api.example.com"] },
-    { "scope": "fs", "paths": ["$DATA/plugins/com.example.web-search/"] }
-  ],
   "parts": {
     "frontend": { "main": "frontend/main.js" },    // 同进程 Cordis 插件（单文件 bundle，导出 apply(ctx, config)）
     "backend":  { "main": "backend/plugin.wasm" }, // v1 预留接口，v2 实现（wasmtime + WIT）
@@ -148,6 +144,8 @@ const result = ctx.waterfall('tools/pre-execute', call, () => defaultExecute(cal
   }
 }
 ```
+
+> **manifest 没有能力声明字段**——不是遗漏，是刻意不做：插件不受能力限制（见 4）。宿主与插件的约定只有 `engines` 版本约束、`activationEvents` 与 `contributes`。
 
 ### 3.1 内置插件 vs 第三方插件
 
@@ -176,16 +174,16 @@ export function apply(ctx, config) { /* 注册服务 / 监听事件 / 声明视�
 
 ---
 
-## 4. 能力声明模型（不是安全机制）
+## 4. 插件不受能力限制（无门控、无审批）
 
-> **先读这条**：在全信任同进程形态下（1.7），内核**无法**阻止插件越权——同一个 realm 内没有 capability 边界。本章描述的是**声明、知情与审计**，不是强制。
+内核不设能力门控，也不提供审批机制：**插件想做什么都可以**，与宿主代码享有同等能力。这是形态选择的直接结果——全信任同进程（1.7）下没有可强制的边界，"声明—检查"只能得到自我报告；加了它除了制造"有防护"的错觉之外不产生任何实际约束，所以不做。
 
-- **声明**：manifest `capabilities` 字段，词汇表由宿主决定（常见做法是对齐 Tauri capabilities：`network`/`fs`/`shell`/`system` + 级别 + 路径/host 白名单）。字段名刻意不叫 `permissions`，以免给人"有强制"的错觉
-- **安装时**：用户确认弹窗，展示全部声明；宿主**可以据此拒绝装载**——这是声明唯一真正"有效"的时点
-- **运行时**：宿主在能收口的地方记录与告警（能力网关的调用记录、越权报告）。这些是**审计**，不是阻断
-- **强制点只有一个**：Rust 侧 Tauri capabilities，且其授权粒度是 **webview** 而非 JS 模块——它挡得住"非宿主 webview"，挡不住"同 webview 内的插件"
-- **策略挂载点**：审批策略作为能力事件（如 `tools/pre-execute`）上的 `waterfall` / `bail` 监听实现。同进程形态下这是**原生同步语义**，即"拦截"确实能生效（这正是放弃 Worker 的最大收益）
-- **要真强制**：唯一有效手段是收窄 Rust capabilities + 危险能力只留宿主单一入口。它提高门槛（防手滑、防被劫持后的间接调用），但**不是**安全边界（插件可以伪造自身身份去调那个入口）
+由此必须认下两条后果：
+
+- **防线只有一个，且在插件之外**：只装可信插件。manifest 里没有 `permissions` / `capabilities` 字段——不是遗漏，是刻意不做没有牙齿的仪式
+- **唯一的真实边界由宿主自己决定**：Tauri capabilities（webview 粒度）与宿主注册的命令面。宿主若要收窄，应在 Rust 侧少开放命令、把危险能力留在自己的代码里，而不是期待插件自我约束。这条属于宿主设计，内核不参与，也不假装参与
+
+内核在此处只提供机制、不提供策略：`ctx.waterfall` / `ctx.bail` 等拦截原语仍然存在（见 2.2 / 2.3），宿主或插件可以用它们实现**自己的**领域策略——但那是应用逻辑，不是插件能力的门控。
 
 ---
 
@@ -204,11 +202,11 @@ cambia/
 ├── crates/
 │   └── plugin-host/           # Rust crate：包解析/校验/安装/能力网关与强制点
 │                              # （预留 wasmtime 后端接口，v1 不实现）
-├── spec/                      # .tap 包规范 + manifest schema + 能力声名词汇表
+├── spec/                      # .tap 包规范 + manifest schema
 └── examples/                  # 参考插件（不依赖任何业务领域）
 ```
 
-宿主侧只需提供：宿主适配层（键位/事件/插槽/能力声明的领域定义）+ 该宿主自己的功能插件。
+宿主侧只需提供：宿主适配层（键位/事件/插槽的领域定义）+ 该宿主自己的功能插件。
 
 ### 5.2 实施路线
 
