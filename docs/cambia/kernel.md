@@ -55,7 +55,7 @@ UI 贡献必须可退化：无 UI 宿主（headless）时视图注册为 no-op�
 
 ### 1.7 全信任同进程；内核不提供安全隔离
 
-插件的执行位置由宿主决定，内核不做假设。当前形态是**全信任同进程**：第三方插件、内置插件与宿主共用同一个 JS realm 与同一个 `ctx`，因此五种派发（含同步拦截）对三者语义完全一致，不需要任何桥或代理 Service。
+插件的执行位置由宿主决定，内核不做假设。当前形态是**全信任同进程**：第三方插件、内置插件与宿主共用同一个 JS realm 与同一个 `ctx`，因此五种派发（含同步拦截）对三者语义完全一致，不需要任何桥或代理 Service。（这里说的是**插件前端**；插件若声明了后端部分，后端是插件自带的独立进程，见 3.3。）
 
 这条路的代价必须明说：**同一个 realm 内不存在安全边界**。JS 没有 capability 机制，插件可以绕过内核直接调用宿主暴露的任意能力（例如 Tauri 的 `invoke`——其授权粒度是 webview，而不是 JS 模块）。因此内核**不承诺、也不应被宣传为**安全隔离手段：它把第三方插件当作可信代码对待，防线在"只装可信插件"（见 4）。
 
@@ -141,7 +141,10 @@ const result = ctx.waterfall('tools/pre-execute', call, () => defaultExecute(cal
   "activationEvents": ["onCommand:web-search"],    // 懒激活；"always" = 随应用启动
   "parts": {
     "frontend": { "main": "frontend/main.js" },    // 同进程 Cordis 插件（单文件 bundle，导出 apply(ctx, config)）
-    "backend":  { "main": "backend/plugin.wasm" }, // v1 预留接口，v2 实现（wasmtime + WIT）
+    "backend":  {                                  // 进程外可执行文件，每平台一份（见 3.3）
+      "dir": "backend",                            // 约定子目录 <os>-<arch>/<可执行文件>
+      "protocol": "jsonrpc-stdio"                  // 宿主 spawn 后走 stdin/stdout
+    },
     "view":     { "entry": "view.html" }           // 独立文档 iframe（无同源，DOM 隔离而非安全边界）
   }
 }
@@ -174,6 +177,27 @@ export function apply(ctx, config) { /* 注册服务 / 监听事件 / 声明视�
 
 同进程装载正因为这个形状而简单：宿主只需 `await ctx.plugin(module.default ?? module, config)`，**不需要任何 API shim**。
 
+### 3.3 后端部分：进程外可执行文件
+
+插件的"完全能力"由**插件自带的原生程序**提供：宿主以子进程方式启动它。插件因此**不受宿主 API 限制**——它就是一个普通进程，能力等于操作系统给它的权限（读写文件、连网、起子进程、调用原生库，随它）。
+
+```
+backend/
+├── win-x64/app.exe
+├── mac-arm64/app
+├── mac-x64/app
+└── linux-x64/app
+```
+
+- **挑选与启动**：宿主按 `<os>-<arch>` 选对应可执行文件 spawn；不支持的平台由插件在 manifest 中声明
+- **通信**：控制面走 **stdin/stdout + JSON-RPC**（照 LSP / MCP 范式），日志走 stderr；大块数据走共享内存或临时文件，不塞进协议
+- **对内核透明**：宿主为后端认领的键位挂一个**代理 Service**，其他插件按 `ctx.<key>` 调用，与内置服务无差别（这正是原先为 Worker 设计的代理 Service，边界从线程换成进程）
+- **生命周期**：spawn / 超时 / 重启 / 退出由宿主托管，宿主退出时必须回收子进程——这是 K2 的验收项之一
+- **卸载即还原**：杀进程就是真卸载，文件可被覆盖更新。这是选择进程外而非动态库的核心原因
+
+> 不再预留 WASM 后端接口：WASM 没有系统调用，它拿到的每个能力都必须由宿主注入——方向与本节的"不受宿主 API 限制"相反。
+> 前端 JS 与后端进程的分工由插件作者决定：前端负责注册与 UI 贡献（同进程、原生 Cordis 语义），后端负责需要完全能力或长耗时的部分。
+
 ---
 
 ## 4. 插件不受能力限制（无门控、无审批）
@@ -183,7 +207,7 @@ export function apply(ctx, config) { /* 注册服务 / 监听事件 / 声明视�
 由此必须认下两条后果：
 
 - **防线只有一个，且在插件之外**：只装可信插件。manifest 里没有 `permissions` / `capabilities` 字段——不是遗漏，是刻意不做没有牙齿的仪式
-- **唯一的真实边界由宿主自己决定**：Tauri capabilities（webview 粒度）与宿主注册的命令面。宿主若要收窄，应在 Rust 侧少开放命令、把危险能力留在自己的代码里，而不是期待插件自我约束。这条属于宿主设计，内核不参与，也不假装参与
+- **宿主能限制的只有前端**：Tauri capabilities 与宿主注册的命令面约束的是 **WebView 里的前端 JS**；插件后端是独立进程（3.3），能力等于操作系统给它的权限，宿主限制不了它。宿主若要收窄，应在 Rust 侧少开放命令、把危险能力留在自己的代码里，而不是期待插件自我约束。这条属于宿主设计，内核不参与，也不假装参与
 
 内核在此处只提供机制、不提供策略：`ctx.waterfall` / `ctx.bail` 等拦截原语仍然存在（见 2.2 / 2.3），宿主或插件可以用它们实现**自己的**领域策略——但那是应用逻辑，不是插件能力的门控。
 
@@ -202,8 +226,7 @@ cambia/
 │   ├── host/                  # @cambia/host：宿主侧装载与运行时（manifest/依赖图/激活/视图插槽）
 │   └── kit/                   # @cambia/kit：插件作者 CLI（脚手架/dev 热重载/打包 .tap）
 ├── crates/
-│   └── plugin-host/           # Rust crate：包解析/校验/安装/能力网关与强制点
-│                              # （预留 wasmtime 后端接口，v1 不实现）
+│   └── plugin-host/           # Rust crate：包解析/校验/安装/后端进程托管
 ├── spec/                      # .tap 包规范 + manifest schema
 └── examples/                  # 参考插件（不依赖任何业务领域）
 ```
@@ -215,14 +238,20 @@ cambia/
 | 阶段 | 内容 | 验收 |
 |---|---|---|
 | **K1 内核面** | `@cambia/core`：在 Cordis 之上冻结插件面向 API（服务认领、inject、effect、五种派发、事件类型声明合并）+ 概念对照与 Cordis 升级策略 | 纯库，零业务依赖，独立可测 |
-| **K2 装载与宿主运行时** | `@cambia/host`：manifest 规范化 + 激活事件 + 依赖图校验 + 同进程装载（external 约定）+ `.tap` 安装管线 + 视图插槽运行时 + 保险丝（6.2） | 第三方插件与内置插件同构地注册、卸载 |
-| **K3 生态件** | `@cambia/kit` CLI + spec 冻结 v1 + plugin-host crate（预留 WASM）+ 参考插件 | 一个真实宿主应用可用 Cambia 起步 |
+| **K2 装载与宿主运行时** | `@cambia/host`：manifest 规范化 + 激活事件 + 依赖图校验 + 前端同进程装载（external 约定）+ **后端进程托管（spawn / 代理 Service / 生命周期）** + `.tap` 安装管线 + 视图插槽运行时 + 保险丝（6.2） | 第三方插件与内置插件同构地注册、卸载；后端进程可被正确回收 |
+| **K3 生态件** | `@cambia/kit` CLI + spec 冻结 v1 + plugin-host crate（含后端进程托管）+ 参考插件 | 一个真实宿主应用可用 Cambia 起步 |
 
 ### 5.3 明确不做 / 后置
 
 - **内核语义自研**：已定案不做。JS 侧直接使用 [Cordis](https://github.com/cordiverse/cordis)（当前钉 `cordis@4.0.0-rc.10`），Cambia 不在其语义上再重写一遍
-- **Rust 侧动态加载**：原生 Rust 无稳定 ABI，动态库方案是深坑；`backend` 部分走 WASM 组件（wasmtime），v1 只留接口
-- **第三方插件的降权执行区（Worker / WASM 隔离）**：后置。当前形态是全信任同进程（1.7）；不为此预留架构，`.tap` spec 只保留"执行位置由宿主决定"的措辞
+- **动态库装载（`.dll` / `.so` / `.dylib`）**：**不做**（不是后置）。理由不止"Rust 无稳定 ABI"这一条：不稳定的只是 **Rust ABI**；**C ABI 本身是稳定的**，写 `extern "C"` 边界确实可行（nginx、VSCode native module 都这么干）。真正的否决理由是代价不可接受：
+  1. **ABI 契约一旦发布永久不能改**，生态会分裂成"进程外后端"与"每平台 dylib + ABI 契约"两套分发形态
+  2. **`dlclose` 不保证真正卸载**——代码段与静态状态可能留在进程里，直接破坏 1.3 的"禁用即回到从未装过"承诺
+  3. **插件段错误/越界直接杀掉宿主进程**，没有边界（还得要求 `catch_unwind` + 禁全局单例 + 所有权规则）
+  4. **macOS 的 library validation** 会拒绝加载非同一 Team ID 签名的 dylib，对开放插件生态是死结
+
+  插件的完全能力改由**进程外后端**提供（见 3.3）——同样的完全能力，外加真隔离与真卸载
+- **前端 JS 的降权执行区（Worker / WASM）**：后置。当前形态是前端同进程全信任（1.7）；若将来要装载不受信插件，缺口在**前端 JS**，而不在后端（后端本来就是独立进程）
 - **UI 框架绑定**：内核不依赖 React——`ctx.views`/`ctx.renderers` 的注册载荷是宿主解释的数据，React/Vue/Svelte 渲染器都属于宿主适配层
 - **强制插件覆盖率**：内核不做覆盖率检查或引导——是否把一切做成插件属于宿主的设计选择（见 1.1），内核只保证机制可用
 
@@ -253,7 +282,7 @@ Cordis 自身 API 未稳定（README 明言，4.0 长期停在 rc），因此**�
 
 ### 6.2 保险丝：激活超时与失败降级
 
-没有 Worker 就没有崩溃隔离——插件死循环会卡住整个应用，这一点**没有技术解**，只能靠降级策略与"只装可信插件"（见 4）。可控的部分是**把失败限制在单个插件上**：
+没有 Worker 就没有崩溃隔离——前端 JS 死循环会卡住整个应用，这一点**没有技术解**，只能靠降级策略与"只装可信插件"（见 4）。（插件后端是独立进程，崩溃只影响它自己，见 3.3；宿主只需负责回收与重启。）可控的部分是**把失败限制在单个插件上**：
 
 - **激活超时**：`await ctx.plugin(...)` 永不 settle（插件在 `apply` 里死等）时，宿主必须超时并判定该次装载失败
 - **失败可观测**：Cordis 的 fiber 会进入 `FAILED` 状态并派发 `internal/status` 事件——宿主据此记录"哪个插件、哪个阶段失败"
@@ -272,6 +301,7 @@ Cordis 自身 API 未稳定（README 明言，4.0 长期停在 rc），因此**�
 | 插件作者 CLI | `@cambia/kit` |
 | 插件包 | `.tap`（manifest: `cambia.json`） |
 | 插件 entry 约定 | `apply(ctx, config)`（Cordis 原生形状；Cordis 与 `@cambia/core` 一律 external） |
+| 插件后端 | 进程外可执行文件，每平台一份（`backend/<os>-<arch>/…`），控制面走 stdio JSON-RPC |
 | 事件声明合并目标 | `@cambia/core`（不是 `cordis`） |
 
 > 重名核查（2026-10-06）：npm / crates.io / PyPI 均未占用；GitHub 存在一个同名仓库（rokkhonorg/cambia，CD 抓轨日志校验工具，70★，领域无关）。发布前建议注册 npm `@cambia` scope 占住命名空间。
