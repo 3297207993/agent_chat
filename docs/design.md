@@ -834,6 +834,8 @@ Tauri invoke → Rust 后端执行
 
 ### 2.8 插件系统
 
+> 本节描述本项目当前的插件系统设计。项目侧"一切皆插件"的目标与迁移规划见 [pluginization.md](./pluginization.md)；底层插件内核（Cambia）的能力描述见 [cambia.md](./cambia.md)。
+
 #### 2.8.1 插件接口
 
 ```typescript
