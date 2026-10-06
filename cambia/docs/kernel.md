@@ -1,6 +1,6 @@
 # Cambia — Tauri 通用插件内核
 
-> 本文是**内核规范**，与具体宿主无关；文档集索引见 [README.md](./README.md)，本项目（agent_chat）的接入与迁移见 [../pluginization.md](../pluginization.md)。
+> 本文是**内核规范**，与具体宿主无关；文档集索引见 [README.md](./README.md)，本项目（agent_chat）的接入与迁移见 [../../docs/pluginization.md](../../docs/pluginization.md)。
 
 > *cambia*：拉丁语 *cambiare*（改变、交换）；亦为 *cambium*（形成层）的复数——树干中那层极薄的分生组织，树的一切增粗、新枝与愈合皆由此生长。
 

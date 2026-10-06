@@ -396,7 +396,7 @@ interface BuiltinTool {
 
 ### 2.11 插件与扩展
 
-> 插件内核能力与项目侧插件化规划的详细设计见 [cambia/kernel.md](./cambia/kernel.md) 与 [pluginization.md](./pluginization.md)。
+> 插件内核能力与项目侧插件化规划的详细设计见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 与 [pluginization.md](./pluginization.md)。
 
 #### 2.11.1 插件系统
 - 插件加载机制（从本地目录加载）

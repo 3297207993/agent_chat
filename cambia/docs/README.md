@@ -7,7 +7,7 @@
 - [plan.md](./plan.md) — Cambia 实现计划：K1–K3 的批次拆分、关键路径与并行轨道、每批验收标准与 Gate（不含工期）
 
 > **内核与宿主的分工**：内核交付机制（服务认领、依赖解析、事件派发、可逆注册、装载），宿主定义领域词汇表（服务键位、事件名与负载、插槽位置）。内核零业务依赖、不 import 本项目任何代码——它是将来独立成仓库的那部分。
-> **宿主侧文档不在本目录**："一切皆插件"的目标与迁移路线是本项目自己的规划，见 [../pluginization.md](../pluginization.md)。
+> **宿主侧文档不在本目录**："一切皆插件"的目标与迁移路线是本项目自己的规划，见 [../../docs/pluginization.md](../../docs/pluginization.md)。
 
 ## 当前形态（已定案）
 
@@ -18,7 +18,7 @@
 
 ## 与其他文档的关系
 
-- 本项目插件化规划：[../pluginization.md](../pluginization.md)
-- 需求：[../requirements.md](../requirements.md)
-- 应用设计（非插件部分）：[../design.md](../design.md)
-- UI 设计：[../ui-design.md](../ui-design.md)
+- 本项目插件化规划：[../../docs/pluginization.md](../../docs/pluginization.md)
+- 需求：[../../docs/requirements.md](../../docs/requirements.md)
+- 应用设计（非插件部分）：[../../docs/design.md](../../docs/design.md)
+- UI 设计：[../../docs/ui-design.md](../../docs/ui-design.md)

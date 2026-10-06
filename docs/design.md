@@ -838,12 +838,12 @@ Tauri invoke → Rust 后端执行
 插件系统的设计分两处：
 
 - [pluginization.md](./pluginization.md) — 本项目插件化目标与迁移规划（服务键位、事件域、迁移路线）
-- [cambia/kernel.md](./cambia/kernel.md) — 插件内核（Cambia）规范，文档集见 [cambia/](./cambia/)
+- [cambia/docs/kernel.md](../cambia/docs/kernel.md) — 插件内核（Cambia）规范，文档集见 [cambia/docs/](../cambia/docs/)
 
 本项目侧的定案结论：
 
 - 插件内核的 JS 侧直接使用 Cordis；第三方插件与宿主**同进程、同 `ctx`**（全信任，无隔离）
-- **插件不受能力限制**：manifest 无 `permissions` / `capabilities` 字段，不做门控也不做审批，防线是"只装可信插件"；唯一真实边界由宿主自己在 Rust 侧决定（见 [cambia/kernel.md](./cambia/kernel.md) 1.7 / 4）
+- **插件不受能力限制**：manifest 无 `permissions` / `capabilities` 字段，不做门控也不做审批，防线是"只装可信插件"；唯一真实边界由宿主自己在 Rust 侧决定（见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 1.7 / 4）
 
 ---
 
@@ -1067,7 +1067,7 @@ interface UIStore {
 
 ### 5.2 Tauri 权限配置
 
-> 这是宿主唯一真实的边界（webview 粒度）：同进程插件与宿主同 realm，JS 侧无法强制，插件也不受能力限制。若要收窄，做法是少开放命令、把危险能力留在宿主自己的代码里，而不是期待插件自我约束（见 [cambia/kernel.md](./cambia/kernel.md) 4）。
+> 这是宿主唯一真实的边界（webview 粒度）：同进程插件与宿主同 realm，JS 侧无法强制，插件也不受能力限制。若要收窄，做法是少开放命令、把危险能力留在宿主自己的代码里，而不是期待插件自我约束（见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 4）。
 
 ```json
 // src-tauri/tauri.conf.json (capabilities 部分)
