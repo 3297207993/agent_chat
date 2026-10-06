@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Chat - 布局预览 v2</title>
+<style>
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --green: #3fb950;
+    --orange: #d2991d;
+    --red: #f85149;
+    --purple: #a371f7;
+    --radius: 8px;
+    --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ===== Top Bar ===== */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    height: 44px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    -webkit-app-region: drag;
+  }
+
+  .topbar__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+    margin-right: 16px;
+  }
+
+  .topbar__spacer { flex: 1; }
+
+  .topbar__model-selector {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+  }
+  .topbar__model-selector:hover { border-color: var(--accent); }
+  .model-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+  .topbar__divider {
+    width: 1px; height: 20px;
+    background: var(--border);
+    margin: 0 4px;
+  }
+
+  .topbar__btn {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; border: none; background: transparent;
+    color: var(--text-secondary); cursor: pointer; font-size: 14px;
+    -webkit-app-region: no-drag;
+    position: relative;
+  }
+  .topbar__btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+  .topbar__btn.active { color: var(--accent); background: var(--bg-tertiary); }
+
+  .tooltip {
+    display: none;
+    position: absolute;
+    top: 34px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-primary);
+    z-index: 100;
+    pointer-events: none;
+  }
+  .topbar__btn:hover .tooltip { display: block; }
+
+  /* ===== Main Layout ===== */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ===== Left Sidebar (纯对话管理) ===== */
+  .sidebar {
+    width: 260px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .sidebar__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar__section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+  }
+
+  .btn-new-chat {
+    flex-shrink: 0;
+    margin: 10px 12px;
+    padding: 7px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color 0.15s;
+  }
+  .btn-new-chat:hover { border-color: var(--accent); }
+
+  .sidebar__search {
+    flex-shrink: 0;
+    margin: 4px 12px 8px;
+    padding: 6px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+  }
+  .sidebar__search::placeholder { color: var(--text-muted); }
+  .sidebar__search:focus { border-color: var(--accent); }
+
+  .sidebar__category-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 12px 6px;
+    flex-shrink: 0;
+  }
+  .sidebar__category-tab {
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .sidebar__category-tab:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+  .sidebar__category-tab.active { background: var(--bg-tertiary); color: var(--text-primary); }
+
+  .sidebar__list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 8px;
+  }
+
+  .chat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: background 0.1s;
+  }
+  .chat-item:hover { background: var(--bg-tertiary); }
+  .chat-item.active { background: var(--bg-tertiary); color: var(--text-primary); }
+  .chat-item__icon { font-size: 14px; flex-shrink: 0; }
+  .chat-item__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-item__time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+  .chat-item__pin { color: var(--orange); font-size: 10px; }
+
+  /* ===== Chat Area ===== */
+  .chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg-primary);
+  }
+
+  .chat__messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 0;
+  }
+
+  .message {
+    display: flex;
+    gap: 14px;
+    padding: 16px 24px;
+    max-width: 860px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .message__avatar {
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .message__avatar--user { background: var(--bg-tertiary); }
+  .message__avatar--assistant { background: #1a3a5c; }
+
+  .message__content {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .message__content p { margin-bottom: 10px; }
+  .message__content p:last-child { margin-bottom: 0; }
+
+  .message--user .message__content { color: var(--text-primary); }
+  .message--assistant .message__content { color: var(--text-primary); }
+
+  .code-block {
+    margin: 10px 0;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .code-block__header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .code-block__body {
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.55;
+    overflow-x: auto;
+  }
+  .code-block__body .keyword { color: var(--red); }
+  .code-block__body .string { color: var(--green); }
+  .code-block__body .function { color: var(--purple); }
+  .code-block__body .comment { color: var(--text-muted); font-style: italic; }
+
+  .tool-call-card {
+    margin: 10px 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .tool-call-card__header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tool-call-card__status { width: 6px; height: 6px; border-radius: 50%; }
+  .tool-call-card__status--running { background: var(--orange); animation: pulse 1.5s infinite; }
+  .tool-call-card__status--done { background: var(--green); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .tool-call-card__body {
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    max-height: 120px;
+    overflow-y: auto;
+  }
+
+  .reasoning-block {
+    margin: 10px 0;
+    border-left: 3px solid var(--purple);
+    padding: 8px 12px;
+    background: rgba(163, 113, 247, 0.05);
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  /* ===== Chat Input ===== */
+  .chat__input-area {
+    padding: 0 24px 20px;
+    max-width: 860px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .input-box {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    transition: border-color 0.15s;
+  }
+  .input-box:focus-within { border-color: var(--accent); }
+
+  .input-box__textarea {
+    width: 100%;
+    min-height: 48px;
+    max-height: 200px;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    resize: none;
+    outline: none;
+  }
+  .input-box__textarea::placeholder { color: var(--text-muted); }
+
+  .input-box__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .input-box__actions {
+    display: flex; gap: 2px;
+  }
+  .input-box__action-btn {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 6px; background: transparent;
+    color: var(--text-secondary); cursor: pointer; font-size: 14px;
+  }
+  .input-box__action-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+
+  .input-box__hint {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .input-box__hint kbd {
+    padding: 1px 5px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .btn-send {
+    width: 32px; height: 32px;
+    border-radius: 8px; border: none;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .btn-send:hover { background: var(--accent-hover); }
+
+  /* ===== Right Panel (上下文状态) ===== */
+  .right-panel {
+    width: 300px;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .right-panel__tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .right-panel__tab {
+    flex: 1;
+    padding: 8px 0;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .right-panel__tab:hover { color: var(--text-primary); }
+  .right-panel__tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .right-panel__content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+
+  .panel-section {
+    margin-bottom: 16px;
+  }
+  .panel-section__title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .panel-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .panel-item:hover { background: var(--bg-tertiary); }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-dot--online { background: var(--green); }
+  .status-dot--offline { background: var(--text-muted); }
+
+  .token-bar {
+    margin-top: 8px;
+  }
+  .token-bar__label {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .token-bar__track {
+    height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden;
+  }
+  .token-bar__fill {
+    height: 100%; background: var(--accent); border-radius: 2px; width: 23%;
+  }
+
+  .memory-item {
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    margin-bottom: 4px;
+  }
+  .memory-item__keywords {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ===== Scrollbar ===== */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- =========================== -->
+  <!--  Top Bar: 模型选择 + 管理入口  -->
+  <!-- =========================== -->
+  <div class="topbar">
+    <span class="topbar__title">Agent Chat</span>
+
+    <span class="topbar__spacer"></span>
+
+    <!-- 管理入口按钮组 -->
+    <button class="topbar__btn" title="规则管理">
+      📋
+      <span class="tooltip">规则管理</span>
+    </button>
+    <button class="topbar__btn" title="MCP Server 管理">
+      🔌
+      <span class="tooltip">MCP 管理</span>
+    </button>
+    <button class="topbar__btn" title="Skill 管理">
+      ⚡
+      <span class="tooltip">Skill 管理</span>
+    </button>
+    <button class="topbar__btn" title="记忆管理">
+      🧠
+      <span class="tooltip">记忆管理</span>
+    </button>
+
+    <span class="topbar__divider"></span>
+
+    <!-- 模型选择器 -->
+    <div class="topbar__model-selector">
+      <span class="model-dot"></span>
+      <span>DeepSeek-V3</span>
+      <span style="font-size:10px;color:var(--text-muted)">▼</span>
+    </div>
+
+    <!-- 设置 -->
+    <button class="topbar__btn" title="应用设置">
+      ⚙
+      <span class="tooltip">设置</span>
+    </button>
+  </div>
+
+  <!-- =========================== -->
+  <!--  Main Content               -->
+  <!-- =========================== -->
+  <div class="main">
+    <!-- ===== Left Sidebar: 纯对话管理 ===== -->
+    <aside class="sidebar">
+      <div class="sidebar__header">
+        <span class="sidebar__section-title">对话</span>
+        <button class="topbar__btn" title="收起侧边栏" style="font-size:12px">◀</button>
+      </div>
+
+      <button class="btn-new-chat">
+        <span>+</span> 新建对话
+      </button>
+      <input class="sidebar__search" type="text" placeholder="搜索对话..." />
+
+      <!-- 分类标签 -->
+      <div class="sidebar__category-tabs">
+        <button class="sidebar__category-tab active">全部</button>
+        <button class="sidebar__category-tab">编程</button>
+        <button class="sidebar__category-tab">写作</button>
+        <button class="sidebar__category-tab">翻译</button>
+      </div>
+
+      <!-- 对话列表 -->
+      <div class="sidebar__list">
+        <div class="chat-item active">
+          <span class="chat-item__pin">📌</span>
+          <span class="chat-item__title">React 组件性能优化方案</span>
+          <span class="chat-item__time">14:32</span>
+        </div>
+        <div class="chat-item">
+          <span class="chat-item__icon">💬</span>
+          <span class="chat-item__title">TypeScript 类型体操练习</span>
+          <span class="chat-item__time">昨天</span>
+        </div>
+        <div class="chat-item">
+          <span class="chat-item__icon">💬</span>
+          <span class="chat-item__title">Rust 所有权机制讲解</span>
+          <span class="chat-item__time">昨天</span>
+        </div>
+        <div class="chat-item">
+          <span class="chat-item__icon">💬</span>
+          <span class="chat-item__title">API 接口设计讨论</span>
+          <span class="chat-item__time">周二</span>
+        </div>
+        <div class="chat-item">
+          <span class="chat-item__icon">💬</span>
+          <span class="chat-item__title">数据库查询优化思路</span>
+          <span class="chat-item__time">周一</span>
+        </div>
+        <div class="chat-item">
+          <span class="chat-item__icon">💬</span>
+          <span class="chat-item__title">给项目添加单元测试</span>
+          <span class="chat-item__time">上周五</span>
+        </div>
+        <div class="chat-item">
+          <span class="chat-item__icon">💬</span>
+          <span class="chat-item__title">Python 异步编程入门</span>
+          <span class="chat-item__time">上周三</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== Chat Area ===== -->
+    <main class="chat">
+      <div class="chat__messages">
+        <!-- User Message -->
+        <div class="message message--user">
+          <div class="message__avatar message__avatar--user">👤</div>
+          <div class="message__content">
+            <p>帮我写一个 React 自定义 Hook，用于管理分页数据加载，支持翻页、刷新和错误重试</p>
+          </div>
+        </div>
+
+        <!-- Assistant Message with Reasoning -->
+        <div class="message message--assistant">
+          <div class="message__avatar message__avatar--assistant">🤖</div>
+          <div class="message__content">
+            <div class="reasoning-block">
+              💭 思考中：用户需要一个通用的分页 Hook，需要处理 loading/error/data 三种状态，支持页码切换和刷新。考虑使用 useReducer 管理复杂状态...
+            </div>
+            <p>好的，这是一个功能完善的 <code style="background:var(--bg-tertiary);padding:1px 5px;border-radius:3px;font-size:13px">usePagination</code> Hook：</p>
+
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>usePagination.ts</span>
+                <span>TypeScript</span>
+              </div>
+              <div class="code-block__body">
+<span class="keyword">import</span> { useReducer, useCallback } <span class="keyword">from</span> <span class="string">'react'</span>;<br><br>
+<span class="keyword">interface</span> <span class="function">PaginationState</span>&lt;T&gt; {<br>
+&nbsp;&nbsp;data: T[];<br>
+&nbsp;&nbsp;loading: <span class="keyword">boolean</span>;<br>
+&nbsp;&nbsp;error: <span class="keyword">Error</span> | <span class="keyword">null</span>;<br>
+&nbsp;&nbsp;page: <span class="keyword">number</span>;<br>
+&nbsp;&nbsp;hasMore: <span class="keyword">boolean</span>;<br>
+}<br><br>
+<span class="keyword">export function</span> <span class="function">usePagination</span>&lt;T&gt;(<br>
+&nbsp;&nbsp;fetchFn: (page: <span class="keyword">number</span>) =&gt; <span class="keyword">Promise</span>&lt;{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;data: T[];<br>
+&nbsp;&nbsp;&nbsp;&nbsp;hasMore: <span class="keyword">boolean</span>;<br>
+&nbsp;&nbsp;}&gt;<br>
+) {<br>
+&nbsp;&nbsp;<span class="comment">// ... 实现代码</span><br>
+&nbsp;&nbsp;<span class="keyword">return</span> { data, loading, error, loadMore, refresh };<br>
+}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Message -->
+        <div class="message message--user">
+          <div class="message__avatar message__avatar--user">👤</div>
+          <div class="message__content">
+            <p>帮我看看这个项目里有哪些文件需要修改</p>
+          </div>
+        </div>
+
+        <!-- Tool Call -->
+        <div class="message message--assistant">
+          <div class="message__avatar message__avatar--assistant">🤖</div>
+          <div class="message__content">
+            <p>让我先查看项目结构...</p>
+            <div class="tool-call-card">
+              <div class="tool-call-card__header">
+                <span class="tool-call-card__status tool-call-card__status--done"></span>
+                <span style="font-size:13px">🔧</span>
+                <span style="flex:1;font-weight:500">list_directory</span>
+                <span style="font-size:11px;color:var(--text-muted)">已完成</span>
+              </div>
+              <div class="tool-call-card__body">
+src/<br>
+├── components/<br>
+├── pages/<br>
+├── stores/<br>
+├── lib/<br>
+└── types/
+              </div>
+            </div>
+            <div class="tool-call-card" style="margin-top:6px">
+              <div class="tool-call-card__header">
+                <span class="tool-call-card__status tool-call-card__status--running"></span>
+                <span style="font-size:13px">🔍</span>
+                <span style="flex:1;font-weight:500">read_file</span>
+                <span style="font-size:11px;color:var(--orange)">执行中...</span>
+              </div>
+              <div class="tool-call-card__body">
+<span style="color:var(--text-muted)">正在读取 src/lib/constants.ts...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input -->
+      <div class="chat__input-area">
+        <div class="input-box">
+          <textarea class="input-box__textarea" placeholder="输入消息，/ 触发 Skill，@ 引用规则" rows="1"></textarea>
+          <div class="input-box__footer">
+            <div class="input-box__actions">
+              <button class="input-box__action-btn" title="上传文件">📎</button>
+              <button class="input-box__action-btn" title="上传图片">🖼</button>
+            </div>
+            <div class="input-box__hint">
+              <kbd>/</kbd> Skill &nbsp; <kbd>@</kbd> 规则
+            </div>
+            <button class="btn-send">↑</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ===== Right Panel: 当前对话上下文状态 ===== -->
+    <aside class="right-panel">
+      <div class="right-panel__tabs">
+        <button class="right-panel__tab active">上下文</button>
+        <button class="right-panel__tab">工具</button>
+        <button class="right-panel__tab">规则</button>
+        <button class="right-panel__tab">MCP</button>
+        <button class="right-panel__tab">记忆</button>
+      </div>
+      <div class="right-panel__content">
+        <!-- 上下文 Tab: Token 用量 + 当前激活的 Skill -->
+        <div class="panel-section">
+          <div class="panel-section__title">Token 用量</div>
+          <div class="token-bar">
+            <div class="token-bar__label">
+              <span>上下文</span>
+              <span>3,012 / 12,800</span>
+            </div>
+            <div class="token-bar__track">
+              <div class="token-bar__fill" style="width:23%"></div>
+            </div>
+          </div>
+          <div style="margin-top:8px">
+            <div class="token-bar__label">
+              <span>本轮累计消耗</span>
+              <span>1,941</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-section__title">当前 Skill</div>
+          <div class="panel-item" style="color:var(--text-muted);font-style:italic">无激活的 Skill，输入 <code style="background:var(--bg-tertiary);padding:1px 4px;border-radius:3px">/</code> 触发</div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-section__title">系统提示词</div>
+          <div class="panel-item" style="color:var(--text-muted);font-style:italic">未设置系统提示词</div>
+        </div>
+
+        <!-- 工具 Tab: 工具调用历史 -->
+        <div class="panel-section" style="display:none">
+          <div class="panel-section__title">工具调用历史</div>
+          <div class="tool-call-card" style="margin-bottom:6px">
+            <div class="tool-call-card__header">
+              <span class="tool-call-card__status tool-call-card__status--done"></span>
+              <span style="font-size:13px">🔧</span>
+              <span style="flex:1;font-weight:500">list_directory</span>
+              <span style="font-size:11px;color:var(--text-muted)">14:30</span>
+            </div>
+            <div class="tool-call-card__body">src/components/</div>
+          </div>
+          <div class="tool-call-card" style="margin-bottom:6px">
+            <div class="tool-call-card__header">
+              <span class="tool-call-card__status tool-call-card__status--running"></span>
+              <span style="font-size:13px">🔍</span>
+              <span style="flex:1;font-weight:500">read_file</span>
+              <span style="font-size:11px;color:var(--orange)">执行中</span>
+            </div>
+            <div class="tool-call-card__body">src/lib/constants.ts</div>
+          </div>
+        </div>
+
+        <!-- 规则 Tab: 生效规则 -->
+        <div class="panel-section" style="display:none">
+          <div class="panel-section__title">生效规则</div>
+          <div class="panel-item">
+            <span style="color:var(--accent)">🌐</span>
+            <span>始终使用中文回复</span>
+            <span style="margin-left:auto;font-size:10px;background:var(--bg-tertiary);padding:1px 5px;border-radius:3px">全局</span>
+          </div>
+          <div class="panel-item">
+            <span style="color:var(--accent)">🌐</span>
+            <span>TypeScript 严格模式</span>
+            <span style="margin-left:auto;font-size:10px;background:var(--bg-tertiary);padding:1px 5px;border-radius:3px">全局</span>
+          </div>
+          <div class="panel-item">
+            <span style="color:var(--green)">📁</span>
+            <span>使用函数式组件</span>
+            <span style="margin-left:auto;font-size:10px;background:rgba(63,185,80,0.15);padding:1px 5px;border-radius:3px">编程分类</span>
+          </div>
+          <div class="panel-item">
+            <span style="color:var(--purple)">💬</span>
+            <span>优先使用 React 19 新特性</span>
+            <span style="margin-left:auto;font-size:10px;background:rgba(163,113,247,0.15);padding:1px 5px;border-radius:3px">本对话</span>
+          </div>
+        </div>
+
+        <!-- MCP Tab: Server 状态 -->
+        <div class="panel-section" style="display:none">
+          <div class="panel-section__title">MCP Server</div>
+          <div class="panel-item">
+            <span class="status-dot status-dot--online"></span>
+            <span>filesystem</span>
+            <span style="margin-left:auto;font-size:10px;color:var(--green)">运行中</span>
+          </div>
+          <div class="panel-item">
+            <span class="status-dot status-dot--online"></span>
+            <span>github</span>
+            <span style="margin-left:auto;font-size:10px;color:var(--green)">运行中</span>
+          </div>
+          <div class="panel-item">
+            <span class="status-dot status-dot--offline"></span>
+            <span>postgres</span>
+            <span style="margin-left:auto;font-size:10px;color:var(--text-muted)">已停止</span>
+          </div>
+        </div>
+
+        <!-- 记忆 Tab: 相关记忆 -->
+        <div class="panel-section" style="display:none">
+          <div class="panel-section__title">相关记忆</div>
+          <div class="memory-item">
+            <div>用户偏好 React 函数式组件风格</div>
+            <div class="memory-item__keywords">偏好 · React · 代码风格</div>
+          </div>
+          <div class="memory-item">
+            <div>项目使用 TypeScript 严格模式</div>
+            <div class="memory-item__keywords">项目配置 · TypeScript</div>
+          </div>
+          <div class="memory-item">
+            <div>用户常用的包管理器是 npm</div>
+            <div class="memory-item__keywords">偏好 · 工具链</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+</body>
+</html>
