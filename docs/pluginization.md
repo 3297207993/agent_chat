@@ -67,18 +67,18 @@
 
 ## 5. 迁移路线（宿主侧）
 
-内核只交付机制，不安排本项目的迁移顺序；本项目的阶段如下（编号沿用全局路线，K1/K6/K7 的内核侧交付见 [cambia.md](./cambia.md) 5.2）：
+内核只交付机制，不安排本项目的迁移顺序；本项目的阶段如下（内核侧阶段 K1–K3 见 [cambia.md](./cambia.md) 5.2）：
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| **K2 首次接入** | 引入内核；sessions 插件化（追加事件 + stores 变投影），首个带 UI 的功能插件（memory 或 rules）验证"服务+事件+视图"三链路 | 对话功能零回归 |
-| **K3 tools** | builtinTools 逐个搬进工具插件；requirePermission 变 waterfall/bail 监听 | 工具调用 + 审批流零回归 |
-| **K4 agent-loop** | createAgentStream 插件化，暴露 `agent/request`、`tools/*` waterfall | 流式对话零回归 |
-| **K5 llm + 周边迁移** | llm 适配器、MCP、skills 迁移为插件 | 全功能等价 |
-| **K6 第三方装载接入** | 接入内核的 `@cambia/host`（manifest 解析 + Worker 运行时 + 代理 Service + `.tap` 安装）；宿主侧补管理界面 | 外部插件注册工具跑通 |
-| **K7 生态验证** | 以本项目为参考宿主，验证 spec v1 与 `@cambia/kit` CLI、参考插件 | 第二个宿主应用可用 Cambia 起步 |
+| **P1 首次接入** | 引入内核；sessions 插件化（追加事件 + stores 变投影），首个带 UI 的功能插件（memory 或 rules）验证"服务+事件+视图"三链路 | 对话功能零回归 |
+| **P2 tools** | builtinTools 逐个搬进工具插件；requirePermission 变 waterfall/bail 监听 | 工具调用 + 审批流零回归 |
+| **P3 agent-loop** | createAgentStream 插件化，暴露 `agent/request`、`tools/*` waterfall | 流式对话零回归 |
+| **P4 llm + 周边迁移** | llm 适配器、MCP、skills 迁移为插件 | 全功能等价 |
+| **P5 第三方装载接入** | 接入内核的 `@cambia/host`（manifest 解析 + Worker 运行时 + 代理 Service + `.tap` 安装）；宿主侧补管理界面 | 外部插件注册工具跑通 |
+| **P6 生态验证** | 以本项目为参考宿主，验证 spec v1 与 `@cambia/kit` CLI、参考插件 | 第二个宿主应用可用 Cambia 起步 |
 
-依赖：K2–K5 需要 K1（内核核心）就绪，K6–K7 需要内核的装载运行时与生态件就绪。
+依赖：P1–P4 需要内核核心就绪，P5–P6 需要内核的装载运行时与生态件就绪。
 
 ---
 
