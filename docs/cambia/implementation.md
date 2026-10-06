@@ -16,10 +16,10 @@
 | `@cambia/host` | manifest 类型与校验 | **复用 + 自研真源** | `zod@4`（+ `z.toJSONSchema()`）；Rust 侧 `jsonschema` |
 | `@cambia/host` | `engines` 版本范围判定 | **复用** | JS `semver@7` / Rust `node-semver@2`（同一语义） |
 | `@cambia/host` | 激活事件匹配 | **自研前缀 + 复用 glob** | 自研前缀解析；glob 型用 `picomatch@4` |
-| `@cambia/host` | 插件依赖图与环检测 | **自研** | DFS + 可诊断错误码（运行期就绪交给 cordis `inject`） |
+| `@cambia/host` | 未激活归因（环 / 无认领键位） | **自研（只做诊断，不建图）** | 读 `Fiber.state` / `Fiber.inject` 做聚合归因；**解析与就绪归 cordis `inject`，host 不排序** |
 | `@cambia/host` | 插件模块装载 | **自研** | 原生 `import()` + hash-qualified specifier + Tauri `asset:` 协议（3.2(e)） |
 | `@cambia/host` | 视图插槽运行时 | **自研** | 数据契约 + headless no-op；内核不绑 UI 框架 |
-| `@cambia/host` | 保险丝（超时 / 降级 / 禁用） | **自研** | 超时 race + fiber 状态 + 持久化禁用表 |
+| `@cambia/host` | 保险丝（超时 / 降级 / 禁用） | **自研** | **等 `state === ACTIVE` 的超时** + fiber 状态 + 持久化禁用表 |
 | `plugin-host` (crate) | `.tap` 打包与解包 | **复用（唯一实现）** | `zip@8`，打包与解包同一实现 |
 | `plugin-host` (crate) | 哈希与签名 | **复用** | `sha2@0.11`；签名（`minisign-verify`）后置 |
 | `plugin-host` (crate) | 下载 | **复用** | `reqwest@0.13` |
@@ -53,6 +53,8 @@
 | 7 | 自定义 scheme 的寻址按平台分叉：Windows/Android 为 `http://<scheme>.localhost/<path>`，macOS/iOS/Linux 为 `<scheme>://localhost/<path>`（`use_https_scheme` 时前者变 `https`）；WKWebView **不允许**注册 `http`/`https`（对 WebKit 已处理的 scheme 会抛异常） | `tauri` 2.11.5 源码注释 + Apple 文档 | 装载 URL 必须由统一助手生成，**代码里禁止硬编码任何一侧**（3.2(e)） |
 | 8 | `asset:` 协议的 scope **可运行期扩展**（`asset_protocol_scope().allow_directory(dir, recursive)`），且每个请求都实时校验 scope（越权返回 403）；CORS 头与 `.js`/`.mjs → text/javascript` 由 Tauri 内置处理器负责 | `tauri` 2.11.5 `scope/fs.rs`、`protocol/asset.rs` | 运行期安装的插件目录**立即可读** → `asset:` 成为主路径；但 scope 是**全局**的 |
 | 9 | `tauri-plugin-shell` 的 `CommandChild::kill()` **不是树杀**（`shared_child` → `Child::kill`），且 **Rust 侧 spawn 的子进程不进入它的退出回收表**（只有 JS IPC spawn 的才被跟踪），也没有 process group / job object 选项 | `plugins-workspace` `v2` 分支源码 | 后端托管必须自持 job object / 进程组（3.3(e)） |
+| 10 | cordis 对"依赖等不到"**零信号**（Node 实跑确认）：互相 `inject` 的两个 fiber 都停在 `state=0`，**不发 `internal/status`**、不报错，且 `await ctx.plugin()` **立即 resolve**（`Fiber.await()` 只等 `inertia`，不等激活——实跑中 0ms 就 resolve，而插件 120ms 后才真正激活）；只有 `apply` 死等时 `state=1 (LOADING)` 且 then 永不 settle | Node 实跑 + `fiber.d.ts` / 运行时代码 | ① 装载成功**不能**用 `await ctx.plugin()` 判定（3.2(e)）；② 环与拼错键位**不被超时保险丝覆盖**，必须显式归因（3.2(d)）——这是它不能删的原因 |
+| 11 | 依赖到位的那一刻，等待中的 fiber 会**自己发 `internal/status`**（`0→1→2`），无需轮询；另：cordis 里 `provide(name, value)` 与 `ctx.set` 是两件事，未 `provide` 就 `set` 会得到 `cannot set property ... without provide` | Node 实跑 | 归因与"迟到激活"都靠 `internal/status` 就够；插件模板必须用对 `provide` / `set` 的分工（3.4） |
 
 ---
 
@@ -121,12 +123,18 @@
 - `workspaceContains:` 这类 glob 交给 picomatch（Vite 系生态同款，行为已被广泛验证），**不自研 glob**。
 - 注意词汇表归属：事件形态属于宿主的词汇表（kernel 1.9），host 只提供**匹配器接口**，具体事件由宿主注册——这条决定避免 host 长出领域概念。
 
-#### (d) 依赖图与环检测
+#### (d) 未激活归因（只做诊断，不建图）
 
-结论：**自研**（DFS 三色标记，几十行），不引入现成图库。
+先划清分工：**依赖的解析、就绪与激活顺序全部归 cordis 的 `inject`**（kernel 1.4 的"依赖即顺序"由它兑现）——host 不排序、不占位、不做"未就绪则挂起"。host 要处理的是一种 cordis 明确不给信号的失败：**插件永远不激活**。
 
-- 理由不是"图论很简单"，而是 host 需要的不是"拓扑排序"这个结果，而是**可诊断的失败**：环上的完整路径、未知服务键位、声明了但无人认领的键位——每一种都要对应用户可见的错误码。现成库通常只返回 `bool` 或抛一个通用异常。
-- 与 Cordis 的分工：**运行期的依赖就绪由 cordis `inject` 负责，host 不重复实现**；host 的图只用于装载期静态校验（插件间 `dependsOn`、`engines`、`contributes` 冲突）与激活顺序推导。
+- **为什么必须有人管**（事实 10，实跑确认）：互相 `inject` 的两个插件，fiber 都停在 `state=0`，**不发 `internal/status`、不报错、`await ctx.plugin()` 立即 resolve**。三条信号全无——"环"和"拼错的键位"若不显式归因就是**零检测**：插件装上了、管理界面里是启用的、功能静默缺失、日志空白。kernel 1.4 承诺"循环依赖在装载期报错，而非运行期死锁"，兑现者只能是 host。
+- **做法：不建图，做聚合**。一次装载尝试结束后，对每个"已导入但 `state !== ACTIVE`"的插件：
+  1. 读 `Fiber.inject` 拿到它在等的键位——`inject` 是模块 export 上的字面数据，`ctx.registry.values()` → `Runtime.fibers` 可直接枚举，**host 不需要自己登记一份依赖表**；
+  2. 逐个键位问"谁认领"：对照宿主键位词汇表（kernel 1.9：词汇表由宿主定义）与 `ctx.<key>` 是否已注册；
+  3. 归因并报出：**无认领者**（键位不在词汇表，或无人 `provide`）／**互相等待**（认领者恰好是另一个同样未激活的插件，即环——把等待关系原样列出）／**待定**（认领动作尚未发生，`provide` 只是声明）。
+- **为什么不需要图算法**：判环不需要"找环"，只需要"这些键位的认领者恰好也是卡住的那几个插件"——这句话直接读运行期事实即可。静态建图反而更脆：依赖也可能来自 `apply` 里的动态 `ctx.inject()`，而静态图看不见。
+- **局限写进实现**：这是**增量**诊断（`inject` 在模块导入前不可见）；触发点是"装载尝试结束后的显式核对"或 `internal/status`——等待中的 fiber 在依赖到位时会自己发 `internal/status`（事实 11），所以"迟到激活"能被观察到，**不需要轮询**。
+- **不做**：自我排序、服务替身、就绪阻塞（重复实现会分裂出第二套依赖语义）；也**不发明 manifest 级的插件间依赖字段**——kernel 3 的 manifest 没有 `dependsOn`，依赖只用服务键位表达（kernel 1.4）。若 spec 将来引入插件级依赖，再另说。
 
 #### (e) 插件模块装载
 
@@ -138,7 +146,8 @@
 - **明确排除 `data:` / `blob:` 与"读文本 + `new Function`"**：前者在两个 WebView 引擎上都没有权威依据，且 opaque origin 无法解析相对导入；后者需要 `'unsafe-eval'`，既削弱宿主自身防护，又让插件 bundle 失去"有文件来源、可校验哈希"的可能（kernel 6.1 已禁止）。二者只在 spike 证明主路径不可行时作为受记录的兜底。
 - **hash-qualified specifier 是本模块的关键工程点**：ES module 一旦被 import 就进入 module 图且无法卸载，因此重新装载必须换 specifier——路径里包含版本与内容哈希（`…/plugins/<id>/<version>-<hash>/frontend/main.js`），让新版本拿到新的模块实例；旧实例的注册由 effect 反卷绕回收。代价是旧模块图不被回收，反复重装的堆增长是**已知成本**——量化它（3.7），但不承诺回收。
 - **CSP 必须写 host-source 形式**（kernel 6.1 的实现细节）：Windows 上 `asset:` 的 URL scheme 实际是 `http`，只写 scheme-source `asset:` 不会匹配。`script-src` 需同时含 `'self'` 与 `http://asset.localhost`（macOS/Linux 再加 `asset:`）；自定义 scheme 同理。Tauri 只会为自己捆绑的资源自动追加 nonce/hash，**插件来源要显式放行**。
-- 装载错误面：协议层失败（403/404）、CORS 或 MIME 不满足、语法错误、缺 `apply`、`inject` 未知键位、超时——每类对应 spec 错误码，且必须能在 UI 里定位到插件 id 与文件路径。
+- **"装载成功"不能用 `await ctx.plugin()` 判定**（事实 10，实跑确认）：它只等装载动作，**0ms 就 resolve**，此时 `state=0`、插件尚未激活（依赖到位后 120ms 才真正 `0→1→2`）。判定标准只能是**显式等 `state === ACTIVE`（订阅 `internal/status`）或 `FAILED`**，并叠加 3.2(g) 的超时——否则"装载成功"报告的是"已发起"，不是"已生效"。
+- 装载错误面：协议层失败（403/404）、CORS 或 MIME 不满足、语法错误、缺 `apply`、`inject` 未知键位、超时——每类对应 spec 错误码，且必须能在 UI 里定位到插件 id 与文件路径（"未激活"的归因见 3.2(d)）。
 - **K2 的第一件事是 spike，不是写代码**：从 `asset:` / 自定义 scheme 动态 `import()` 这一点，官方文档与 issue 都没有覆盖（这是核查中唯一找不到权威依据的结论），必须先在 WebView2 上证明，再验 WKWebView 与 WebKitGTK。
 
 #### (f) 视图插槽运行时
@@ -153,7 +162,8 @@
 
 结论：**自研**，不引入任何"隔离/沙箱"库。
 
-- 组成即 kernel 6.2 的四条：`Promise.race` 超时、订阅 cordis fiber 状态（`internal/status`）、失败/超时插件的禁用表持久化、下次启动默认禁用 + 手动重试入口。
+- 组成即 kernel 6.2 的四条：**等 `state === ACTIVE` 的超时**（不是拿 `Promise.race` 包 `ctx.plugin()`——它立即 resolve，事实 10）、订阅 `internal/status`（`FAILED` 与激活转换都由它播报）、失败/超时插件的禁用表持久化、下次启动默认禁用 + 手动重试入口。
+- **超时能覆盖什么、不能覆盖什么**（实证）：`apply` 里死等的插件 `state=1 (LOADING)` 且 then 永不 settle → **超时有效**；依赖等不到的插件 `state=0` 且 then 立即 settle → **超时无效**，归 3.2(d) 的归因。两者互补，缺任意一个都有一类失败没有任何信号。
 - **明确不做**：崩溃恢复、内存/CPU 限额、恶意代码阻断——同 realm 内没有技术解，做了只会制造"有防护"的错觉（kernel 6.2 已声明不承诺）。
 - 存储边界：禁用表与安装记录通过宿主提供的 KV 服务读写，内核不自带存储实现。
 
@@ -256,8 +266,8 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 
 | 层级 | 工具 | 覆盖 | 对应验收 |
 |---|---|---|---|
-| 语义回归（最关键） | vitest | kernel 2.2 / 2.3 的五种派发、effect 反卷绕顺序、`inject` 就绪、循环依赖报错、waterfall 终止实现、`next` 二次调用抛错 | cordis 升级的唯一安全网；K1 |
-| 单元 | vitest / cargo test | manifest 校验、激活匹配、依赖图诊断、journal 恢复、平台键映射 | K2 |
+| 语义回归（最关键） | vitest | kernel 2.2 / 2.3 的五种派发、effect 反卷绕顺序、`inject` 就绪、**未满足的 `inject` 不发 `internal/status` 且 `await ctx.plugin()` 立即 resolve**、**`apply` 死等则 then 不 settle、`state=1`**（这两条锁住上游行为——3.2(d) 的归因与 3.2(g) 的超时都建立在它们之上）、waterfall 终止实现、`next` 二次调用抛错 | cordis 升级的唯一安全网；K1 |
+| 单元 | vitest / cargo test | manifest 校验、激活匹配、**未激活归因的输出（环 / 无认领键位 / 待定）**、journal 恢复、平台键映射 | K2 |
 | 契约一致性 | 同一批 fixtures 跑两侧 | JS 与 Rust 对同一 manifest 判定一致 | K2 |
 | 集成（无 Tauri） | vitest + happy-dom + 真实 `.tap` 目录的 headless 宿主 fixture | 装载 → 注册 → 卸载 → **监听数归零、认领键位消失**（kernel 6.2 验收项） | K2 |
 | 后端进程 | cargo test | spawn / 超时 / 重启 / 优雅关闭 / 宿主退出回收（Windows 上断言无孤儿进程） | K2 |
@@ -280,6 +290,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 10 | `asset:` 的 scope 是**全局**的：放行插件根目录后，应用内任何 webview 都能读该目录 | 与"全信任同进程"一致，但不满足将来要收窄的诉求 | 现在就写进文档（**不做安全承诺**）；若将来需要隔离，切自定义 scheme + 请求级路径校验 | 已知，接受 |
 | 11 | WKWebView 不允许注册 `http`/`https`，同一 scheme 也不能注册两次；Windows 上 WebView2 只对 http/https 触发资源拦截（wry 的 `http://<scheme>.localhost` 变通即由此而来） | 自定义 scheme 的命名与注册时机 | scheme 名唯一且避开 `http(s)`；**必须在 `Builder` 阶段注册**（app 级，无法按 webview） | **已收口** |
 | 12 | macOS 上不能靠 `tauri-driver` 做 E2E | CI 矩阵覆盖不到 macOS | 用 WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server） | **已收口** |
+| 13 | cordis 对"依赖等不到"零信号（事实 10：无事件、无报错、`await ctx.plugin()` 立即 resolve） | 若把它当装载成功信号，会漏掉整类"静默不生效"的插件 | 装载判定改为显式等 `ACTIVE`（3.2(e)）+ 未激活归因（3.2(d)）；两者都写进 K1 的语义回归测试 | **已收口** |
 
 ### 3.9 里程碑映射
 
