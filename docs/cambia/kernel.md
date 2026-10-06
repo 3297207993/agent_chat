@@ -12,7 +12,7 @@ Cambia 是一个 **Tauri 通用插件内核**：它不属于任何单个应用�
 
 设计蓝本：[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 everything-is-a-plugin 架构及其底层框架 [Cordis](https://github.com/cordiverse/cordis)。
 
-**内核语义不做自研**：插件内核的 JS 侧直接使用 Cordis（同进程、全信任，与 DH 一致），Cambia 的价值在 Cordis 之外——装载、包管理、宿主适配与 Rust 侧能力。`@cambia/core` 的职责是**冻结插件面向的 API**（服务认领、inject、effect、五种派发、事件类型声明合并），Cordis 只是它的实现，不出现在插件作者可见的类型面里。决策依据与防腐层规则见 5.3。
+**内核语义不做自研**：插件内核的 JS 侧直接使用 Cordis（同进程、全信任，与 DSH 一致），Cambia 的价值在 Cordis 之外——装载、包管理、宿主适配与 Rust 侧能力。`@cambia/core` 的职责是**冻结插件面向的 API**（服务认领、inject、effect、五种派发、事件类型声明合并），Cordis 只是它的实现，不出现在插件作者可见的类型面里。决策依据与防腐层规则见 5.3。
 
 ---
 
