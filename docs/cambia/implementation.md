@@ -19,7 +19,7 @@
 | `@cambia/host` | 未激活归因（环 / 无认领键位） | **自研（只做诊断，不建图）** | 读 `Fiber.state` / `Fiber.inject` 做聚合归因；**解析与就绪归 cordis `inject`，host 不排序** |
 | `@cambia/host` | 插件模块装载 | **自研** | 原生 `import()` + hash-qualified specifier + Tauri `asset:` 协议（3.2(e)） |
 | `@cambia/host` | 视图插槽运行时 | **自研** | 数据契约 + headless no-op；内核不绑 UI 框架 |
-| `@cambia/host` | 保险丝（超时 / 降级 / 禁用） | **自研** | **等 `state === ACTIVE` 的超时** + fiber 状态 + 持久化禁用表 |
+| `@cambia/host` | 保险丝（超时 / 降级 / 禁用） | **自研** | **等 fiber 进 `ACTIVE` 的超时**（词表见 3.2）+ 持久化禁用表 |
 | `plugin-host` (crate) | `.tap` 打包与解包 | **复用（唯一实现）** | `zip@8`，打包与解包同一实现 |
 | `plugin-host` (crate) | 哈希与签名 | **复用** | `sha2@0.11`；签名（`minisign-verify`）后置 |
 | `plugin-host` (crate) | 下载 | **复用** | `reqwest@0.13` |
@@ -99,6 +99,26 @@
 ### 3.2 `@cambia/host` —— 宿主侧装载与运行时
 
 这是自研最集中、复用最少的一块：它的每一部分都与 spec 耦合。复用只出现在四个"纯工具"位置——`zod`、`semver`、`node-semver`、`picomatch`——加上宿主运行时的两个内置能力（Tauri 的 `asset:` 协议、原生 `import()`）。
+
+**先对齐本文用到的 cordis 观测面**（`Context` / `Service` / `inject` / `effect` / 五种派发的语义见 [kernel.md](./kernel.md) 2 章，这里只补 fiber 层面的观测面；这些类型由 `@cambia/core` 再导出，插件作者同样会看到，下面 (d) / (e) / (g) 都用它）：
+
+| 术语 | 含义 | 怎么读 |
+|---|---|---|
+| `Fiber` | 一次插件装载实例：`ctx.plugin(p)` 一次 = 一个 fiber；同一插件装两次 = 两个 fiber | `ctx.registry.values()` → `Runtime.fibers` |
+| `Fiber.state` | fiber 的生命周期状态（`FiberState`，取值即下表） | 直接读属性 |
+| `internal/status(fiber, oldState)` | 状态**发生变化**时派发的事件 | `ctx.on('internal/status', ...)` |
+| `Fiber.inject` | 该 fiber 声明的依赖键位 | `Object.keys(fiber.inject)` |
+
+| 值 | 状态 | 含义（实现视角） |
+|---|---|---|
+| 0 | `PENDING` | **未激活**——依赖未就绪，或从未被评估（**两者靠 `state` 分不出来**，需按 (d) 归因） |
+| 1 | `LOADING` | `apply` 正在执行；**在 `apply` 里死等会停在这一态**（(g) 的超时针对它） |
+| 2 | `ACTIVE` | 已激活，注册全部生效——**装载成功的目标态** |
+| 3 | `FAILED` | 装载失败（`apply` 抛错、校验失败、超时），降级表记录的对象（kernel 6.2） |
+| 4 | `DISPOSED` | 已卸载并回收（uid 置空） |
+| 5 | `UNLOADING` | 正在反卷绕卸载 |
+
+两条实现上必须知道、且只有实测才知道的细节：① **状态没变化就不发事件**——一个从一开始就等不到依赖的 fiber 全程不发 `internal/status`，所以"没收到事件"不等于"没问题"；② 失败路径**不保证**是 `1 → 3`（实测出现过 `1 → 5 → 3`），判定失败只看是否落到 `FAILED`，不要把转移序列写死。
 
 #### (a) manifest 类型与校验
 
