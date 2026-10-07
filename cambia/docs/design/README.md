@@ -29,7 +29,7 @@
 |---|---|---|
 | `packages/core` | [core.md](./core.md) | 有（实现后补写） |
 | `packages/eslint-config` | [eslint-config.md](./eslint-config.md) | 有（实现后补写） |
-| `packages/host` | `host.md` | 没有——动手前建 |
+| `packages/host` | [host.md](./host.md) | 有（草稿：可行性验证那批（K2.5）写全，K2.1–K2.4 待各自批次实现前补写） |
 | `packages/kit` | `kit.md` | 没有——动手前建 |
 | `crates/plugin-host` | `plugin-host.md` | 没有——动手前建 |
 | `crates/tauri-plugin-cambia` | `tauri-plugin-cambia.md` | 没有——动手前建 |
@@ -50,7 +50,7 @@
 # <模块名> 设计
 
 > 状态：草稿 / 已评审 / 已实现
-> 对应批次：K2.3（plan.md）
+> 对应批次：K2.2（plan.md）
 
 ## 边界
 
