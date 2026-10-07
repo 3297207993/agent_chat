@@ -1,0 +1,9 @@
+# 内核与生态件的 workspace 根。
+# 适配层（crates/tauri-plugin-cambia）不在这里：它自带 package.json 与 lockfile，
+# 是独立 workspace、独立 CI 轨道（implementation.md 3.3(g)）。
+packages:
+  - packages/*
+
+# pnpm 默认拦截依赖的构建脚本，esbuild 需要执行 postinstall 安装平台二进制
+allowBuilds:
+  esbuild: true

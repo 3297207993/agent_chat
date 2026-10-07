@@ -1,0 +1,12 @@
+{
+  "name": "cambia",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Cambia —— Tauri 通用插件内核（独立通用库；适配层自成独立 workspace）",
+  "packageManager": "pnpm@12.5.1",
+  "scripts": {
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
