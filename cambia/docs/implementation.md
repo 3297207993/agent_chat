@@ -19,7 +19,7 @@
 | `@cambia/host` | 未激活原因诊断（环 / 没有提供者） | **自研（只做诊断，不建图）** | 读 `Fiber.state` / `Fiber.inject` 做聚合原因诊断；**解析与就绪归 cordis `inject`，host 不排序** |
 | `@cambia/host` | 插件模块装载 | **自研** | 原生 `import()` + hash-qualified specifier + Tauri `asset:` 协议（3.2(e)） |
 | `@cambia/host` | 视图插槽运行时 | **自研** | 数据契约 + headless no-op；内核不绑 UI 框架 |
-| `@cambia/host` | 失败保护措施（超时 / 降级 / 禁用） | **自研** | **等 fiber 进 `ACTIVE` 的超时**（词表见 3.2）+ 持久化禁用名单 |
+| `@cambia/host` | 失败保护措施（激活超时） | **自研** | **等 fiber 进 `ACTIVE` 的超时** + 订阅 `internal/status` 记录失败（词表见 3.2） |
 | `plugin-host` (crate) | `.tap` 打包与解包 | **复用（唯一实现）** | `zip@8`，打包与解包同一实现 |
 | `plugin-host` (crate) | 哈希与签名 | **复用** | `sha2@0.11`；签名（`minisign-verify`）后置 |
 | `plugin-host` (crate) | 下载 | **复用** | `reqwest@0.13` |
@@ -126,7 +126,7 @@
 | 0 | `PENDING` | **未激活**——依赖未就绪，或从未被评估（**两者靠 `state` 分不出来**，需按 (d) 原因诊断） |
 | 1 | `LOADING` | `apply` 正在执行；**在 `apply` 里一直等待会停在这一态**（(g) 的超时针对它） |
 | 2 | `ACTIVE` | 已激活，注册全部生效——**装载成功的目标态** |
-| 3 | `FAILED` | 装载失败（`apply` 抛错、校验失败、超时），禁用名单记录的对象（kernel 6.2） |
+| 3 | `FAILED` | 装载失败（`apply` 抛错、校验失败、超时），由宿主记录的对象（kernel 6.2） |
 | 4 | `DISPOSED` | 已卸载并回收（uid 置空） |
 | 5 | `UNLOADING` | 正在撤销注册并卸载 |
 
@@ -134,7 +134,7 @@
 
 ① **状态没变化就不发事件**——一个从一开始就等不到依赖的 fiber 全程不发 `internal/status`，所以"没收到事件"不等于"没问题"。
 ② 失败路径**不保证**是 `1 → 3`：实测 `apply` 抛错时走的是 **`1 → 5 → 3`**（先 UNLOADING 再 FAILED），判定失败只看是否落到 `FAILED`，不要把转移序列写死。
-③ **卸载一个卡在 `LOADING` 的插件时，`dispose()` 永不 settle**（uid 已置空、state 停在 1、也不发任何事件）——所以 K2.3 的禁用名单不能等 `dispose()` 完成再记，否则会被"`apply` 里死等"的插件一起拖死。
+③ **卸载一个卡在 `LOADING` 的插件时，`dispose()` 永不 settle**（uid 已置空、state 停在 1、也不发任何事件）——所以卸载路径不能等 `dispose()` settle，否则会被"`apply` 里死等"的插件一起拖死。
 ④ **卸载一个从未激活的插件一个事件都不发，且 state 停在 `PENDING`（0）而不是 `DISPOSED`（4）**——"这个插件还在吗"只能看 `uid`（`null` = 已卸载），不能看 state。
 ⑤ 重复 `dispose()` 返回的是 `undefined` 而不是 promise（上游类型声明写的是 `() => Promise<void>`）：可以重复 `await`，但别对返回值调 `.then()`。
 ⑥ `assertActive()` 的实际判据是 `uid !== null`，所以 "cannot create effect on inactive context"（`code: INACTIVE_EFFECT`）的真实含义是"**这个 fiber 已经卸载**"，与 state 是否为 `ACTIVE` 无关——`ctx.effect` / `ctx.on` / `ctx.provide` 三者一致。
@@ -200,14 +200,13 @@
 - 贡献载荷是**数据**（schema 表单 / 渲染器服务键 / iframe 文档 URL），React 组件只存在于宿主适配层。
 - 没有可复用的等价库，而且这段代码属内核契约的一部分，必须自己管理。
 
-#### (g) 失败保护措施（激活超时与失败降级）
+#### (g) 失败保护措施（激活超时）
 
 结论：**自研**，不引入任何"隔离/沙箱"库。
 
-- 组成即 kernel 6.2 的四条：**等 `state === ACTIVE` 的超时**（不是拿 `Promise.race` 包 `ctx.plugin()`——它立即 resolve，事实 10）、订阅 `internal/status`（`FAILED` 与激活转换都由它发出）、失败/超时插件的禁用名单持久化、下次启动默认禁用 + 手动重试入口。
+- 组成即 kernel 6.2：**等 `state === ACTIVE` 的超时**（不是拿 `Promise.race` 包 `ctx.plugin()`——它立即 resolve，事实 10）、订阅 `internal/status` 记录失败（`FAILED` 与激活转换都由它发出）。
 - **超时能覆盖什么、不能覆盖什么**（实证）：`apply` 里一直等待的插件 `state=1 (LOADING)` 且 then 永不 settle → **超时有效**；依赖等不到的插件 `state=0` 且 then 立即 settle → **超时无效**，由 3.2(d) 的原因诊断负责。两者互补，缺任意一个都有一类失败没有任何信号。
 - **明确不做**：崩溃恢复、内存/CPU 限额、恶意代码阻断——同 realm 内没有技术解，做了只会制造"有防护"的错觉（kernel 6.2 已声明不承诺）。
-- 存储边界：禁用名单与安装记录通过宿主提供的 KV 服务读写，内核不自带存储实现。
 
 ### 3.3 `plugin-host` crate —— 包管理与后端进程托管
 
@@ -354,7 +353,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 12 | macOS 上不能靠 `tauri-driver` 做 E2E | CI 矩阵覆盖不到 macOS | 用 WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server） | **已定案** |
 | 13 | cordis 对"依赖等不到"没有任何信号（事实 10：无事件、无报错、`await ctx.plugin()` 立即 resolve） | 若把它当装载成功信号，会漏掉整类"静默不生效"的插件 | 装载判定改为显式等 `ACTIVE`（3.2(e)）+ 未激活原因诊断（3.2(d)）；两者都写进 K1 的上游行为锁定测试 | **已定案** |
 | 14 | 适配层要跟 tauri 大版本走（2 → 3） | 适配层返工；一旦它膨胀，返工就会蔓延进内核实现层 | 守住"删掉它内核仍成立"的薄度（四件事之外不放东西）+ 独立 workspace / CI 轨道；内核实现层不出现 Tauri 符号 | 设计内 |
-| 15 | 卸载路径的边界状态反直觉（实测，见 3.2 的 ③④）：卡在 `LOADING` 的插件 `dispose()` 永不 settle；从未激活的插件卸载后 state 停在 `PENDING` 而非 `DISPOSED` | K2.2 的"卸载即还原"与 K2.3 的禁用名单 / 手动重试会被卡住的插件拖住，或误判"插件还活着" | 禁用名单**先写后卸**、卸载不 await `dispose()`；"还在吗"一律看 `uid` 而不是 state；已由 K1 的上游行为锁定测试钉住 | **已识别** |
+| 15 | 卸载路径的边界状态反直觉（实测，见 3.2 的 ③④）：卡在 `LOADING` 的插件 `dispose()` 永不 settle；从未激活的插件卸载后 state 停在 `PENDING` 而非 `DISPOSED` | K2.2 的"卸载即还原"会被卡住的插件拖住，或误判"插件还活着" | 卸载不 await `dispose()`；"还在吗"一律看 `uid` 而不是 state；已由 K1 的上游行为锁定测试钉住 | **已识别** |
 
 ### 3.9 里程碑映射
 

@@ -10,7 +10,7 @@
 |---|---|---|
 | **K2.1** manifest 与校验 | zod schema、`engines` 判定、激活事件匹配、错误码表初稿 | **写全**（接口 / 数据流 / 失败路径 / 验收）；码值落在 `spec/`（[spec.md](./spec.md)） |
 | K2.2 装载最小闭环 | 装载判定（显式等 `ACTIVE` / `FAILED`）、卸载路径、不依赖 Tauri 的宿主 fixture | 只写边界 |
-| K2.3 原因诊断与失败保护 | 未激活原因的聚合诊断、激活超时、失败禁用名单 | 只写边界 |
+| K2.3 原因诊断与失败保护 | 未激活原因的聚合诊断、激活超时 | 只写边界 |
 | K2.4 视图插槽运行时 | 插槽位置解析、渲染器服务键查找、无 UI 宿主的 no-op、iframe 容器 | 只写边界 |
 | **K2.5** 可行性验证 | 装载入口：specifier、与宿主运行时的接缝、`import()`、失败分类 | **写全**（接口 / 数据流 / 失败路径 / 验收）；最小版只点火，双版本对照 / CSP 三变体 / 平台差异属补全版 |
 
@@ -22,7 +22,7 @@
 
 - **契约层**（K2.1）：manifest 的类型与校验、`engines` 判定、激活事件匹配——`zod@4` 是唯一来源，`spec/*/manifest.schema.json` 由它生成
 - **装载层**（K2.2 / K2.5）：插件模块的 specifier、动态 `import()`、装载失败的分类与定位、装载判定（显式等 fiber 到 `ACTIVE` 或 `FAILED`）、卸载路径
-- **诊断与失败保护**（K2.3）：未激活原因的聚合诊断、等待激活的超时、失败/超时插件的禁用名单
+- **诊断与失败保护**（K2.3）：未激活原因的聚合诊断、等待激活的超时
 - **视图插槽运行时**（K2.4）：把宿主定义的插槽位置、渲染器、无 UI 宿主的降级接上
 
 **不负责**：
@@ -161,7 +161,6 @@ PluginRef{id,version,hash} → pluginModulePath() → 相对路径
 |---|---|
 | 这个插件激活了没有 | `Fiber.state`，变化由 `internal/status` 派发（观测方式见 [../implementation.md](../implementation.md) 3.2 开头的词表） |
 | 这个插件还在不在 | `Fiber.uid`（`null` = 已卸载）。**不能看 state**：从未激活的插件卸载后停在 `PENDING` 而不是 `DISPOSED`（K1.1 锁定） |
-| 上次启动失败过哪些插件 | 宿主提供的 KV 服务；本模块不含存储实现（[../implementation.md](../implementation.md) 3.2(g)） |
 
 **两条环境前提**（本批实测后回写为事实 13–15，写进实现而非假设）：
 
@@ -188,7 +187,7 @@ PluginRef{id,version,hash} → pluginModulePath() → 相对路径
 | 包内相对说明符（多文件 bundle） | 说明符被解析到站点根，整张模块图取不到 | 归"取不到"；这是 kernel 3.2 的单文件硬约束被违反后的形态，拦截在构建期 | 真 WebView 脚本的对照用例 |
 | 依赖等不到（环 / 拼错服务键） | `state=0`、无事件、无报错、`await ctx.plugin()` 立即 resolve | **本模块不处理**：K2.3 做聚合诊断（这是 kernel 1.4 承诺的落实点） | K2.3 |
 | 插件在 `apply` 里一直等 | `state=1`、then 永不 settle | **本模块不处理**：K2.3 的激活超时 | K2.3 |
-| 卸载一个卡在 `LOADING` 的插件 | `dispose()` 永不 settle，且不发事件 | 卸载路径**不 await `dispose()`**；禁用名单**先写后卸**（否则会被死等的插件拖死） | K2.2 / K2.3 |
+| 卸载一个卡在 `LOADING` 的插件 | `dispose()` 永不 settle，且不发事件 | 卸载路径**不 await `dispose()`**（否则会被死等的插件拖死） | K2.2 / K2.3 |
 | 重复 `import()` 同一个 specifier | 命中模块图里的同一实例 | 不是失败，但它定死了"换路径才能换实例"这条设计 | 装载层单测 |
 | 从 CJS `require('@cambia/host')` | 有意不满足：插件 bundle 在 WebView 里按 ES module 装载 | 同 `@cambia/core`：ESM-only，用 attw 的 `esm-only` profile 显式忽略，而不是压掉警告 | `check:publish` |
 
