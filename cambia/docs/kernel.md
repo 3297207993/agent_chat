@@ -125,7 +125,7 @@ const result = ctx.waterfall('tools/pre-execute', call, () => defaultExecute(cal
 - 同一个 `next()` 调用两次会抛错
 - 协作式监听者通常修改共享的请求/决策对象后委托；策略型监听者拥有决策权时短路
 
-漏传终止实现不会有编译期错误，而是运行期 `inner is not a function` —— 这是最容易踩的一条。
+漏传终止实现不会有编译期错误，只有运行期 TypeError，而且**形态有两种**（实测）：没有监听者时报 `inner is not a function`（终止实现位置拿到的是载荷本身）；有监听者且它调用 `next()` 时报 `next is not a function`（载荷被当成终止实现弹出了，`next` 位置是空的）。这是最容易踩的一条。
 
 ---
 

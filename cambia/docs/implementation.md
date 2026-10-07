@@ -120,7 +120,14 @@
 | 4 | `DISPOSED` | 已卸载并回收（uid 置空） |
 | 5 | `UNLOADING` | 正在撤销注册并卸载 |
 
-两条实现上必须知道、且只有实测才知道的细节：① **状态没变化就不发事件**——一个从一开始就等不到依赖的 fiber 全程不发 `internal/status`，所以"没收到事件"不等于"没问题"；② 失败路径**不保证**是 `1 → 3`（实测出现过 `1 → 5 → 3`），判定失败只看是否落到 `FAILED`，不要把转移序列写死。
+六条实现上必须知道、且只有实测才知道的细节（全部由 K1.1 的 `packages/core/test/semantics/` 锁定）：
+
+① **状态没变化就不发事件**——一个从一开始就等不到依赖的 fiber 全程不发 `internal/status`，所以"没收到事件"不等于"没问题"。
+② 失败路径**不保证**是 `1 → 3`：实测 `apply` 抛错时走的是 **`1 → 5 → 3`**（先 UNLOADING 再 FAILED），判定失败只看是否落到 `FAILED`，不要把转移序列写死。
+③ **卸载一个卡在 `LOADING` 的插件时，`dispose()` 永不 settle**（uid 已置空、state 停在 1、也不发任何事件）——所以 K2.4 的禁用名单不能等 `dispose()` 完成再记，否则会被"`apply` 里死等"的插件一起拖死。
+④ **卸载一个从未激活的插件一个事件都不发，且 state 停在 `PENDING`（0）而不是 `DISPOSED`（4）**——"这个插件还在吗"只能看 `uid`（`null` = 已卸载），不能看 state。
+⑤ 重复 `dispose()` 返回的是 `undefined` 而不是 promise（上游类型声明写的是 `() => Promise<void>`）：可以重复 `await`，但别对返回值调 `.then()`。
+⑥ `assertActive()` 的实际判据是 `uid !== null`，所以 "cannot create effect on inactive context"（`code: INACTIVE_EFFECT`）的真实含义是"**这个 fiber 已经卸载**"，与 state 是否为 `ACTIVE` 无关——`ctx.effect` / `ctx.on` / `ctx.provide` 三者一致。
 
 #### (a) manifest 类型与校验
 
@@ -304,7 +311,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 
 | 层级 | 工具 | 覆盖 | 对应验收 |
 |---|---|---|---|
-| 上游行为锁定测试（最关键） | vitest | kernel 2.2 / 2.3 的五种派发、effect 逆序撤销的顺序、`inject` 就绪、**未满足的 `inject` 不发 `internal/status` 且 `await ctx.plugin()` 立即 resolve**、**`apply` 一直等待则 then 不 settle、`state=1`**（这两条锁住上游行为——3.2(d) 的原因诊断与 3.2(g) 的超时都建立在它们之上）、waterfall 终止实现、`next` 二次调用抛错 | cordis 升级的唯一安全网；K1 |
+| 上游行为锁定测试（最关键） | vitest | kernel 2.2 / 2.3 的五种派发、effect 逆序撤销的顺序、`inject` 就绪、**未满足的 `inject` 不发 `internal/status` 且 `await ctx.plugin()` 立即 resolve**、**`apply` 一直等待则 then 不 settle、`state=1`**（这两条锁住上游行为——3.2(d) 的原因诊断与 3.2(g) 的超时都建立在它们之上）、waterfall 终止实现、`next` 二次调用抛错、漏传终止实现的两种 TypeError 形态、重复 `dispose()` 的返回值、`internal/dispatch` 对 `parallel` 的上报怪癖 | cordis 升级的唯一安全网；K1——**已落地**：`packages/core/test/semantics/`（44 条用例，`pnpm --filter @cambia/core test`） |
 | 单元 | vitest / cargo test | manifest 校验、激活匹配、**未激活原因诊断的输出（环 / 没有提供者 / 待定）**、journal 恢复、平台键映射 | K2 |
 | 契约一致性 | 同一批 fixtures 跑两侧 | JS 与 Rust 对同一 manifest 判定一致 | K2 |
 | 集成（无 Tauri） | vitest + happy-dom + 真实 `.tap` 目录的 headless 宿主 fixture | 装载 → 注册 → 卸载 → **监听数归零、占用的服务键消失**（kernel 6.2 验收项） | K2 |
@@ -330,6 +337,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 12 | macOS 上不能靠 `tauri-driver` 做 E2E | CI 矩阵覆盖不到 macOS | 用 WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server） | **已定案** |
 | 13 | cordis 对"依赖等不到"没有任何信号（事实 10：无事件、无报错、`await ctx.plugin()` 立即 resolve） | 若把它当装载成功信号，会漏掉整类"静默不生效"的插件 | 装载判定改为显式等 `ACTIVE`（3.2(e)）+ 未激活原因诊断（3.2(d)）；两者都写进 K1 的上游行为锁定测试 | **已定案** |
 | 14 | 适配层要跟 tauri 大版本走（2 → 3） | 适配层返工；一旦它膨胀，返工就会蔓延进内核实现层 | 守住"删掉它内核仍成立"的薄度（四件事之外不放东西）+ 独立 workspace / CI 轨道；内核实现层不出现 Tauri 符号 | 设计内 |
+| 15 | 卸载路径的边界状态反直觉（实测，见 3.2 的 ③④）：卡在 `LOADING` 的插件 `dispose()` 永不 settle；从未激活的插件卸载后 state 停在 `PENDING` 而非 `DISPOSED` | K2.3 的"卸载即还原"与 K2.4 的禁用名单 / 手动重试会被卡住的插件拖住，或误判"插件还活着" | 禁用名单**先写后卸**、卸载不 await `dispose()`；"还在吗"一律看 `uid` 而不是 state；已由 K1 的上游行为锁定测试钉住 | **已识别** |
 
 ### 3.9 里程碑映射
 
