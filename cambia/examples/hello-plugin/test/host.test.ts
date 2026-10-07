@@ -51,7 +51,7 @@ describe('example plugin: load → activate → unload', () => {
     expect(transcript.slice(-2)).toEqual(['log-close', 'cache-close'])
     expect(ctx.get('greeter')).toBeUndefined()
 
-    // Listener count back to zero: broadcasting once more reaches nobody (the K2.3 acceptance item)
+    // Listener count back to zero: broadcasting once more reaches nobody (the K2.2 acceptance item)
     const seen = transcript.length
     ctx.emit('hello/greeted', { name: 'nobody', greeting: 'silence' })
     expect(transcript.length).toBe(seen)

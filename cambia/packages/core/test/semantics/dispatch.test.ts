@@ -294,7 +294,7 @@ describe('dispatch: shared conventions', () => {
   // Locks: registration order is execution order; a listener with `prepend: true` goes first;
   //        ctx.on returns an undo function, after which that listener is never reached again
   // Needed by: the "order = registration order" rule of kernel.md 2.2; the ordered contribution
-  //        lists of K2.5 slots and the activation-event priority of K2.2 both depend on it
+  //        lists of K2.4 slots and the activation-event priority of K2.1 both depend on it
   it('runs in registration order, prepend goes first, and the undo function works', () => {
     const ctx = new Context()
     const order: string[] = []

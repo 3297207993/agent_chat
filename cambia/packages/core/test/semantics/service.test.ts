@@ -75,7 +75,7 @@ describe('provide versus ctx.set', () => {
 
   // Locks: providing the same service name a second time throws
   //        `service "<name>" has been registered at <name of the first registrant>`
-  // Needed by: the attribution output of K2.4 — "who is occupying the key I want" must be nameable,
+  // Needed by: the attribution output of K2.3 — "who is occupying the key I want" must be nameable,
   //        and this message already carries the occupant's name
   it('a service name cannot be registered twice, and the error names the occupant', async () => {
     const ctx = new Context()
@@ -90,7 +90,7 @@ describe('provide versus ctx.set', () => {
 
   // Locks: once the provider unloads the service disappears from the registry (provide itself is a
   //        reversible registration)
-  // Needed by: "disable = back to never installed" (kernel.md 1.3) — the K2.3 acceptance item "the
+  // Needed by: "disable = back to never installed" (kernel.md 1.3) — the K2.2 acceptance item "the
   //        occupied service key disappears" is exactly this
   it('the service disappears once its provider unloads', async () => {
     const ctx = new Context()

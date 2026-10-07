@@ -67,7 +67,7 @@ describe('fiber states and internal/status', () => {
 
   // Locks: unloading a plugin stuck in LOADING means dispose() **does not settle either**: state
   //        stays at 1, uid is cleared and no event is emitted
-  // Needed by: the failure deny-list and "manual retry" entry point of K2.4 — a host must not wait
+  // Needed by: the failure deny-list and "manual retry" entry point of K2.3 — a host must not wait
   //        for dispose() before recording the deny entry, or one plugin with a dead-locked apply
   //        drags the whole unload path down with it; "is it still there" can only be answered by uid
   it('unloading a plugin stuck in LOADING never settles and emits nothing', async () => {
@@ -90,7 +90,7 @@ describe('fiber states and internal/status', () => {
   })
 
   // Locks: unloading an activated plugin walks 2→5→4 and clears uid
-  // Needed by: the unload path of K2.3 — the host uses "landed on DISPOSED" as the completion signal
+  // Needed by: the unload path of K2.2 — the host uses "landed on DISPOSED" as the completion signal
   it('unloading an activated plugin walks 2→5→4', async () => {
     const ctx = new Context()
     const transitions: string[] = []
@@ -106,7 +106,7 @@ describe('fiber states and internal/status', () => {
 
   // Locks: unloading a plugin that was **never active** emits no internal/status at all, and state
   //        stays at 0 (PENDING) rather than 4
-  // Needed by: the deny-list of K2.4 and the "back to zero" check of K2.3 — an unloaded fiber may
+  // Needed by: the deny-list of K2.3 and the "back to zero" check of K2.2 — an unloaded fiber may
   //        still read PENDING, so "is this plugin still there" can only be answered by uid, never by
   //        state; this is also where "no state change, no event" becomes visible
   it('unloading a never-active plugin emits nothing and leaves state at 0', async () => {
@@ -127,7 +127,7 @@ describe('fiber states and internal/status', () => {
   // Locks: disposing twice throws nothing and state stays DISPOSED, but **the second call returns
   //        undefined instead of a promise** (the effect wrapper already undid it, so
   //        `if (!runner.epoch) return` short-circuits)
-  // Needed by: the unload path of K2.3 and the manual retry of K2.4 may trigger an unload twice —
+  // Needed by: the unload path of K2.2 and the manual retry of K2.3 may trigger an unload twice —
   //        awaiting again is safe, but never call .then() on the return value; upstream's
   //        `dispose: () => Promise<void>` declaration does not match runtime here
   it('disposing twice throws nothing and the second call returns undefined', async () => {

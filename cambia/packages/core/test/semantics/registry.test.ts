@@ -33,7 +33,7 @@ describe('registry: the enumeration surface the unmet-cause diagnostics need', (
   //        unloading only one leaves the runtime in place; once both are unloaded the runtime
   //        disappears from the registry
   // Needed by: the diagnostics of implementation.md 3.2(d) must look per fiber rather than per plugin
-  //        (a plugin can have several instances); the "no residue after unload" of K2.3 is that
+  //        (a plugin can have several instances); the "no residue after unload" of K2.2 is that
   //        last step
   it('loading the same plugin twice gives two fibers over one runtime; unloading both removes it', async () => {
     const ctx = new Context()
@@ -57,7 +57,7 @@ describe('registry: the enumeration surface the unmet-cause diagnostics need', (
 
   // Locks: when a plugin loads another plugin inside itself, the two get independent runtimes and
   //        uids keep incrementing
-  // Needed by: the load path of K2.3 may have a plugin calling `ctx.plugin()` on its own (a plugin
+  // Needed by: the load path of K2.2 may have a plugin calling `ctx.plugin()` on its own (a plugin
   //        loading a sub-capability, say); diagnostics output must be able to locate them separately
   it('a plugin loading another plugin keeps runtimes and uids independent', async () => {
     const ctx = new Context()

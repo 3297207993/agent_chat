@@ -7,7 +7,7 @@ describe('effect: reversible registration', () => {
   //        (DisposableList.clear() returns the reversed list)
   // Needed by: "every registration is reversible" (kernel.md 1.3) is the root of "disable = back to
   //        never installed"; reversing it wrongly leaves a half-torn-down state where a dependency
-  //        is removed before whatever depends on it, and the unload path of K2.3 rests on this
+  //        is removed before whatever depends on it, and the unload path of K2.2 rests on this
   it('runs in registration order and undoes in reverse order on unload', async () => {
     const ctx = new Context()
     const order: string[] = []
@@ -81,7 +81,7 @@ describe('effect: reversible registration', () => {
 
   // Locks: registering on an already unloaded fiber context throws an Error with
   //        code=INACTIVE_EFFECT (effect / on / provide behave identically)
-  // Needed by: the deny-list and "manual retry" entry point of K2.4 must rest on "nothing new can be
+  // Needed by: the deny-list and "manual retry" entry point of K2.3 must rest on "nothing new can be
   //        registered after unload", otherwise a half-installed state appears between unload and
   //        reinstall
   it('registering on an unloaded context throws INACTIVE_EFFECT', async () => {
@@ -102,7 +102,7 @@ describe('effect: reversible registration', () => {
 
   // Locks: listeners are effects too — once a plugin unloads, its listeners are recycled and the
   //        event no longer reaches them
-  // Needed by: the acceptance item of K2.3 is exactly "the listener count drops to zero", which is
+  // Needed by: the acceptance item of K2.2 is exactly "the listener count drops to zero", which is
   //        how a host concludes that a plugin really unloaded cleanly
   it('a plugin listener is no longer reached after the plugin unloads', async () => {
     const ctx = new Context()

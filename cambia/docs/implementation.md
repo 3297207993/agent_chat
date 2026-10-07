@@ -134,7 +134,7 @@
 
 ① **状态没变化就不发事件**——一个从一开始就等不到依赖的 fiber 全程不发 `internal/status`，所以"没收到事件"不等于"没问题"。
 ② 失败路径**不保证**是 `1 → 3`：实测 `apply` 抛错时走的是 **`1 → 5 → 3`**（先 UNLOADING 再 FAILED），判定失败只看是否落到 `FAILED`，不要把转移序列写死。
-③ **卸载一个卡在 `LOADING` 的插件时，`dispose()` 永不 settle**（uid 已置空、state 停在 1、也不发任何事件）——所以 K2.4 的禁用名单不能等 `dispose()` 完成再记，否则会被"`apply` 里死等"的插件一起拖死。
+③ **卸载一个卡在 `LOADING` 的插件时，`dispose()` 永不 settle**（uid 已置空、state 停在 1、也不发任何事件）——所以 K2.3 的禁用名单不能等 `dispose()` 完成再记，否则会被"`apply` 里死等"的插件一起拖死。
 ④ **卸载一个从未激活的插件一个事件都不发，且 state 停在 `PENDING`（0）而不是 `DISPOSED`（4）**——"这个插件还在吗"只能看 `uid`（`null` = 已卸载），不能看 state。
 ⑤ 重复 `dispose()` 返回的是 `undefined` 而不是 promise（上游类型声明写的是 `() => Promise<void>`）：可以重复 `await`，但别对返回值调 `.then()`。
 ⑥ `assertActive()` 的实际判据是 `uid !== null`，所以 "cannot create effect on inactive context"（`code: INACTIVE_EFFECT`）的真实含义是"**这个 fiber 已经卸载**"，与 state 是否为 `ACTIVE` 无关——`ctx.effect` / `ctx.on` / `ctx.provide` 三者一致。
@@ -187,7 +187,7 @@
 - **CSP 必须写 host-source 形式**（kernel 6.1 的实现细节）：Windows 上 `asset:` 的 URL scheme 实际是 `http`，只写 scheme-source `asset:` 不会匹配。`script-src` 需同时含 `'self'` 与 `http://asset.localhost`（macOS/Linux 再加 `asset:`）；自定义 scheme 同理。Tauri 只会为自己捆绑的资源自动追加 nonce/hash，**插件来源要显式放行**。
 - **"装载成功"不能用 `await ctx.plugin()` 判定**（事实 10，实跑确认）：它只等装载动作，**0ms 就 resolve**，此时 `state=0`、插件尚未激活（依赖到位后 120ms 才真正 `0→1→2`）。判定标准只能是**显式等 `state === ACTIVE`（订阅 `internal/status`）或 `FAILED`**，并叠加 3.2(g) 的超时——否则"装载成功"报告的是"已发起"，不是"已生效"。
 - 装载错误分几类：协议层失败（403/404）、CORS 或 MIME 不满足、语法错误、缺 `apply`、`inject` 未知服务键、超时——每类对应 spec 错误码，且必须能在 UI 里定位到插件 id 与文件路径（"未激活"的原因诊断见 3.2(d)）。
-- **K2 的第一件事是可行性验证，不是写代码**：从 `asset:` / 自定义 scheme 动态 `import()` 这一点，官方文档与 issue 都没有覆盖（这是核查中唯一找不到权威依据的结论），必须先在 WebView2 上证明，再验 WKWebView 与 WebKitGTK。
+- **可行性验证的性质是"先证明再写代码"，但它的位置已挪到 K2 的末尾（K2.4 之后、G2 之前）**：从 `asset:` / 自定义 scheme 动态 `import()` 这一点，官方文档与 issue 都没有覆盖（这是核查中唯一找不到权威依据的结论），必须先在 WebView2 上证明，再验 WKWebView 与 WebKitGTK。它挡住的只是**装载通道**：manifest 校验、装载判定与卸载语义、未激活诊断、插槽运行时都不依赖通道（装载入口用假 bridge 注入模块 URL 即可测），所以主体先做、把真实 WebView 与 Tauri 试验工程推后。代价写明：通道未验期间**测试全绿不等于真机能装**——这条挂在 3.8 条目 2 上。
 
 #### (f) 视图插槽运行时
 
@@ -336,7 +336,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | # | 风险 | 影响 | 缓解 / 回落 | 状态 |
 |---|---|---|---|---|
 | 1 | 上游长期停在 rc（`latest` 就是 4.0.0-rc.10） | 语义范围由未稳定上游决定 | vendor 源码（从 git 取）+ 上游行为锁定测试 | 已识别，触发条件见 3.1 |
-| 2 | 从 `asset:` / 自定义 scheme 动态 `import()`，**没有任何官方文档或 issue 覆盖** | 整个 K2 的装载路径 | 设计已锁定主路径 `asset:`（CORS + JS MIME 由 Tauri 负责）；**K2 第一件事是在 WebView2 上做可行性验证**，再验 WKWebView / WebKitGTK；失败才回落自定义 scheme → Blob | **待验证**（设计已定，实现待证） |
+| 2 | 从 `asset:` / 自定义 scheme 动态 `import()`，**没有任何官方文档或 issue 覆盖** | 整个 K2 的装载路径 | 设计已锁定主路径 `asset:`（CORS + JS MIME 由 Tauri 负责）；**可行性验证排在 K2.4 之后、G2 之前**（主体不依赖通道），最小版先在 WebView2 上点火，再验 WKWebView / WebKitGTK；失败才回落自定义 scheme → Blob | **待验证**（设计已定，实现待证） |
 | 3 | 宿主启用严格 CSP 后的装载 | 需要精确的 CSP 模板 | 已锁定写法：`script-src` 必须含 host-source `http://asset.localhost`（Windows 上 scheme 实为 `http`，只写 `asset:` 不匹配），macOS/Linux 再加 `asset:`；Tauri 不会为插件来源追加 nonce/hash（kernel 6.1） | **已定案** |
 | 4 | ES module 图不可卸载 | 反复重装累积内存 | hash-qualified specifier（功能正确）+ 量化基线（不承诺回收） | 已知成本 |
 | 5 | Windows 文件占用 | 更新失败 | 先停后端进程再替换 + journal 延迟替换 | 设计内 |
@@ -349,14 +349,14 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 12 | macOS 上不能靠 `tauri-driver` 做 E2E | CI 矩阵覆盖不到 macOS | 用 WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server） | **已定案** |
 | 13 | cordis 对"依赖等不到"没有任何信号（事实 10：无事件、无报错、`await ctx.plugin()` 立即 resolve） | 若把它当装载成功信号，会漏掉整类"静默不生效"的插件 | 装载判定改为显式等 `ACTIVE`（3.2(e)）+ 未激活原因诊断（3.2(d)）；两者都写进 K1 的上游行为锁定测试 | **已定案** |
 | 14 | 适配层要跟 tauri 大版本走（2 → 3） | 适配层返工；一旦它膨胀，返工就会蔓延进内核实现层 | 守住"删掉它内核仍成立"的薄度（四件事之外不放东西）+ 独立 workspace / CI 轨道；内核实现层不出现 Tauri 符号 | 设计内 |
-| 15 | 卸载路径的边界状态反直觉（实测，见 3.2 的 ③④）：卡在 `LOADING` 的插件 `dispose()` 永不 settle；从未激活的插件卸载后 state 停在 `PENDING` 而非 `DISPOSED` | K2.3 的"卸载即还原"与 K2.4 的禁用名单 / 手动重试会被卡住的插件拖住，或误判"插件还活着" | 禁用名单**先写后卸**、卸载不 await `dispose()`；"还在吗"一律看 `uid` 而不是 state；已由 K1 的上游行为锁定测试钉住 | **已识别** |
+| 15 | 卸载路径的边界状态反直觉（实测，见 3.2 的 ③④）：卡在 `LOADING` 的插件 `dispose()` 永不 settle；从未激活的插件卸载后 state 停在 `PENDING` 而非 `DISPOSED` | K2.2 的"卸载即还原"与 K2.3 的禁用名单 / 手动重试会被卡住的插件拖住，或误判"插件还活着" | 禁用名单**先写后卸**、卸载不 await `dispose()`；"还在吗"一律看 `uid` 而不是 state；已由 K1 的上游行为锁定测试钉住 | **已识别** |
 
 ### 3.9 里程碑映射
 
 | 阶段 | 引入的依赖与实现 | 备注 |
 |---|---|---|
 | **K1** 内核面 | cordis（显式固定版本）、`tsup`、`vitest`、eslint 规则集、`publint`/`attw` | 不引入任何 Node 侧的 cordis 生态包 |
-| **K2** 装载与宿主运行时 | 起始动作：**装载路径可行性验证**（WebView2 → WKWebView / WebKitGTK 证明 `import()` 从 `asset:` 可用）；随后 `zod`、`semver`、`node-semver`、`picomatch`、`jsonschema`、`zip`、`sha2`、`reqwest`、`tokio`、`process-wrap`、Tauri（仅宿主适配层）、`happy-dom`（测试） | 3.8 的条目在本阶段收尾：2 已定设计待证，3 / 8 / 11 / 12 已定案 |
+| **K2** 装载与宿主运行时 | 先做主体：`zod`、`semver`、`node-semver`、`picomatch`、`jsonschema`、`zip`、`sha2`、`reqwest`、`tokio`、`process-wrap`、Tauri（仅宿主适配层）、`happy-dom`（测试）；**装载路径可行性验证**（WebView2 → WKWebView / WebKitGTK 证明 `import()` 从 `asset:` 可用）排在 K2.4 之后、G2 之前 | 3.8 的条目在本阶段收尾：2 已定设计待证，3 / 8 / 11 / 12 已定案 |
 | **K3** 生态件 | `cac`、`@clack/prompts`、`giget`、Vite、`fflate`（回落）、`@changesets/cli` | spec v1 冻结 + 参考插件 |
 
 ---

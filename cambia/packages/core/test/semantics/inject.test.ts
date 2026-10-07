@@ -24,8 +24,8 @@ describe('inject: dependencies are the activation condition', () => {
   //        when a dependency never shows up the fiber stays at state=0, apply does not run,
   //        **not a single internal/status is emitted**, and `await ctx.plugin()` **resolves
   //        immediately** (`Fiber.await()` waits on inertia, not on activation)
-  // Needed by: "the load decision must explicitly wait for ACTIVE/FAILED" (K2.3), the unmet-cause
-  //        diagnostics (K2.4) and the activation timeout (K2.7) all rest on this; treating it as a
+  // Needed by: "the load decision must explicitly wait for ACTIVE/FAILED" (K2.2), the unmet-cause
+  //        diagnostics (K2.3) and the activation timeout (K2.3) all rest on this; treating it as a
   //        success signal misses an entire class of silently dead plugins
   it('stays silent when a dependency never appears, and does not block the await', async () => {
     const ctx = new Context()
@@ -52,7 +52,7 @@ describe('inject: dependencies are the activation condition', () => {
 
   // Locks (implementation.md fact 11): when the dependency shows up later, the waiting fiber
   //        activates on its own and emits internal/status (0→1→2) — no polling required
-  // Needed by: the "late activation" of K2.4 is observable; a host only has to subscribe to
+  // Needed by: the "late activation" of K2.3 is observable; a host only has to subscribe to
   //        internal/status, no periodic scan
   it('activates on its own and emits internal/status when the dependency arrives later', async () => {
     const ctx = new Context()
@@ -77,7 +77,7 @@ describe('inject: dependencies are the activation condition', () => {
 
   // Locks: fiber.inject is literal data on the module export and can be enumerated directly; fibers
   //        are also enumerable through the registry
-  // Needed by: the unmet-cause diagnostics of K2.4 depend on it — a host does **not** need to keep a
+  // Needed by: the unmet-cause diagnostics of K2.3 depend on it — a host does **not** need to keep a
   //        dependency table of its own, it just reads runtime facts
   it('the inject declaration can be read straight off the fiber', async () => {
     const ctx = new Context()
@@ -94,7 +94,7 @@ describe('inject: dependencies are the activation condition', () => {
 
   // Locks: the dynamic form ctx.inject(deps, cb) has the same semantics as the plugin declaration —
   //        state=0 and no callback while dependencies are unmet, self-activation once they arrive
-  // Needed by: the diagnostics of K2.4 must cover "dependencies introduced by a dynamic
+  // Needed by: the diagnostics of K2.3 must cover "dependencies introduced by a dynamic
   //        ctx.inject() inside apply" as well, which a static graph cannot see
   it('dynamic ctx.inject has the same semantics as a plugin declaration', async () => {
     const ctx = new Context()

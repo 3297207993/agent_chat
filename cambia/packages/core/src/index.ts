@@ -84,7 +84,7 @@ export type {
   Disposable,
   /** Everything `ctx.effect()` may return: an undo function, iterables of those, or promises of either */
   Effect,
-  /** Entries of `fiber.getEffects()`: label plus children, used by K2.4 diagnostics */
+  /** Entries of `fiber.getEffects()`: label plus children, used by K2.3 diagnostics */
   EffectMeta,
   /** Plugin shape (`name` / `inject` / `apply`) */
   Plugin,
