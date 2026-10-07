@@ -25,14 +25,15 @@
 
 文件名就是模块名，不带 scope 前缀；**一个模块一个文件，模块之间不合并**（`core` 与 `host` 不许写成同一份）：
 
-| 模块 | 文档 |
-|---|---|
-| `packages/core` | `core.md` |
-| `packages/host` | `host.md` |
-| `packages/kit` | `kit.md` |
-| `crates/plugin-host` | `plugin-host.md` |
-| `crates/tauri-plugin-cambia` | `tauri-plugin-cambia.md` |
-| `spec/` | `spec.md` |
+| 模块 | 文档 | 现在有没有 |
+|---|---|---|
+| `packages/core` | [core.md](./core.md) | 有（实现后补写） |
+| `packages/eslint-config` | [eslint-config.md](./eslint-config.md) | 有（实现后补写） |
+| `packages/host` | `host.md` | 没有——动手前建 |
+| `packages/kit` | `kit.md` | 没有——动手前建 |
+| `crates/plugin-host` | `plugin-host.md` | 没有——动手前建 |
+| `crates/tauri-plugin-cambia` | `tauri-plugin-cambia.md` | 没有——动手前建 |
+| `spec/` | `spec.md` | 没有——动手前建 |
 
 ## 必备内容
 
