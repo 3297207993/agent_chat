@@ -1,14 +1,14 @@
 # `@cambia/host` 设计
 
-> 状态：**草稿**（未评审）
-> 对应批次：K2.1–K2.5（[../plan.md](../plan.md) 4 节）。开工顺序即编号顺序 **K2.1 → K2.2 → K2.3 → K2.4 → K2.5**：主体四批先做，装载路径可行性验证（K2.5）排在最后、G2 之前。本文把 K2.5 那批写全，其余批次只写已定案的边界与约束，接口在各自批次的实现之前补写。
+> 状态：**草稿**（K2.1 已实现、自测通过；文档本身未评审）
+> 对应批次：K2.1–K2.5（[../plan.md](../plan.md) 4 节）。开工顺序即编号顺序 **K2.1 → K2.2 → K2.3 → K2.4 → K2.5**：主体四批先做，装载路径可行性验证（K2.5）排在最后、G2 之前。本文把 K2.1（契约层）与 K2.5（装载层）两批写全，其余批次只写已定案的边界与约束，接口在各自批次的实现之前补写。
 > 只写这一个模块。语义以 [../kernel.md](../kernel.md) 1.6 / 1.9 / 3 章 / 6 章为准，选型以 [../implementation.md](../implementation.md) 3.2 为准，本文不重新定义它们。
 
 ## 本模块在 K2 里分几批
 
 | 批次 | 落在本模块的部分 | 本文现在写到哪 |
 |---|---|---|
-| **K2.1** manifest 与校验 | zod schema、`engines` 判定、激活事件匹配、错误码表初稿 | 只写边界；码值定稿在 `spec/` |
+| **K2.1** manifest 与校验 | zod schema、`engines` 判定、激活事件匹配、错误码表初稿 | **写全**（接口 / 数据流 / 失败路径 / 验收）；码值落在 `spec/`（[spec.md](./spec.md)） |
 | K2.2 装载最小闭环 | 装载判定（显式等 `ACTIVE` / `FAILED`）、卸载路径、不依赖 Tauri 的宿主 fixture | 只写边界 |
 | K2.3 原因诊断与失败保护 | 未激活原因的聚合诊断、激活超时、失败禁用名单 | 只写边界 |
 | K2.4 视图插槽运行时 | 插槽位置解析、渲染器服务键查找、无 UI 宿主的 no-op、iframe 容器 | 只写边界 |
@@ -39,6 +39,55 @@
 
 ## 接口
 
+### 契约层（K2.1 交付）
+
+manifest 的类型与校验在本模块，**唯一来源是 zod**（[../implementation.md](../implementation.md) 3.2(a)）：`spec/v1/manifest.schema.json` 是它的生成物，Rust 侧安装期校验读同一份 JSON Schema。
+
+| 导出 | 形状 | 说明 |
+|---|---|---|
+| `MANIFEST_FILENAME` | `'cambia.json'` | [../kernel.md](../kernel.md) 7 章的 manifest 文件名 |
+| `DEFAULT_ENTRY` | `'frontend/main.js'` | `parts.frontend.main` 的默认值（[../kernel.md](../kernel.md) 3 章）；装载层（K2.5）从这里再导出 |
+| `manifestSchema` | zod schema | 结构契约 = kernel 3 的字段全集。**所有约束都必须是 JSON Schema 可表达的**（正则 / `propertyNames` / `additionalProperties`），否则 Rust 侧看不见它 |
+| `validateManifest(input)` | `ManifestValidation` | 结构 + 语义两段判定，**一次收齐全部问题**（不是抛第一个）。结构没过时**不跑语义段**：字段值本身不可信 |
+| `parseManifest(input)` | `Manifest` | 同一套判定，失败时抛 `PluginError`（`issues` 挂在错误上）——给"装不上就报错"的调用方 |
+| `manifestJsonSchema()` | `object` | `z.toJSONSchema(manifestSchema, { io: 'input' })` 的结果 |
+| `serializeManifestJsonSchema()` | `string` | **产物的确切字节**：生成脚本与漂移检查共用这一份定义，否则"重新生成"修不好文件 |
+| `PluginError` / `PluginErrorCode` / `ERROR_CODES` | 见"失败路径" | 码值的唯一来源是 `spec/v1/error-codes.json`（[spec.md](./spec.md)），本模块只是一张常量映射 |
+| `checkEngines(manifest, runtime)` | `EnginesVerdict` | `engines` 相交判定（`semver@7`） |
+| `createActivationMatcher(events)` | `(event: string) => boolean` | 激活事件匹配器；一次编译，纯函数 |
+| `parseActivationEvent(entry)` | `'always' \| { prefix, pattern } \| null` | 单条目形态解析，供诊断与测试复用 |
+
+三条契约决定：
+
+1. **顶层键宽松、`parts` 严格**。顶层用 `looseObject`：多出来的键**原样保留**——这是版本化的前提，新 manifest 装进旧宿主不该因为多了一个字段就失败。`parts` 用 `strictObject`：未知部分意味着"宿主缺这个能力"，必须报 `MANIFEST_UNKNOWN_PART`（kernel 3 只定义了 frontend / backend / view 三个部分）。
+2. **路径规则写进 schema 而不是"语义阶段"**：只允许相对路径、`/` 分隔、无 `.` / `..` 段、无空段，字符集限于 ASCII 的 `[A-Za-z0-9._-]`（这些名字出自 ZIP，还要跨平台比对）。理由是 `..` 越界必须在**安装期**就被拒（[../kernel.md](../kernel.md) 3.3），而 Rust 侧只做 schema 级校验（[../implementation.md](../implementation.md) 3.2(a)）——放进语义阶段就等于 Rust 侧看不到。
+3. **`contributes` 是不透明的**：内容是宿主词汇（[../kernel.md](../kernel.md) 1.9），本模块只保证它是个对象，不解释里面有什么。宿主自己的 contributes 校验归 K2.4。
+
+#### `engines` 判定
+
+- `engines.cambia` = 内核版本范围；`engines.host` = `<宿主 id>@<范围>`（kernel 3 的双约束）。
+- 形态与"范围是否合法"由 zod + `semver.validRange()` 判；**相交判定**是 `checkEngines(manifest, { cambia, host })`（宿主传入自己与内核的当前版本）。
+- 判定只回答"相交 / 不相交 + 原因"（哪一条约束不满足），**不决定"不相交时是否仍允许安装"**——那是宿主策略（implementation.md 3.2(b)）。宿主 id 不匹配也算不相交，原因单独列出。
+- **按 semver 的默认语义判**：范围里没有显式写预发布标签时，预发布版本不算相交（`^0.1` 不收 `0.1.0-rc.1`）。要不要放宽是将来单独的事，不是现在顺手做的事。
+- `checkEngines` 是**全函数**：非法范围 / 非法 `engines.host` 一律回"不相交 + 原因"，不抛——安装编排会先校验再判定，但这个 API 不该赌调用顺序（`semver.satisfies()` 对非法范围会抛，实测）。
+
+#### 激活事件匹配
+
+- 条目形态只有两种：`always`，或 `<前缀>:<模式>`。**前缀词汇由宿主定义**，本模块不认识任何具体前缀（kernel 1.9）——匹配器只做"前缀相等 + 值相等或 glob"。
+- 前缀型精确匹配自研；模式里出现 `*` / `?` / `[` / `{` 时才交给 `picomatch@4`（implementation.md 3.2(c)）。**只有这四种字符会触发 glob**：其余一律按字面比较，包括以 `!` 开头的模式（picomatch 本来把它当取反，这里故意不当——一个字面量不该因为首字符而变义）。
+- 匹配器不订阅任何东西、不产生副作用：**何时问它由宿主决定**（宿主收到自己的事件后问"哪些插件该激活"）。
+- 条目形态不合规时匹配器**跳过该条目**而不是抛错：拒绝它们的是 manifest 校验，匹配器在装载路径上，不能成为新的崩溃点。
+
+#### 落地结论（2026-10-07）
+
+实现落在 `packages/host/src/{errors,manifest,engines,activation}.ts`，测试在 `packages/host/test/`（5 个文件、107 条）。以下都是**实测**，不是推测：
+
+- **zod 4.6.5 的 `z.toJSONSchema()` 覆盖我们需要的全部形状**：`.regex()` → `pattern`、`z.record(键 schema, 值)` → `propertyNames.pattern`、`z.union` → `anyOf`、`strictObject` → `additionalProperties: false`、`default` / `describe` 各自落地。所以"路径越界"与"平台键"这两条规则 Rust 侧免费拿到，不需要第二份判定实现。
+- **`refine` 会被静默丢掉**（不抛错，生成的 schema 里那条约束直接消失）——这正是"所有约束必须是 JSON Schema 可表达的"由纪律而非工具来守的原因：`spec` 的产物测试只能发现生成物被手改，发现不了"这条约束从来没进过 schema"。
+- **`semver.validRange('')` 返回 `'*'`**：空范围在 semver 眼里等于"任何版本"，所以本模块显式拒绝空串——"没写约束"不是 manifest 允许表达的意思。
+- **判定用的 zod issue 形态**（错误码映射按此写）：缺键 = `invalid_type` 且该位置取值为 `undefined`；未知 parts = `unrecognized_keys`（带 `keys`）；非法平台键 = `invalid_key`；正则不符 = `invalid_format` + `format: 'regex'`。
+- **两处默认值**：`parts.frontend.main` 缺省 = `frontend/main.js`（kernel 3 的默认）；`activationEvents` 缺省 = `['always']`——不让"没声明激活条件"静默变成"永远不激活"。后者 spec 没写明，记在 [spec.md](./spec.md) 的未决项里，K3.1 复核。
+
 ### 与宿主运行时的接缝：`PluginHostBridge`
 
 ```ts
@@ -56,7 +105,7 @@ export interface PluginHostBridge {
 | 导出 | 形状 | 说明 |
 |---|---|---|
 | `PluginRef` | `{ id, version, hash }` | 一次装载的目标。同一 id 的两个版本 = 两个 ref = 两个模块实例 |
-| `DEFAULT_ENTRY` | `'frontend/main.js'` | [../kernel.md](../kernel.md) 3 章 `parts.frontend.main` 的默认值 |
+| `DEFAULT_ENTRY` | `'frontend/main.js'` | 定义在契约层，这里只是再导出 |
 | `pluginModulePath(ref, entry?)` | `string` | `<id>/<version>-<hash>/<entry>`，插件根目录下的相对路径 |
 | `PluginModule` | `{ apply?: unknown; [k: string]: unknown }` | 模块的**形状**由 cordis 的插件签名决定，装载层不解释它 |
 | `loadPluginModule(url, options?)` | `Promise<PluginModule>` | `import()` + 校验导出（默认要求 `apply`）。**这不是"装载成功"** |
@@ -84,6 +133,15 @@ export interface PluginHostBridge {
 
 ## 数据流与状态
 
+**K2.1 的契约层数据流**（纯函数、无状态）：
+
+```
+cambia.json 文本 → JSON.parse（不是对象 = MANIFEST_PARSE_FAILED）
+    → 结构校验（zod）+ 语义校验，一次收齐全部 issues → Manifest
+    → checkEngines(manifest, { cambia, host })——独立的第二步判定
+    → createActivationMatcher(manifest.activationEvents)——宿主在事件发生时调用
+```
+
 **K2.5 的装载数据流**：
 
 ```
@@ -94,6 +152,8 @@ PluginRef{id,version,hash} → pluginModulePath() → 相对路径
 ```
 
 失败时同一路径反向产出 `PluginLoadError`（码 + URL + 探测结果）。整条路径上没有 Tauri、没有磁盘布局假设。
+
+装载层不持有任何"插件状态副本"，三处状态各有唯一来源：
 
 **本模块不持有插件状态副本**，三处"状态"各有唯一来源：
 
@@ -112,6 +172,15 @@ PluginRef{id,version,hash} → pluginModulePath() → 相对路径
 
 | 失败 | 表现 | 本模块的行为 | 谁在看着 |
 |---|---|---|---|
+| manifest 缺失 / 不是 JSON 对象 | 读不到或读到别的东西 | `MANIFEST_PARSE_FAILED` | 校验单测 |
+| 字段类型或形态不对（`id`、`version`、`name`…） | zod 结构失败 | `MANIFEST_FIELD_INVALID`，`path` 指向具体字段 | 同上 |
+| 缺 `engines`（或缺 `engines.cambia`） | 无法判定兼容性 | `MANIFEST_MISSING_ENGINES` | 同上（K2.1 验收项之一） |
+| `parts` 里有未知部分 | 宿主缺这个能力 | `MANIFEST_UNKNOWN_PART` | 同上（K2.1 验收项之一） |
+| 路径越界（绝对路径 / `..` / 反斜杠 / 空段） | 可能读到包外文件 | `MANIFEST_PATH_ESCAPE` | 同上（K2.1 验收项之一） |
+| `backend.bin` 平台键不在词汇里 | 宿主猜不到该起哪个 | `MANIFEST_PLATFORM_KEY_INVALID` | 同上（K2.1 验收项之一） |
+| `backend` 存在但缺 `bin` / `protocol` | 无法启动后端 | `MANIFEST_BACKEND_INCOMPLETE` | 同上 |
+| `activationEvents` 条目形态不对 | 永远等不到激活 | `MANIFEST_ACTIVATION_EVENT_INVALID` | 同上 |
+| `engines` 与运行版本不相交 | 装上了也跑不起来 | `ENGINE_INCOMPATIBLE`（带原因：内核范围 / 宿主 id / 宿主版本） | `checkEngines` 单测 |
 | 插件目录没放行 / 文件不在 / CORS 被拒 | `import()` 抛错，探测拿到 403 / 404 / 无 CORS 头 | 分类为"取不到"，错误里带 URL + 探测结果 | 装载层单测（假 bridge）+ 真 WebView 脚本 |
 | 响应不是 JS | UA 报 MIME，或探测到的 `Content-Type` 不是 JS | 分类为 MIME 不符 | 同上 |
 | 语法错误 / 模块顶层抛错 | `import()` 抛错 | 分类为语法 / 求值期，保留原始 message 与 `cause` | 同上 |
@@ -127,6 +196,9 @@ PluginRef{id,version,hash} → pluginModulePath() → 相对路径
 
 | 手段 | 覆盖 | 对应验收 |
 |---|---|---|
+| **manifest 校验单测**（vitest） | 合法 manifest 一次通过；四类非法 manifest（路径越界 / 未知 parts / 缺 engines / 平台键不合法）各命中**对应**错误码；一次调用收齐多个问题 | K2.1 |
+| **examples 全量校验** | `examples/**/cambia.json` 全部通过 `validateManifest` | K2.1（[../plan.md](../plan.md) 4 节） |
+| **生成物漂移检查** | `spec/v1/manifest.schema.json` 与 `manifestJsonSchema()` 逐字节一致；`ERROR_CODES` 的键集合与 `spec/v1/error-codes.json` 双向一致 | K2.1（"schema 生成物与代码一致"） |
 | **真 WebView 的可行性验证脚本** | 放行插件目录后动态 `import()` 装载 ESM、同一插件的两个版本各自拿到实例、`Content-Type`、三种 CSP 变体下的行为、失败分类 | **K2.5**：Windows/WebView2 上装载成功 + 能重复装载同一插件的两个不同版本（[../plan.md](../plan.md) 4 节） |
 | 装载层单测（假 bridge + 假模块，不需要 Tauri） | specifier 形状、失败分类的判定顺序、`requireApply` 两种行为 | K2.5（本模块自身） |
 | 不依赖 Tauri 的宿主 fixture（vitest + happy-dom） | 装载 → 注册 → 卸载 → **监听器数量归零、占用的服务键消失**；装载判定不依赖 `await ctx.plugin()` 的回归用例 | K2.2（[../kernel.md](../kernel.md) 6.2） |
@@ -140,6 +212,11 @@ K2.5 的完成定义不含"写多少代码"，只含"证明主路径成立并留
 
 | 未决项 | 现在怎么办 |
 |---|---|
+| `spec/v1/manifest.schema.json` 的 `$id` 归属（域名 / registry 未定） | 生成物现在只带 `$schema`，不带 `$id`；等"公开发布还是私有 registry"定案（[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）再补 |
+| 平台键要不要覆盖 `android` / `ios` | 现在只认 `win` / `mac` / `linux` + `*`（适配层把移动端标为不支持）；要支持移动端时再扩词汇，属 spec 变更 |
+| `contributes` 的宿主级 schema | 本模块只保证它是对象；宿主自己的校验随 K2.4 的插槽运行时定 |
+| 内核 CI 轨道还没建（[../plan.md](../plan.md) 2 节的欠账） | K2.1 要的"生成物由 CI 验证"暂时由 vitest 用例承担——`pnpm check` 就是将来那条 CI 轨道要跑的命令 |
+| `@cambia/host` 现在是 `private: true`（模块还没做完，不进 changesets 的发布组） | 等它成为可发布包的那一批，把它加入 `.changeset/config.json` 的 fixed 组并与 `@cambia/core` 版本对齐（同 `@cambia/eslint-config` 的处理方式） |
 | macOS/WKWebView 与 Linux/WebKitGTK 上的装载未验 | 同一脚本换宿主平台再跑，结论补进事实 13–15；失败才评估回落到自定义 scheme（本批重做） |
 | 错误码表的码值与最终措辞 | K2.1 由 `spec/` 定稿，本模块只是消费方；本文的码是草案，不是承诺 |
 | `asset:` 的 scope 是**全局**的：放行插件根目录后，应用内任何 webview 都能读该目录 | 不承诺隔离（[../implementation.md](../implementation.md) 风险 10）；将来要收窄才切自定义 scheme + 请求级路径校验 |
