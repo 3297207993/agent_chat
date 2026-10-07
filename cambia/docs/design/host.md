@@ -52,7 +52,7 @@ manifest 的类型与校验在本模块，**唯一来源是 zod**（[../implemen
 | `parseManifest(input)` | `Manifest` | 同一套判定，失败时抛 `PluginError`（`issues` 挂在错误上）——给"装不上就报错"的调用方 |
 | `manifestJsonSchema()` | `object` | `z.toJSONSchema(manifestSchema, { io: 'input' })` 的结果 |
 | `serializeManifestJsonSchema()` | `string` | **产物的确切字节**：生成脚本与漂移检查共用这一份定义，否则"重新生成"修不好文件 |
-| `PluginError` / `PluginErrorCode` / `ERROR_CODES` | 见"失败路径" | 码值的唯一来源是 `spec/v1/error-codes.json`（[spec.md](./spec.md)），本模块只是一张常量映射 |
+| `PluginError` / `PluginErrorCode` / `ERROR_CODES` | 见"失败路径" | 码值的唯一来源是 `spec/v1/error-codes.json`（[spec.md](./spec.md)），本模块只是一张常量映射；码表当前覆盖校验与装载，**不含安装语义**（`INSTALL_*` 一类随 K2.6 的命令集合补） |
 | `checkEngines(manifest, runtime)` | `EnginesVerdict` | `engines` 相交判定（`semver@7`） |
 | `createActivationMatcher(events)` | `(event: string) => boolean` | 激活事件匹配器；一次编译，纯函数 |
 | `parseActivationEvent(entry)` | `'always' \| { prefix, pattern } \| null` | 单条目形态解析，供诊断与测试复用 |
@@ -212,6 +212,7 @@ K2.5 的完成定义不含"写多少代码"，只含"证明主路径成立并留
 
 | 未决项 | 现在怎么办 |
 |---|---|
+| 命令集合（`install` / `uninstall` / `list` / `enable`）与 `INSTALL_*` 一类错误码 | 都不在本批：命令集合归适配层（K2.6），码表的安装语义随之补——**命令要报的错必须先有码**（[../plan.md](../plan.md) 第 1 节） |
 | `spec/v1/manifest.schema.json` 的 `$id` 归属（域名 / registry 未定） | 生成物现在只带 `$schema`，不带 `$id`；等"公开发布还是私有 registry"定案（[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）再补 |
 | 平台键要不要覆盖 `android` / `ios` | 现在只认 `win` / `mac` / `linux` + `*`（适配层把移动端标为不支持）；要支持移动端时再扩词汇，属 spec 变更 |
 | `contributes` 的宿主级 schema | 本模块只保证它是对象；宿主自己的校验随 K2.4 的插槽运行时定 |

@@ -18,6 +18,7 @@
 |---|---|
 | manifest 的类型与校验逻辑（zod 源） | `packages/host`（[host.md](./host.md)）；`spec/` 只放它的**生成物** |
 | 错误码在代码里的常量映射与抛出 | `@cambia/host`（JS）与 `crates/plugin-host`（Rust）；本目录只放**表本身** |
+| **命令集合**（适配层的 `install` / `uninstall` / `list` / `enable`） | 适配层 `crates/tauri-plugin-cambia`（K2.6 定稿）；它受本目录的码表约束——命令要报的错必须先有码 |
 | 控制面协议在两侧的客户端 / 服务端实现 | `crates/plugin-host` + K2.7 的代理 Service；本批不写协议 |
 | 语义（内核承诺什么） | [../kernel.md](../kernel.md)；`spec/` 只把它变成可校验的形式 |
 | manifest 里宿主解释的部分（`contributes`） | 宿主应用（kernel 1.9）；`spec/` 不定义它的内容 |
@@ -30,7 +31,7 @@
 | `v1/error-codes.json` | **手写**（内容不是从代码推出来的，是两侧共同的词汇表） | JS：`@cambia/host` 的 `ERROR_CODES`；Rust：随 K2.6 建的常量映射 | 两侧各自的测试断言"键集合双向一致"（JS 侧现在就有；Rust 侧随 `crates/plugin-host` 补） |
 | `README.md` | 手写 | 读 `spec/` 的人：产物从哪来、怎么改、怎么重新生成 | — |
 
-K2.1 只落上表三件。**不在本批**：控制面协议（K2.7 才写）、版本与废弃窗口规则（K3.1 定稿）。
+K2.1 只落上表三件。**不在本批**：**命令集合**（K2.6 随适配层定稿；本批的码表只给"命令能报什么错"打底，且**不含安装语义**——`INSTALL_*` 一类随 K2.6 的命令集合补）、控制面协议（K2.7 才写）、版本与废弃窗口规则（K3.1 定稿）。
 
 错误码表的形态：`{ "version": 1, "codes": { "<CODE>": { "stage": "...", "summary": "..." } } }`。`stage` 取值 `manifest` / `engines` / `load`，用来表明这条码归哪一批实现（装载类码值在本批随表定稿，**实现**归 K2.5）。表里的文案是英文（代码侧文本一律英文，[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）。
 
@@ -74,4 +75,5 @@ K2.1 只落上表三件。**不在本批**：控制面协议（K2.7 才写）、
 | `manifest.schema.json` 的 `$id`（域名 / registry 未定） | 生成物现在只带 `$schema`（draft 2020-12），不带 `$id`；等发布形态定案再补 |
 | 错误码表要不要对外开放（插件作者可见的稳定契约） | 现在只承诺"码值是稳定标识"，措辞与废弃窗口归 K3.1 |
 | 控制面协议（方法集、帧格式） | K2.7 写；本批不在表里预置协议码 |
+| 命令集合与 `INSTALL_*` 一类错误码 | 归 K2.6（适配层命令集合 + 码表的安装语义）；本批的码表只管校验与装载 |
 | Rust 侧的键集合检查 | 随 `crates/plugin-host`（K2.6）一起补，检查方式与 JS 侧对称 |

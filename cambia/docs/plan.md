@@ -41,7 +41,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 
 **适配层不在关键路径上**——检验标准是"把它整个删掉，内核照旧成立"。所以它不设门槛、也不阻塞任何批次；但它是 K2.5 那个宿主 fixture 的天然载体（接线只写一次，不要在 examples 里再写一遍）。
 
-**唯一需要刻意协调的冲突点**：JS 与 Rust 两侧共用的**错误码表与命令集合**。做法是：在 K2.1 一起定稿，之后各自推进，最后由"两侧一致性测试"守住（写在 K2.6 的验收里）。
+**唯一需要刻意协调的冲突点**：JS 与 Rust 两侧共用的**错误码表与命令集合**。两者的定稿时机不同：**码表在 K2.1 出初稿**（已落地，`spec/v1/error-codes.json`），**命令集合随 K2.6 的适配层定稿**（K2.6 那条交付物：`install` / `uninstall` / `list` / `enable` + `permissions/`），且**命令要报的错必须先出现在码表里**——加命令若需要新码，先改表再改两侧代码。之后各自推进，最后由"两侧一致性测试"守住（写在 K2.6 的验收里）。
 
 ---
 
@@ -102,7 +102,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 
 | 项 | 内容 |
 |---|---|
-| **交付物** | zod schema（kernel.md 3 的字段全集）+ 用 `z.toJSONSchema()` 生成 `spec/v1/manifest.schema.json` + CI 比对检查；`engines` 判定（JS 用 `semver` / Rust 用 `node-semver`）；**错误码表初稿**（JS 与 Rust 共用，决定两侧的命令集合）。**落地（2026-10-07）**：`packages/host` 建成（zod schema、`validateManifest` / `parseManifest` 的错误码映射、`engines` 判定、激活事件匹配器）；`spec/v1/manifest.schema.json` 是生成物（`pnpm --filter @cambia/host spec:generate`）、`spec/v1/error-codes.json` 是手写码表（14 个码；`manifest` / `engines` 两 stage 已实现，`load` 五个随表定稿、实现归 K2.5）；`examples/**/cambia.json` 全部通过校验；一致性由 `packages/host/test/spec.test.ts` 守（D0 欠账里的 `spec/` 随之补齐）。 |
+| **交付物** | zod schema（kernel.md 3 的字段全集）+ 用 `z.toJSONSchema()` 生成 `spec/v1/manifest.schema.json` + CI 比对检查；`engines` 判定（JS 用 `semver` / Rust 用 `node-semver`）；**错误码表初稿**（JS 与 Rust 共用，决定两侧的命令集合；**命令集合本身随 K2.6 定稿，不在本批**）。**落地（2026-10-07）**：`packages/host` 建成（zod schema、`validateManifest` / `parseManifest` 的错误码映射、`engines` 判定、激活事件匹配器）；`spec/v1/manifest.schema.json` 是生成物（`pnpm --filter @cambia/host spec:generate`）、`spec/v1/error-codes.json` 是手写码表（14 个码；`manifest` / `engines` 两 stage 已实现，`load` 五个随表定稿、实现归 K2.5）；`examples/**/cambia.json` 全部通过校验；一致性由 `packages/host/test/spec.test.ts` 守（D0 欠账里的 `spec/` 随之补齐）。 |
 | **依赖** | K1.2 |
 | **验收** | `examples/` 全部通过校验；非法 manifest（路径越界、未知 parts、缺 `engines`、平台键不合法）各有对应错误码；schema 生成物与代码一致（由 CI 验证） |
 
@@ -142,7 +142,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 
 | 项 | 内容 |
 |---|---|
-| **交付物** | crate：`.tap` 打包与解包（**唯一实现**、可复现的打包规范）、sha256 校验、下载到 staging、原子替换 + journal 恢复；host：安装 / 卸载 / 更新的编排，specifier 采用 `<version>-<hash>` 路径；**适配层：命令集合（install / uninstall / list / enable）+ `permissions/` 权限文件** |
+| **交付物** | crate：`.tap` 打包与解包（**唯一实现**、可复现的打包规范）、sha256 校验、下载到 staging、原子替换 + journal 恢复；host：安装 / 卸载 / 更新的编排，specifier 采用 `<version>-<hash>` 路径；**适配层：命令集合（install / uninstall / list / enable）+ `permissions/` 权限文件**（命令集合与码表在此对齐：命令要报的错必须先有码，见第 1 节） |
 | **依赖** | K2.2 + crate 的打包与下载批次 |
 | **验收** | 并发安装 / 更新 / 卸载都幂等；**注入故障后能按 journal 恢复**；Windows 文件占用场景有确定行为（先停后端再替换，失败则推迟到下次启动）；**JS 打的包能被 Rust 解开、Rust 打的包能被 JS 校验**（两侧一致） |
 
