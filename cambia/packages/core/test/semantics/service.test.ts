@@ -4,19 +4,23 @@ import { captureError, tick } from './helpers'
 
 type Loose = Record<string, unknown>
 
-describe('provide 与 ctx.set 的分工', () => {
-  // 锁：ctx.set 一个没 provide 过的名字会抛 `cannot set property "<name>" without provide`
-  // 依赖：kernel.md 6.2 / implementation.md 3.2(d) 的诊断面——宿主与 kit 的错误提示要能对上这条文案；
-  //       也说明"注册服务"必须走 provide（它是可逆的），不能靠 set 偷偷挂上去
-  it('ctx.set 一个没 provide 过的名字会抛错', () => {
+describe('provide versus ctx.set', () => {
+  // Locks: ctx.set on a name that was never provided throws
+  //        `cannot set property "<name>" without provide`
+  // Needed by: the diagnostics surface of kernel.md 6.2 / implementation.md 3.2(d) — host and kit
+  //        error hints must line up with this wording; it also means "registering a service" has to
+  //        go through provide (which is reversible) rather than being smuggled in with set
+  it('ctx.set on a name that was never provided throws', () => {
     const ctx = new Context()
     const error = captureError(() => ctx.set('nope', 1))
     expect(error.message).toBe('cannot set property "nope" without provide')
   })
 
-  // 锁：在插件里给 ctx 挂任意属性同样抛错；**但根上下文可以**（根没有 fiber runtime，走的是 Reflect.set 回落）
-  // 依赖：kernel.md 1.9 的边界——插件的对外能力必须走服务键；根上下文是宿主自己的地盘，不受这条约束
-  it('插件里挂任意属性会抛错，根上下文不受限制', async () => {
+  // Locks: hanging an arbitrary property off ctx inside a plugin throws the same way, **but the root
+  //        context is exempt** (a root has no fiber runtime and falls back to Reflect.set)
+  // Needed by: the boundary of kernel.md 1.9 — a plugin's outward capabilities must go through
+  //        service keys; the root context is the host's own turf and is not bound by that
+  it('attaching an arbitrary property inside a plugin throws, the root context is exempt', async () => {
     const root = new Context()
     ;(root as unknown as Loose).arbitrary = 1
     expect((root as unknown as Loose).arbitrary).toBe(1)
@@ -40,10 +44,11 @@ describe('provide 与 ctx.set 的分工', () => {
     ])
   })
 
-  // 锁：provide 之后，值由提供者自己 set；别的 fiber 去 set 会抛
-  //     `cannot set property "<name>" in multiple fibers`
-  // 依赖：kernel.md 1.5「插件间通信只走两条通道」——服务只有一个拥有者，别的插件要改只能通过它的公开方法
-  it('provide 之后由提供者自己改值，别的 fiber 不能替它改', async () => {
+  // Locks: after provide, only the provider may set the value; another fiber doing so throws
+  //        `cannot set property "<name>" in multiple fibers`
+  // Needed by: "plugins talk over exactly two channels" (kernel.md 1.5) — a service has a single
+  //        owner, and other plugins may only change it through its public methods
+  it('after provide only the provider may set the value, other fibers cannot', async () => {
     const ctx = new Context()
     let ownerValue: unknown
     let otherError: { message: string } | undefined
@@ -68,9 +73,11 @@ describe('provide 与 ctx.set 的分工', () => {
     expect(ctx.get('owned-service')).toBe('updated-by-owner')
   })
 
-  // 锁：同名服务第二次 provide 会抛 `service "<name>" has been registered at <先注册者的名字>`
-  // 依赖：K2.4 的归因输出——"谁占了我要的键"必须能指名道姓，这条文案里就带着占用者的名字
-  it('同名服务不能二次注册，错误里带着占用者的名字', async () => {
+  // Locks: providing the same service name a second time throws
+  //        `service "<name>" has been registered at <name of the first registrant>`
+  // Needed by: the attribution output of K2.4 — "who is occupying the key I want" must be nameable,
+  //        and this message already carries the occupant's name
+  it('a service name cannot be registered twice, and the error names the occupant', async () => {
     const ctx = new Context()
     let second: { message: string } | undefined
 
@@ -78,12 +85,14 @@ describe('provide 与 ctx.set 的分工', () => {
     await ctx.plugin({ name: 'two', apply(ctx) { second = captureError(() => ctx.provide('dup-service', 2)) } })
 
     expect(second?.message).toBe('service "dup-service" has been registered at <one>')
-    expect(ctx.get('dup-service')).toBe(1)      // 先注册的仍然生效
+    expect(ctx.get('dup-service')).toBe(1)      // the first registration is still the effective one
   })
 
-  // 锁：提供者卸载后，服务从注册表里消失（provide 本身是可逆注册）
-  // 依赖：kernel.md 1.3「禁用 = 即刻回到从未装过它」——K2.3 的验收项"占用的服务键消失"就是这条
-  it('提供者卸载后服务消失', async () => {
+  // Locks: once the provider unloads the service disappears from the registry (provide itself is a
+  //        reversible registration)
+  // Needed by: "disable = back to never installed" (kernel.md 1.3) — the K2.3 acceptance item "the
+  //        occupied service key disappears" is exactly this
+  it('the service disappears once its provider unloads', async () => {
     const ctx = new Context()
     const fiber = await ctx.plugin({
       name: 'temp-provider',
@@ -92,7 +101,7 @@ describe('provide 与 ctx.set 的分工', () => {
     expect(ctx.get('temp-service')).toBe('v')
 
     await fiber.dispose()
-    await tick()      // 撤销是异步的（effect 撤销链在微任务里推进）
+    await tick()      // undoing is asynchronous (the effect teardown chain advances in microtasks)
 
     expect(ctx.get('temp-service')).toBeUndefined()
   })

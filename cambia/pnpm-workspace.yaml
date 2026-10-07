@@ -1,10 +1,12 @@
-# 内核与生态件的 workspace 根。
-# 适配层（crates/tauri-plugin-cambia）不在这里：它自带 package.json 与 lockfile，
-# 是独立 workspace、独立 CI 轨道（implementation.md 3.3(g)）。
+# Workspace root of the kernel and the ecosystem packages.
+# The adapter layer (crates/tauri-plugin-cambia) is deliberately not listed here: it ships its own
+# package.json and lockfile, and lives in an independent workspace on its own CI track
+# (implementation.md 3.3(g)).
 packages:
   - packages/*
   - examples/*
 
-# pnpm 默认拦截依赖的构建脚本，esbuild 需要执行 postinstall 安装平台二进制
+# pnpm blocks dependency build scripts by default; esbuild needs its postinstall to install the
+# platform binary
 allowBuilds:
   esbuild: true

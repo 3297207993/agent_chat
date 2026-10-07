@@ -1,22 +1,23 @@
 /**
- * 示例插件（K1.2 的验收载体）：**只 import `@cambia/core`**，不出现 'cordis'。
+ * Example plugin (the acceptance vehicle of K1.2): it **imports `@cambia/core` and nothing else**.
  *
- * 两个插件覆盖 kernel.md 2 章的五个概念：服务仓库（`greeter` 服务键）、inject、
- * 类型化事件（`hello/greeted`）、effect（可逆注册）、插件（`apply`）。
- * 事件名与服务键都合并到 `@cambia/core`——这是 kernel.md 5.3.1 规则 2 要求的，
- * 换成 vendor 实现或升内核大版本时插件侧不动。
+ * The two plugins cover the five concepts of kernel.md chapter 2: the service registry (the
+ * `greeter` service key), inject, typed events (`hello/greeted`), effect (reversible
+ * registration) and plugin (`apply`). Both event names and service keys merge into
+ * `@cambia/core`, as kernel.md 5.3.1 rule 2 requires, so plugin code survives a vendor
+ * implementation or a kernel major upgrade untouched.
  */
 
 import type { Context, Plugin } from '@cambia/core'
 
 declare module '@cambia/core' {
   interface Services {
-    /** 服务键：谁在 `inject` 里声明它，就要等它到位才激活 */
+    /** Service key: whoever declares it in `inject` waits for it before activating */
     greeter: Greeter
   }
 
   interface Events {
-    /** 观察型事件（`emit`）：广播后不等监听者 */
+    /** Observation event (`emit`): broadcast without waiting for listeners */
     'hello/greeted'(payload: Greeted): void
   }
 }
@@ -31,24 +32,26 @@ export interface Greeter {
 }
 
 /**
- * 插件之间的观察点：测试用它断言"事件确实到达了""effect 确实撤销了"。
- * 真实插件不会把状态暴露成模块级变量——这里是为了让示例可断言。
+ * Observation point shared by the plugins: the tests use it to assert that events did arrive
+ * and that effects did get undone. A real plugin would not expose state as a module-level
+ * variable — this is here to make the example assertable.
  */
 export const transcript: string[] = []
 
-/** 提供 `greeter` 服务键，并注册两个 effect 与一个事件监听者。 */
+/** Provides the `greeter` service key and registers two effects plus one event listener. */
 export const helloProvider = {
   name: 'hello-provider',
   apply(ctx: Context) {
-    // 可逆注册：提供者卸载后这个服务键会从注册表消失（kernel.md 1.3）
+    // Reversible registration: once the provider unloads, this service key is gone from the
+    // registry (kernel.md 1.3)
     ctx.provide('greeter', { greet: (name) => `Hello, ${name}!` })
 
-    // 监听者也是可逆注册，随插件卸载自动回收
+    // Listeners are reversible registrations too, recycled when the plugin unloads
     ctx.on('hello/greeted', ({ greeting }) => {
       transcript.push(`provider-seen:${greeting}`)
     })
 
-    // 两个 effect 用来验证"按注册逆序撤销"
+    // Two effects, to verify that teardown runs in reverse registration order
     ctx.effect(() => {
       transcript.push('cache-open')
       return () => { transcript.push('cache-close') }
@@ -60,7 +63,7 @@ export const helloProvider = {
   },
 } satisfies Plugin
 
-/** 注入 `greeter`，用它打招呼并广播 `hello/greeted`。 */
+/** Injects `greeter`, greets through it and broadcasts `hello/greeted`. */
 export const helloConsumer = {
   name: 'hello-consumer',
   inject: ['greeter'],

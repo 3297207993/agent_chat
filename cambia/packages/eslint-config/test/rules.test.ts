@@ -1,12 +1,14 @@
 /**
- * 这套测试的作用不是"跑一遍 lint"，而是**证明规则真的会报错**：
- * 故意违规的 fixture 必须被拦下（而且要报在正确的规则上），真实的示例插件必须零告警。
+ * This suite does not merely "run lint once" — it **proves that the rules really report**:
+ * deliberate violations must be caught (and by the right rule), while the real example plugin
+ * must come out spotless.
  *
- * 没有这套断言，规则集就只是"写在文档里的承诺"——那正是 K1.3 要消灭的东西。
+ * Without these assertions the rule set would be a promise written in a document, which is exactly
+ * what K1.3 set out to eliminate.
  */
 
 import { fileURLToPath } from 'node:url'
-import { basename, join } from 'node:path'
+import { basename } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ESLint } from 'eslint'
 import { base, isolation, plugin } from '../index.js'
@@ -20,11 +22,12 @@ interface Report {
   message: string
 }
 
-/** 用给定的配置 lint 一批文件，返回拍平后的报错清单。 */
+/** Lint a set of files with the given config and flatten the reports. */
 async function lint(cwd: string, config: unknown[], patterns: string[]): Promise<Report[]> {
   const eslint = new ESLint({
     cwd,
-    // 用调用方给的配置，不去找配置文件：这样测的就是"发布出去的那份配置"
+    // Use the caller's config and never look for a config file: this exercises the very config
+    // that gets published
     overrideConfigFile: true,
     overrideConfig: config as never,
     ignore: false,
@@ -40,7 +43,7 @@ async function lint(cwd: string, config: unknown[], patterns: string[]): Promise
 const ruleIdsOf = (reports: Report[], file: string) =>
   reports.filter((report) => report.file === file).map((report) => report.ruleId)
 
-describe('上游隔离规则：故意违规必须被拦下', () => {
+describe('upstream isolation rules: deliberate violations must be caught', () => {
   const violations = [
     'imports-cordis.ts',
     'cordis-subpath.ts',
@@ -48,7 +51,7 @@ describe('上游隔离规则：故意违规必须被拦下', () => {
     'core-subpath.ts',
   ]
 
-  it('四条违规写法各报在对应的规则上', async () => {
+  it('reports each of the four violations on its own rule', async () => {
     const reports = await lint(fixturesDir, plugin, violations)
 
     expect(ruleIdsOf(reports, 'imports-cordis.ts')).toContain('no-restricted-imports')
@@ -56,18 +59,20 @@ describe('上游隔离规则：故意违规必须被拦下', () => {
     expect(ruleIdsOf(reports, 'core-subpath.ts')).toContain('no-restricted-imports')
     expect(ruleIdsOf(reports, 'declare-module-cordis.ts')).toContain('no-restricted-syntax')
 
-    // 报错信息要指回文档，否则作者只知道"被拦下了"，不知道该怎么写
+    // The message has to point back at the document, otherwise the author only learns "blocked",
+    // not how to write it correctly
     const declareReport = reports.find((report) => report.file === 'declare-module-cordis.ts')
     expect(declareReport?.message).toContain('kernel.md 5.3.1')
   })
 
-  it('合规写法零告警', async () => {
+  it('compliant code produces no report at all', async () => {
     const reports = await lint(fixturesDir, plugin, ['clean.ts'])
     expect(reports).toEqual([])
   })
 
-  it('只带隔离规则的配置也能拦住违规（组合到自定义配置时仍然生效）', async () => {
-    // isolation 是一组规则，不含语言配置：拼到自己的配置上时按 `[...base, ...isolation]` 组合
+  it('the isolation rules alone still catch violations when composed onto a custom config', async () => {
+    // isolation is a rule set without any language configuration: composed onto your own config it
+    // is used as `[...base, ...isolation]`
     const reports = await lint(fixturesDir, [...base, ...isolation], violations)
     const flagged = [...new Set(reports.map((report) => report.file))].sort()
     expect(flagged).toEqual([
@@ -81,8 +86,8 @@ describe('上游隔离规则：故意违规必须被拦下', () => {
   })
 })
 
-describe('真实的示例插件：必须零告警', () => {
-  it('examples/hello-plugin 在插件预设下干净', async () => {
+describe('the real example plugin: must be spotless', () => {
+  it('examples/hello-plugin is clean under the plugin preset', async () => {
     const reports = await lint(exampleDir, plugin, [
       'src/index.ts',
       'test/host.test.ts',

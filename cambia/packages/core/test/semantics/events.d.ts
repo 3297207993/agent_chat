@@ -1,18 +1,19 @@
-// 这套测试锁的是上游 Cordis 本身，所以直接对 'cordis' 做声明合并。
-// 插件与示例代码必须对 '@cambia/core' 做（kernel.md 5.3.1），这里的例外仅限 test/semantics。
+// This suite pins upstream Cordis itself, so it merges declarations into 'cordis' directly.
+// Plugins and example code must target '@cambia/core' instead (kernel.md 5.3.1); the exception
+// here is limited to test/semantics.
 declare module 'cordis' {
   interface Events {
-    /** 观察型：不等待监听者 */
+    /** Observation: does not wait for listeners */
     'lock/emit'(payload: string): void
-    /** 环绕中间件：监听者收到 (payload, next)，派发时最后一个参数是终止实现 */
+    /** Around-middleware: listeners receive (payload, next), and the last dispatch argument is the terminating implementation */
     'lock/waterfall'(payload: string, next: () => any): any
-    /** 顺序 await，返回第一个非 null/false/undefined 的值；不注入 next */
+    /** Sequential await; returns the first value that is not null/false/undefined; no `next` injected */
     'lock/serial'(payload: string): any
-    /** 第一个返回非 null/false/undefined 的监听者生效 */
+    /** The first listener returning something other than null/false/undefined wins */
     'lock/bail'(payload: string): any
-    /** 并发等待所有监听者 */
+    /** Waits for every listener concurrently */
     'lock/parallel'(payload: string): Promise<void>
-    /** 通用：用于观察顺序、参数个数、回收行为等 */
+    /** Generic probe: used to observe ordering, argument counts, recycling and the like */
     'lock/probe'(...args: any[]): any
   }
 }

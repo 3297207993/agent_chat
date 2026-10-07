@@ -6,6 +6,11 @@
 2. **cordis 显式固定版本、不跟 dist-tag**：`cordis@4.0.0-rc.10` 写死在 `packages/core/package.json`（不带 `^`）。升级必须跑通 `packages/core/test/semantics/` 的上游行为锁定测试，并把结论回写 implementation.md 的事实表。
 3. **内核实现层不出现 Tauri 符号**：`packages/*` 与 `crates/plugin-host` 不许 import Tauri。Tauri 接线只存在于 `crates/tauri-plugin-cambia`（独立 workspace、独立 CI 轨道，根 workspace 里已 `exclude`）。检验标准是**删掉整个适配层，内核测试仍然全绿**。
 
+## 语言约定
+
+- **代码一律英文**：注释、测试名、lint 报错文案等一切代码里的文本，理由是这个仓库要开源、外人读到的就是这些
+- **文档暂时中文**：`docs/`、`CONTRIBUTING.md`、各 README 与 CHANGELOG 先保持中文，之后再单独做一轮（`packages/core/test/semantics/README.md` 里引用的注释标记已经是 `// Locks:` / `// Needed by:`）
+
 ## 常用命令
 
 ```bash

@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
 import { State, tick, trackStatus } from './helpers'
 
-describe('inject：依赖即激活条件', () => {
-  // 锁：依赖就绪时，插件在装载时就立刻执行 apply 并激活
-  // 依赖：kernel.md 1.4「依赖决定加载顺序」——加载顺序由服务需求表达，不需要手工排序
-  it('依赖已就绪时立刻执行 apply 并激活', async () => {
+describe('inject: dependencies are the activation condition', () => {
+  // Locks: when dependencies are ready, apply runs right away at load time and the plugin activates
+  // Needed by: "dependencies decide loading order" (kernel.md 1.4) — order is expressed through
+  //        service requirements, no manual sorting needed
+  it('runs apply and activates immediately when dependencies are ready', async () => {
     const ctx = new Context()
     ctx.provide('ready-service', 1)
     const applied: string[] = []
@@ -19,12 +20,14 @@ describe('inject：依赖即激活条件', () => {
     expect(fiber.state).toBe(State.ACTIVE)
   })
 
-  // 锁（implementation.md 事实 10，本套测试最核心的一条）：
-  //     依赖等不到时，fiber 停在 state=0、apply 不执行、**一个 internal/status 都不发**，
-  //     而且 `await ctx.plugin()` **立即 resolve**（`Fiber.await()` 等的是 inertia，不是激活）
-  // 依赖：K2.3 的"装载判定必须显式等 ACTIVE/FAILED"、K2.4 的"未激活原因诊断"、
-  //       K2.7 的激活超时——三者都建立在这条上；若把它当装载成功信号，会漏掉整类"静默不生效"的插件
-  it('依赖等不到时零信号，且不阻塞 await', async () => {
+  // Locks (implementation.md fact 10, the single most important case in this suite):
+  //        when a dependency never shows up the fiber stays at state=0, apply does not run,
+  //        **not a single internal/status is emitted**, and `await ctx.plugin()` **resolves
+  //        immediately** (`Fiber.await()` waits on inertia, not on activation)
+  // Needed by: "the load decision must explicitly wait for ACTIVE/FAILED" (K2.3), the unmet-cause
+  //        diagnostics (K2.4) and the activation timeout (K2.7) all rest on this; treating it as a
+  //        success signal misses an entire class of silently dead plugins
+  it('stays silent when a dependency never appears, and does not block the await', async () => {
     const ctx = new Context()
     const transitions = trackStatus(ctx)
     const applied: string[] = []
@@ -37,20 +40,21 @@ describe('inject：依赖即激活条件', () => {
     })
     const elapsed = performance.now() - started
 
-    expect(elapsed).toBeLessThan(50)      // 实测 0ms；这里只断言"立即"，不把它变成性能测试
+    expect(elapsed).toBeLessThan(50)      // observed at 0ms; this only asserts "immediate", it is not a performance test
     expect(fiber.state).toBe(State.PENDING)
     expect(applied).toEqual([])
-    expect(transitions).toEqual([])       // 零信号：没有事件、没有报错（apply 根本没跑）
+    expect(transitions).toEqual([])       // zero signal: no event, no error (apply never ran)
 
     await tick(30)
-    expect(applied).toEqual([])           // 再等也不会自己好
+    expect(applied).toEqual([])           // waiting longer does not fix it by itself
     expect(fiber.state).toBe(State.PENDING)
   })
 
-  // 锁（implementation.md 事实 11）：依赖在之后到位时，等待中的 fiber 会自己激活并发出
-  //     internal/status（0→1→2）——不需要轮询
-  // 依赖：K2.4 的"迟到激活"能被观察到；宿主只订阅 internal/status 就够，不必定时扫描
-  it('依赖之后到位时，fiber 自己激活并发 internal/status', async () => {
+  // Locks (implementation.md fact 11): when the dependency shows up later, the waiting fiber
+  //        activates on its own and emits internal/status (0→1→2) — no polling required
+  // Needed by: the "late activation" of K2.4 is observable; a host only has to subscribe to
+  //        internal/status, no periodic scan
+  it('activates on its own and emits internal/status when the dependency arrives later', async () => {
     const ctx = new Context()
     const transitions = trackStatus(ctx)
     const applied: string[] = []
@@ -71,9 +75,11 @@ describe('inject：依赖即激活条件', () => {
     expect(transitions).toEqual(['0->1', '1->2'])
   })
 
-  // 锁：fiber.inject 是模块 export 上的字面数据，可以直接枚举出来；registry 里也能枚举到 fiber
-  // 依赖：K2.4 的未激活原因诊断靠它——宿主**不需要**自己登记一份依赖表，读运行期事实即可
-  it('inject 声明可以直接从 fiber 上读出来', async () => {
+  // Locks: fiber.inject is literal data on the module export and can be enumerated directly; fibers
+  //        are also enumerable through the registry
+  // Needed by: the unmet-cause diagnostics of K2.4 depend on it — a host does **not** need to keep a
+  //        dependency table of its own, it just reads runtime facts
+  it('the inject declaration can be read straight off the fiber', async () => {
     const ctx = new Context()
     const fiber = await ctx.plugin({
       name: 'inject-readable',
@@ -86,10 +92,11 @@ describe('inject：依赖即激活条件', () => {
     expect(fibers.map((item) => Object.keys(item.inject))).toContainEqual(['a-service', 'b-service'])
   })
 
-  // 锁：动态形式 ctx.inject(deps, cb) 与插件声明同语义——依赖未到位时 state=0、不执行回调，
-  //     依赖到位后自己激活
-  // 依赖：K2.4 的诊断要覆盖"依赖来自 apply 里的动态 ctx.inject()"这种情况（静态建图看不见它）
-  it('动态 ctx.inject 与插件声明同语义', async () => {
+  // Locks: the dynamic form ctx.inject(deps, cb) has the same semantics as the plugin declaration —
+  //        state=0 and no callback while dependencies are unmet, self-activation once they arrive
+  // Needed by: the diagnostics of K2.4 must cover "dependencies introduced by a dynamic
+  //        ctx.inject() inside apply" as well, which a static graph cannot see
+  it('dynamic ctx.inject has the same semantics as a plugin declaration', async () => {
     const ctx = new Context()
     let ran = false
 

@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
 import { captureError } from './helpers'
 
-describe('effect：可逆注册', () => {
-  // 锁：effect 按注册顺序执行；卸载时按注册的逆序撤销（DisposableList.clear() 返回 reverse 后的列表）
-  // 依赖：kernel.md 1.3「一切注册都可逆」是"禁用 = 回到从未装过它"的根基；
-  //       顺序反了会出现"被依赖者先于依赖者拆除"的半拆状态，K2.3 的卸载路径就建立在这条上
-  it('按注册顺序执行，卸载时按注册的逆序撤销', async () => {
+describe('effect: reversible registration', () => {
+  // Locks: effects run in registration order and are undone in reverse registration order on unload
+  //        (DisposableList.clear() returns the reversed list)
+  // Needed by: "every registration is reversible" (kernel.md 1.3) is the root of "disable = back to
+  //        never installed"; reversing it wrongly leaves a half-torn-down state where a dependency
+  //        is removed before whatever depends on it, and the unload path of K2.3 rests on this
+  it('runs in registration order and undoes in reverse order on unload', async () => {
     const ctx = new Context()
     const order: string[] = []
     const fiber = await ctx.plugin({
@@ -26,9 +28,10 @@ describe('effect：可逆注册', () => {
     ])
   })
 
-  // 锁：一个 effect 返回撤销函数数组时，组内也按逆序撤销
-  // 依赖：与上一条同理——一次注册产生多个撤销函数时，逆序是"后注册的先撤"的一致延伸
-  it('一个 effect 返回多个撤销函数时，组内也按逆序', async () => {
+  // Locks: when one effect returns an array of undo functions, the group is undone in reverse too
+  // Needed by: same reasoning as above — reverse order is the consistent extension of "last
+  //        registered, first undone" to a single registration producing several undo functions
+  it('a single effect returning several undo functions also undoes them in reverse', async () => {
     const ctx = new Context()
     const order: string[] = []
     const fiber = await ctx.plugin({
@@ -46,11 +49,13 @@ describe('effect：可逆注册', () => {
     expect(order).toEqual(['dispose-c', 'dispose-b', 'dispose-a'])
   })
 
-  // 锁：effect 可以返回 promise 或 async generator——异步产生的撤销函数照样在卸载时执行
-  //      （异步者之间的相对次序由微任务调度决定，实测不稳定，所以这里只锁"都执行了"）
-  // 依赖：implementation.md 3.3(a)/(d) 的 .tap 安装事务里有异步清理（staging 目录、journal），
-  //        它们必须挂在 effect 上才能保证卸载即还原
-  it('异步产生的撤销函数也会在卸载时执行', async () => {
+  // Locks: an effect may return a promise or an async generator — undo functions produced
+  //        asynchronously still run on unload (their relative order is decided by microtask
+  //        scheduling and is not stable in practice, so only "all of them ran" is pinned here)
+  // Needed by: the .tap install transaction of implementation.md 3.3(a)/(d) has asynchronous
+  //        clean-up (staging directory, journal); it must hang off effects to guarantee
+  //        "uninstall restores everything"
+  it('undo functions produced asynchronously also run on unload', async () => {
     const ctx = new Context()
     const order: string[] = []
     const fiber = await ctx.plugin({
@@ -74,10 +79,12 @@ describe('effect：可逆注册', () => {
     )
   })
 
-  // 锁：在已卸载的 fiber 上下文上注册会抛 code=INACTIVE_EFFECT 的 Error（effect / on / provide 三者一致）
-  // 依赖：K2.4 的失败禁用名单与"手动重试"入口必须建立在"卸载后拒绝任何新注册"上，
-  //       否则卸载与重装之间会出现半装状态
-  it('在已卸载的上下文上注册会抛 INACTIVE_EFFECT', async () => {
+  // Locks: registering on an already unloaded fiber context throws an Error with
+  //        code=INACTIVE_EFFECT (effect / on / provide behave identically)
+  // Needed by: the deny-list and "manual retry" entry point of K2.4 must rest on "nothing new can be
+  //        registered after unload", otherwise a half-installed state appears between unload and
+  //        reinstall
+  it('registering on an unloaded context throws INACTIVE_EFFECT', async () => {
     const ctx = new Context()
     const fiber = await ctx.plugin({ name: 'effect-inactive', apply() {} })
     await fiber.dispose()
@@ -93,35 +100,38 @@ describe('effect：可逆注册', () => {
     }
   })
 
-  // 锁：监听者注册也是 effect，插件卸载后它的监听者被回收，事件不再触达
-  // 依赖：K2.3 的验收项就是"卸载后监听数归零"——宿主据此断定一个插件真的卸载干净了
-  it('插件卸载后它的监听者不再被触达', async () => {
+  // Locks: listeners are effects too — once a plugin unloads, its listeners are recycled and the
+  //        event no longer reaches them
+  // Needed by: the acceptance item of K2.3 is exactly "the listener count drops to zero", which is
+  //        how a host concludes that a plugin really unloaded cleanly
+  it('a plugin listener is no longer reached after the plugin unloads', async () => {
     const ctx = new Context()
     const seen: string[] = []
-    ctx.on('lock/probe', () => { seen.push('宿主') })
+    ctx.on('lock/probe', () => { seen.push('host') })
 
     const fiber = await ctx.plugin({
       name: 'effect-listener',
       apply(ctx) {
-        ctx.on('lock/probe', () => { seen.push('插件') })
-        ctx.once('lock/probe', () => { seen.push('插件-once') })
+        ctx.on('lock/probe', () => { seen.push('plugin') })
+        ctx.once('lock/probe', () => { seen.push('plugin-once') })
       },
     })
 
     ctx.emit('lock/probe')
-    expect(seen).toEqual(['宿主', '插件', '插件-once'])
+    expect(seen).toEqual(['host', 'plugin', 'plugin-once'])
 
     await fiber.dispose()
     ctx.emit('lock/probe')
-    expect(seen).toEqual(['宿主', '插件', '插件-once', '宿主'])
+    expect(seen).toEqual(['host', 'plugin', 'plugin-once', 'host'])
   })
 
-  // 锁：运行期允许 effect 什么都不返回（当作 no-op 注册），但上游的类型签名不允许——
-  //     `Effect = SyncEffect | AsyncEffect` 两者都不含 void，所以 `ctx.effect(() => { doSomething() })`
-  //     在插件作者那边是编译错误，必须显式返回一个撤销函数或断言绕过类型
-  // 依赖：K1.2 会把 effect 类型再导出给插件作者，这条约束会一起被冻结；K3.2 的 doctor
-  //       也应该能提示这个写法
-  it('运行期允许 effect 返回 void，但类型签名不允许', async () => {
+  // Locks: at runtime an effect may return nothing (treated as a no-op registration), but upstream's
+  //        type signature forbids it — `Effect = SyncEffect | AsyncEffect` contains no void, so
+  //        `ctx.effect(() => { doSomething() })` is a compile error on the plugin author's side and
+  //        must explicitly return an undo function or cast around the types
+  // Needed by: K1.2 re-exports the effect types to plugin authors, freezing this constraint along
+  //        with them; K3.2's doctor should be able to flag the same mistake
+  it('runtime allows an effect returning void, the type signature does not', async () => {
     const ctx = new Context()
     const order: string[] = []
     const fiber = await ctx.plugin({

@@ -7,6 +7,6 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  // 导出面收窄的一部分：不生成 `./src/*` 子路径入口（kernel.md 5.3.1）
+  // Part of narrowing the export surface: no `./src/*` subpath entry (kernel.md 5.3.1)
   external: [/^cordis/],
 })

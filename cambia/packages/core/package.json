@@ -2,7 +2,7 @@
   "name": "@cambia/core",
   "version": "0.1.0",
   "type": "module",
-  "description": "Cambia 插件内核：把插件面向的 API 在 Cordis 之上固定下来（公开 API 契约见 kernel.md 5.3.1）",
+  "description": "Cambia plugin kernel: freezes the plugin-facing API on top of Cordis (public API contract: kernel.md 5.3.1)",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

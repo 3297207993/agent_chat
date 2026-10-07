@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "共享 lint 规则集：把 kernel.md 5.3.1 的两条上游隔离规则变成真的会报错的检查（仓库内部与插件模板共用同一份）",
+  "description": "Shared lint rule set: turns the two upstream-isolation rules of kernel.md 5.3.1 into checks that actually report (one config for this repo and the plugin template)",
   "exports": {
     ".": "./index.js"
   },

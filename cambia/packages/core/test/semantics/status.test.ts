@@ -2,33 +2,35 @@ import { describe, expect, it } from 'vitest'
 import { Context } from 'cordis'
 import { State, tick } from './helpers'
 
-describe('fiber 状态与 internal/status', () => {
-  // 锁：正常激活的迁移序列是 0→1→2；事件名叫 internal/status，参数是 (fiber, 旧值)，
-  //     并且**处理器里读到的 fiber.state 已经是新值**
-  // 依赖：implementation.md 3.2 的观测面——宿主靠这个事件记录"哪个插件、哪个阶段失败"，
-  //       事件发出时状态已更新是它能直接读 state 的前提
-  it('正常激活的迁移序列是 0→1→2，事件里已是新值', async () => {
+describe('fiber states and internal/status', () => {
+  // Locks: normal activation goes 0→1→2; the event is named internal/status, its arguments are
+  //        (fiber, oldValue), and **the fiber.state read inside a handler is already the new value**
+  // Needed by: the observation surface of implementation.md 3.2 — hosts use this event to record
+  //        "which plugin failed at which stage", and "state is updated by dispatch time" is what
+  //        lets them read state directly
+  it('normal activation transitions 0→1→2 and the event already carries the new value', async () => {
     const ctx = new Context()
-    const observed: Array<{ 旧值: number, 当前值: number }> = []
+    const observed: Array<{ oldState: number, currentState: number }> = []
     ctx.on('internal/status', (fiber, oldState) => {
-      observed.push({ 旧值: oldState, 当前值: fiber.state })
+      observed.push({ oldState, currentState: fiber.state })
     })
 
     const fiber = await ctx.plugin({ name: 'status-normal', apply() {} })
 
     expect(observed).toEqual([
-      { 旧值: State.PENDING, 当前值: State.LOADING },
-      { 旧值: State.LOADING, 当前值: State.ACTIVE },
+      { oldState: State.PENDING, currentState: State.LOADING },
+      { oldState: State.LOADING, currentState: State.ACTIVE },
     ])
     expect(fiber.state).toBe(State.ACTIVE)
     expect(fiber.uid).toBeGreaterThan(0)
   })
 
-  // 锁：apply 抛错时迁移序列是 0→1→**5**→**3**（先 UNLOADING 再 FAILED，不是直线的 1→3），
-  //     并且 await ctx.plugin() 会 reject 出原始错误
-  // 依赖：implementation.md 3.2 明确"判定失败只看是否落到 FAILED，不要把转移序列写死"——
-  //       这条用例把实测到的非直线路径钉住，正是为了让将来改判定的人看见这句话的依据
-  it('apply 抛错时走 0→1→5→3，并且 await 会 reject', async () => {
+  // Locks: when apply throws the sequence is 0→1→**5**→**3** (UNLOADING before FAILED, not a
+  //        straight 1→3), and `await ctx.plugin()` rejects with the original error
+  // Needed by: implementation.md 3.2 states plainly that "failure is decided by whether it lands on
+  //        FAILED; do not hard-code the transition sequence" — this case pins the observed
+  //        non-linear path precisely so that whoever revisits the decision sees the evidence
+  it('apply throwing walks 0→1→5→3 and the await rejects', async () => {
     const ctx = new Context()
     const transitions: string[] = []
     ctx.on('internal/status', (fiber, oldState) => { transitions.push(`${oldState}->${fiber.state}`) })
@@ -42,10 +44,12 @@ describe('fiber 状态与 internal/status', () => {
     expect(transitions).toEqual(['0->1', '1->5', '5->3'])
   })
 
-  // 锁：apply 一直等待时 fiber 停在 1（LOADING），`await ctx.plugin()` **永不 settle**
-  // 依赖：kernel.md 6.2 的激活超时（"await ctx.plugin() 永不 settle 时宿主必须超时判定失败"）——
-  //       这条是超时保险丝唯一的存在理由；也说明不能拿 Promise.race 包 ctx.plugin() 又同时依赖它做别的判定
-  it('apply 一直等待时停在 LOADING，且 await 不 settle', async () => {
+  // Locks: when apply awaits forever the fiber stays at 1 (LOADING) and `await ctx.plugin()`
+  //        **never settles**
+  // Needed by: the activation timeout of kernel.md 6.2 ("when await ctx.plugin() never settles the
+  //        host must time out and mark it failed") — this is the only reason that fuse exists; it
+  //        also means you cannot wrap ctx.plugin() in Promise.race and still rely on it elsewhere
+  it('an apply that awaits forever stays LOADING and the await never settles', async () => {
     const ctx = new Context()
     const transitions: string[] = []
     ctx.on('internal/status', (fiber, oldState) => { transitions.push(`${oldState}->${fiber.state}`) })
@@ -53,18 +57,20 @@ describe('fiber 状态与 internal/status', () => {
     const fiber = ctx.plugin({ name: 'status-stuck', apply() { return new Promise<void>(() => {}) } })
     const outcome = await Promise.race([
       fiber.then(() => 'settle', () => 'reject'),
-      tick(50).then(() => '没有 settle'),
+      tick(50).then(() => 'not settled'),
     ])
 
-    expect(outcome).toBe('没有 settle')
+    expect(outcome).toBe('not settled')
     expect(fiber.state).toBe(State.LOADING)
     expect(transitions).toEqual(['0->1'])
   })
 
-  // 锁：卸载一个卡在 LOADING 的插件时，dispose() **也不会 settle**，state 停在 1、uid 被置空、不发事件
-  // 依赖：K2.4 的失败禁用名单与"手动重试"入口——宿主不能等 dispose() 完成再记禁用，
-  //       否则一个 apply 死等的插件会把卸载路径一起拖死；判断"还活着吗"只能看 uid
-  it('卸载卡在 LOADING 的插件不会 settle，也不发事件', async () => {
+  // Locks: unloading a plugin stuck in LOADING means dispose() **does not settle either**: state
+  //        stays at 1, uid is cleared and no event is emitted
+  // Needed by: the failure deny-list and "manual retry" entry point of K2.4 — a host must not wait
+  //        for dispose() before recording the deny entry, or one plugin with a dead-locked apply
+  //        drags the whole unload path down with it; "is it still there" can only be answered by uid
+  it('unloading a plugin stuck in LOADING never settles and emits nothing', async () => {
     const ctx = new Context()
     const transitions: string[] = []
     ctx.on('internal/status', (fiber, oldState) => { transitions.push(`${oldState}->${fiber.state}`) })
@@ -74,18 +80,18 @@ describe('fiber 状态与 internal/status', () => {
 
     const outcome = await Promise.race([
       fiber.dispose().then(() => 'settle', () => 'reject'),
-      tick(50).then(() => '没有 settle'),
+      tick(50).then(() => 'not settled'),
     ])
 
-    expect(outcome).toBe('没有 settle')
+    expect(outcome).toBe('not settled')
     expect(fiber.uid).toBeNull()
     expect(fiber.state).toBe(State.LOADING)
     expect(transitions).toEqual(['0->1'])
   })
 
-  // 锁：卸载已激活的插件走 2→5→4，uid 置空
-  // 依赖：K2.3 的卸载路径——宿主用"落到 DISPOSED"作为卸载完成信号
-  it('卸载已激活的插件走 2→5→4', async () => {
+  // Locks: unloading an activated plugin walks 2→5→4 and clears uid
+  // Needed by: the unload path of K2.3 — the host uses "landed on DISPOSED" as the completion signal
+  it('unloading an activated plugin walks 2→5→4', async () => {
     const ctx = new Context()
     const transitions: string[] = []
     ctx.on('internal/status', (fiber, oldState) => { transitions.push(`${oldState}->${fiber.state}`) })
@@ -98,10 +104,12 @@ describe('fiber 状态与 internal/status', () => {
     expect(fiber.uid).toBeNull()
   })
 
-  // 锁：卸载一个**从未激活**的插件时，一个 internal/status 都不发，且 state 停在 0（PENDING）而不是 4
-  // 依赖：K2.4 的禁用名单与 K2.3 的"归零"判定——一个已卸载的 fiber 可能仍然显示 PENDING，
-  //       所以"这个插件还在吗"只能看 uid，不能看 state；"状态没变化就不发事件"也是这里看到的
-  it('卸载从未激活的插件：不发任何事件，state 停在 0', async () => {
+  // Locks: unloading a plugin that was **never active** emits no internal/status at all, and state
+  //        stays at 0 (PENDING) rather than 4
+  // Needed by: the deny-list of K2.4 and the "back to zero" check of K2.3 — an unloaded fiber may
+  //        still read PENDING, so "is this plugin still there" can only be answered by uid, never by
+  //        state; this is also where "no state change, no event" becomes visible
+  it('unloading a never-active plugin emits nothing and leaves state at 0', async () => {
     const ctx = new Context()
     const transitions: string[] = []
     ctx.on('internal/status', (fiber, oldState) => { transitions.push(`${oldState}->${fiber.state}`) })
@@ -116,11 +124,13 @@ describe('fiber 状态与 internal/status', () => {
     expect(transitions).toEqual([])
   })
 
-  // 锁：重复 dispose 不抛错、状态保持 DISPOSED，但**第二次返回的是 undefined 而不是 promise**
-  //     （effect 包装器第一次就撤销过了，`if (!runner.epoch) return` 直接返回）
-  // 依赖：K2.3 的卸载路径与 K2.4 的手动重试可能重复触发卸载——可以放心重复 await，
-  //       但不要对返回值调 .then()；上游的 `dispose: () => Promise<void>` 类型声明在这里与运行期不符
-  it('重复 dispose 不抛错，第二次返回 undefined', async () => {
+  // Locks: disposing twice throws nothing and state stays DISPOSED, but **the second call returns
+  //        undefined instead of a promise** (the effect wrapper already undid it, so
+  //        `if (!runner.epoch) return` short-circuits)
+  // Needed by: the unload path of K2.3 and the manual retry of K2.4 may trigger an unload twice —
+  //        awaiting again is safe, but never call .then() on the return value; upstream's
+  //        `dispose: () => Promise<void>` declaration does not match runtime here
+  it('disposing twice throws nothing and the second call returns undefined', async () => {
     const ctx = new Context()
     const fiber = await ctx.plugin({ name: 'status-dispose-twice', apply() {} })
 
@@ -129,6 +139,6 @@ describe('fiber 状态与 internal/status', () => {
 
     expect(fiber.dispose()).toBeUndefined()
     expect(fiber.state).toBe(State.DISPOSED)
-    await fiber.dispose()      // await undefined 也是安全的
+    await fiber.dispose()      // awaiting undefined is safe as well
   })
 })

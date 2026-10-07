@@ -9,11 +9,13 @@
 
 ## 三条写作规则
 
+> 代码侧（注释、测试名、报错文案）一律英文，文档暂时中文——这一批先把代码改成英文，文档之后再单独处理。
+
 1. **每条用例都要写两行注释**：
 
    ```ts
-   // 锁：上游的哪条行为
-   // 依赖：本内核的哪一处设计依赖它（kernel.md / implementation.md 章节）
+   // Locks: which upstream behaviour is pinned
+   // Needed by: which part of this kernel's design depends on it (kernel.md / implementation.md)
    ```
 
    断言本身不自解释（有些期望值看起来像 bug，例如"装载成功的 promise 立即 resolve"）。

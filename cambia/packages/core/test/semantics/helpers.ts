@@ -1,16 +1,17 @@
 import { Context } from 'cordis'
 
 /**
- * cordis 把 FiberState 声明成 `const enum`（lib/fiber.d.ts），运行期没有实体，
- * 所以这里按声明顺序写死数值。这些数字由 status.test.ts 的迁移序列断言钉住：
- * 0→1→2（正常激活）、1→5→3（apply 抛错）、2→5→4（卸载）。上游重新编号必然红灯。
+ * cordis declares FiberState as a `const enum` (lib/fiber.d.ts), so there is no runtime entity
+ * to import; the numbers are written down here in declaration order. They are pinned by the
+ * transition assertions in status.test.ts: 0→1→2 (normal activation), 1→5→3 (apply threw),
+ * 2→5→4 (unload). Renumbering upstream necessarily turns this red.
  *
- *   PENDING = 0  依赖未就绪，或从未被评估
- *   LOADING = 1  apply 正在执行
- *   ACTIVE  = 2  已激活，注册全部生效
- *   FAILED  = 3  装载失败
- *   DISPOSED = 4 已卸载并回收（uid 置空）
- *   UNLOADING = 5 正在撤销注册
+ *   PENDING = 0   dependencies missing, or never evaluated
+ *   LOADING = 1   apply is running
+ *   ACTIVE  = 2   active, every registration in effect
+ *   FAILED  = 3   load failed
+ *   DISPOSED = 4  unloaded and recycled (uid cleared)
+ *   UNLOADING = 5 tearing registrations down
  */
 export const State = {
   PENDING: 0,
@@ -21,13 +22,14 @@ export const State = {
   UNLOADING: 5,
 } as const
 
-/** 等一拍，让微任务与定时器跑完。 */
+/** Wait one beat so that microtasks and timers have run. */
 export const tick = (ms = 20) => new Promise<void>((resolve) => { setTimeout(resolve, ms) })
 
 /**
- * 记录状态迁移，格式 `旧值->新值`。
- * 注意记录的是「事件里的旧值」与「处理器里读到的 fiber.state」（即新值），
- * 这样连"事件发出时状态是否已经更新"也一起锁住。
+ * Record state transitions as `old->new`.
+ * Note that it records the "old value carried by the event" against the "fiber.state read inside
+ * the handler" (the new value), which also pins down whether the state is already updated by the
+ * time the event is dispatched.
  */
 export function trackStatus(ctx: Context): string[] {
   const transitions: string[] = []
@@ -37,7 +39,7 @@ export function trackStatus(ctx: Context): string[] {
   return transitions
 }
 
-/** 捕获同步抛错，返回错误文案与 code。没有抛错则测试失败。 */
+/** Capture a synchronous throw and return its message and code. Fails the test when nothing throws. */
 export function captureError(fn: () => unknown): { message: string, code?: string, name: string } {
   try {
     fn()
@@ -45,5 +47,5 @@ export function captureError(fn: () => unknown): { message: string, code?: strin
     const e = error as Error & { code?: string }
     return { message: e.message, code: e.code, name: e.name }
   }
-  throw new Error('期望抛错，但没有抛错')
+  throw new Error('expected a throw, but nothing was thrown')
 }

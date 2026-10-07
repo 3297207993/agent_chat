@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    // 只跑运行期用例；test/contract.ts 是类型断言用例，由 tsc 检查
+    // Runtime cases only; test/contract.ts holds the type assertions, checked by tsc
     include: ['test/**/*.test.ts'],
   },
 })

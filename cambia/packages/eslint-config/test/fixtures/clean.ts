@@ -1,4 +1,4 @@
-// 合规写法：插件只 import @cambia/core，声明合并也只写 @cambia/core
+// Compliant: the plugin imports @cambia/core only, and merges declarations into @cambia/core as well
 import type { Context, Plugin } from '@cambia/core'
 
 declare module '@cambia/core' {
