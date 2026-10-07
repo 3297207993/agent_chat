@@ -1,0 +1,15 @@
+{
+  "id": "com.example.hello-plugin",
+  "name": "Hello Plugin",
+  "version": "0.0.0",
+  "engines": {
+    "cambia": "^0.1",
+    "host": "agent-chat@^0.1"
+  },
+  "activationEvents": ["always"],
+  "parts": {
+    "frontend": {
+      "main": "dist/index.js"
+    }
+  }
+}

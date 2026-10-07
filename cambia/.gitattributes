@@ -1,0 +1,6 @@
+# `spec/` holds the contract content both sides (JS and Rust) read. The JSON Schema there is a
+# generated artifact compared **byte-for-byte** with what the code produces
+# (packages/host/test/spec.test.ts), so its line endings must survive a checkout unchanged: on a
+# Windows machine with core.autocrlf=true (the default here) a CRLF checkout would fail that check
+# for a reason that has nothing to do with the contract. Hence LF, explicitly.
+spec/** text eol=lf

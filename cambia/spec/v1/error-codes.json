@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "codes": {
+    "MANIFEST_PARSE_FAILED": {
+      "stage": "manifest",
+      "summary": "The manifest is missing, unreadable, or not a JSON object"
+    },
+    "MANIFEST_FIELD_INVALID": {
+      "stage": "manifest",
+      "summary": "A field is present but its type or format is wrong; path points at it"
+    },
+    "MANIFEST_MISSING_ENGINES": {
+      "stage": "manifest",
+      "summary": "engines is absent, or lacks cambia / host (kernel.md 3 requires the double constraint)"
+    },
+    "MANIFEST_UNKNOWN_PART": {
+      "stage": "manifest",
+      "summary": "parts carries a key outside frontend / backend / view: the host lacks that ability"
+    },
+    "MANIFEST_PATH_ESCAPE": {
+      "stage": "manifest",
+      "summary": "A declared path can leave the package root (absolute, .., backslash, empty segment)"
+    },
+    "MANIFEST_PLATFORM_KEY_INVALID": {
+      "stage": "manifest",
+      "summary": "A backend.bin key is outside the <os>[-<arch>] / * vocabulary (kernel.md 3.3)"
+    },
+    "MANIFEST_BACKEND_INCOMPLETE": {
+      "stage": "manifest",
+      "summary": "parts.backend exists but is missing protocol or bin"
+    },
+    "MANIFEST_ACTIVATION_EVENT_INVALID": {
+      "stage": "manifest",
+      "summary": "An activationEvents entry is neither always nor <prefix>:<pattern>"
+    },
+    "ENGINE_INCOMPATIBLE": {
+      "stage": "engines",
+      "summary": "An engines range does not admit the running kernel / host version"
+    },
+    "LOAD_FETCH_FAILED": {
+      "stage": "load",
+      "summary": "The plugin module could not be fetched (403 / 404 / CORS / a dependency of the module)"
+    },
+    "LOAD_MIME_MISMATCH": {
+      "stage": "load",
+      "summary": "Fetched, but the response is not JavaScript (ES module MIME checking is strict)"
+    },
+    "LOAD_SYNTAX": {
+      "stage": "load",
+      "summary": "The module does not parse (matched by name, not instanceof: cross-realm)"
+    },
+    "LOAD_EVALUATION": {
+      "stage": "load",
+      "summary": "Fetched, valid JS, and still threw: the module itself blew up"
+    },
+    "LOAD_NO_APPLY": {
+      "stage": "load",
+      "summary": "The module evaluates but exports no apply (not a plugin entry)"
+    }
+  }
+}

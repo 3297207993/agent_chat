@@ -1,0 +1,38 @@
+{
+  "name": "@cambia/host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cambia host runtime: manifest contract, activation matching and plugin loading (kernel.md 1.9 splits the host side out of the kernel)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "spec:generate": "pnpm build && node scripts/generate-spec.mjs"
+  },
+  "dependencies": {
+    "picomatch": "^4.0.7",
+    "semver": "^7.8.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/picomatch": "^4.0.2",
+    "@types/semver": "^7.7.1",
+    "tsup": "^8.5.1",
+    "typescript": "~5.8.3",
+    "vitest": "^5.0.3"
+  }
+}
