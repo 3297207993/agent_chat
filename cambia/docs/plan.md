@@ -76,7 +76,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 
 | 项 | 内容 |
 |---|---|
-| **交付物** | eslint 规则（用 `no-restricted-imports` 封住 cordis、禁止 `declare module 'cordis'`），并在示例上验证**它真的会报错**；changesets 发布流程；`@cambia/core@0.1.0` 首次发布（或私有 registry） |
+| **交付物** | eslint 规则（用 `no-restricted-imports` 封住 cordis、禁止 `declare module 'cordis'`），并在示例上验证**它真的会报错**；changesets 发布流程；`@cambia/core@0.1.0` 首次发布（或私有 registry）。**收尾状态**：规则集落在 `packages/eslint-config`、门禁是 `pnpm lint`；changesets 已走通一次完整流程（`0.0.0 → 0.1.0` + CHANGELOG）；**实际 publish 还差两件外部前提**——npm 上 `@cambia` scope 可用、以及"公开发布还是私有 registry"的决定（见 [../CONTRIBUTING.md](../CONTRIBUTING.md)） |
 | **依赖** | K1.2 |
 | **验收** | 故意违规的示例构建失败；`npm pack` 产物只暴露 `"."` 入口 |
 

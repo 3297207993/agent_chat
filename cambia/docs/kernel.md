@@ -238,7 +238,8 @@ cambia/
 ├── packages/
 │   ├── core/                  # @cambia/core：插件面向 API（Cordis 之上在 Cordis 之上固定下来的插件 API）
 │   ├── host/                  # @cambia/host：宿主侧装载与运行时（manifest/依赖图/激活/视图插槽）
-│   └── kit/                   # @cambia/kit：插件作者 CLI（脚手架/dev 热重载/打包 .tap）
+│   ├── kit/                   # @cambia/kit：插件作者 CLI（脚手架/dev 热重载/打包 .tap）
+│   └── eslint-config/         # @cambia/eslint-config：共享 lint 规则集（上游隔离规则的强制检查点）
 ├── crates/
 │   ├── plugin-host/           # Rust crate：包解析/校验/安装/后端进程托管（零 Tauri 依赖）
 │   └── tauri-plugin-cambia/   # 适配层：把 Tauri 的协议/路径/事件/进程接线进内核（独立 workspace 与 CI）

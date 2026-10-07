@@ -313,8 +313,8 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 - **CI 分两条轨道**：核心（`packages/*` + `crates/plugin-host`，**不需要安装 tauri**，保持快）与适配层（`crates/tauri-plugin-cambia`，三平台 tauri 构建，可挂在 nightly / 发布前）。根 workspace `exclude` 适配层，保证核心流水线永远碰不到 tauri——这条不是优化，是让"内核实现层零 Tauri 依赖"变成**结构上的事实**而不是纪律上的希望。
 - **构建**：`tsup@8` 打 `@cambia/*`；`publint` + `@arethetypeswrong/cli` 卡发布前检查。
 - **测试**：`vitest@5`（单元 + happy-dom 渲染插槽）；`cargo test`（crate）。
-- **版本与发布**：`@changesets/cli@3` 以 fixed 模式统一 `@cambia/*` 版本，crate 版本与之保持一致；`engines.cambia` 的兼容矩阵在代码里维护成常量表，随发布更新。
-- **Lint**：eslint 9 + typescript-eslint，规则集**同时用于本仓库与插件模板**——上游隔离规则 1、2 靠 `no-restricted-imports` / `no-restricted-syntax` 强制检查。
+- **版本与发布**：`@changesets/cli@3` 以 fixed 模式统一 `@cambia/*` 版本，crate 版本与之保持一致；`engines.cambia` 的兼容矩阵在代码里维护成常量表，随发布更新。**已落地**（K1.3）：`.changeset/config.json`（`fixed: [["@cambia/*"]]`、`access: public`）+ 根 scripts（`changeset` / `version-packages` / `release`），首个 changeset 已跑过一次完整流程（`@cambia/core` 从 `0.0.0` 走到 `0.1.0` 并生成 CHANGELOG）。注意一处实测行为：**`private: true` 的包被 changesets 跳过**，所以 `@cambia/eslint-config` 暂时不在组内一致（等它随 kit 发布时再加入）。
+- **Lint**：`eslint` + `typescript-eslint`，规则集**单独成包**（`@cambia/eslint-config`）、同时用于本仓库与插件模板——上游隔离规则 1、2 靠 `no-restricted-imports` / `no-restricted-syntax` 强制检查。**已落地**（K1.3）：三个导出 `base` / `isolation` / `plugin`；仓库根 `eslint.config.js` 把 `base` 给 `packages/*`（内核实现层，允许直连上游）、把 `isolation` 只套在 `examples/**`（插件面向的代码）上。版本实测为 `eslint@10` + `typescript-eslint@8`（本文早先写的 9 是计划时的当前版本，以实测为准）。
 - **依赖治理**：cordis 版本显式固定且**不跟随 dist-tag**（事实 1）；升级必须跑通 3.7 的上游行为锁定测试；可选 `cargo-deny` 做许可证与重复依赖检查。
 
 ### 3.7 测试与验收
@@ -325,6 +325,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 单元 | vitest / cargo test | manifest 校验、激活匹配、**未激活原因诊断的输出（环 / 没有提供者 / 待定）**、journal 恢复、平台键映射 | K2 |
 | 契约一致性 | 同一批 fixtures 跑两侧 | JS 与 Rust 对同一 manifest 判定一致 | K2 |
 | 公开 API 契约（K1.2） | tsc（类型断言）+ vitest | 白名单有谁 / 没有谁、`Events` 与 `Services` 的声明合并生效、五种派发的签名、`FiberState` 六个值与上游一致、示例插件装载 → 卸载后服务键与监听者一起消失、effect 逆序撤销 | K1——**已落地**：`examples/hello-plugin/`（类型断言在 `test/contract.ts`，运行期在 `test/host.test.ts`；`pnpm --filter cambia-example-hello-plugin test`） |
+| 规则集自证（K1.3） | vitest + ESLint Node API | 四种违规写法（import cordis / cordis 子路径 / `declare module 'cordis'` / `@cambia/core/*` 子路径）必须报在对应规则上且文案指回 kernel.md；合规写法与**真实的示例插件**必须零告警 | K1——**已落地**：`packages/eslint-config/test/rules.test.ts`（`pnpm --filter @cambia/eslint-config test`）；全仓门禁是 `pnpm lint` |
 | 集成（无 Tauri） | vitest + happy-dom + 真实 `.tap` 目录的 headless 宿主 fixture | 装载 → 注册 → 卸载 → **监听数归零、占用的服务键消失**（kernel 6.2 验收项） | K2 |
 | 后端进程 | cargo test | spawn / 超时 / 重启 / 优雅关闭 / 宿主退出回收（Windows 上断言无孤儿进程） | K2 |
 | E2E | WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server，覆盖 Windows/Linux/macOS；直用 `tauri-driver` 只有 Windows/Linux） | 真 WebView 下的动态模块装载、CSP 生效、iframe 视图 | K2 / K3 |
