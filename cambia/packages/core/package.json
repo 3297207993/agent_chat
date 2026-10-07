@@ -1,7 +1,6 @@
 {
   "name": "@cambia/core",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Cambia 插件内核：把插件面向的 API 在 Cordis 之上固定下来（公开 API 契约见 kernel.md 5.3.1）",
   "exports": {
@@ -13,8 +12,12 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
