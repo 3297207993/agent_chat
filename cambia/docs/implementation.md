@@ -82,21 +82,31 @@
 **自研**：只有公开 API 契约本身，具体是四件事。
 
 - **导出范围收窄**：`exports` 只留 `"."`，不暴露 `./src/*`（与 cordis 的做法相反，事实 4）——插件作者拿不到内部模块路径，上游重构不会穿透到插件。
-- **白名单再导出**：`Context`、`Service` 与 kernel 2 章列出的方法/类型；不导出 cordis 的 `logger` / `registry` / `reflect` / `utils` 等实现细节。
-- **类型化事件的合并目标固定为 `@cambia/core`**（kernel 5.3.1 规则 2），`Events` 接口由本包声明；将来换成 vendor 实现时插件侧类型不变。
+- **白名单再导出**：`Context`、`Service`、`Fiber`、`FiberState` 与 kernel 2 章列出的方法/类型（派发用 `DispatchMode` / `EventOptions`，effect 用 `Disposable` / `Effect` / `EffectMeta`，插件形状用 `Plugin` / `Inject` / `InjectKey`）；不导出 cordis 的 `logger` / `registry` / `reflect` / `utils` 等实现细节。名单就是 `packages/core/src/index.ts` 的全部导出，`examples/hello-plugin/test/contract.ts` 用类型断言把"白名单里有谁、没有谁"钉住。
+- **声明合并目标固定为 `@cambia/core`**（kernel 5.3.1 规则 2）：事件名写进 `Events`、服务键写进 `Services`；将来换成 vendor 实现时插件侧类型不变。
 - **版本化契约**：把 kernel 2 章的语义固化为本包的 semver 规则——语义变更 = 内核 major；仅新增服务键类型不构成 major。
+
+**合并目标的桥接方式（K1.2 落地时实测出来的三条硬约束）**：插件声明的东西必须让 `ctx.on` / `ctx.emit` / `ctx.<服务键>` 看得见，而上游的事件类型是按它自己的 `Events` 推导的，所以本包做了一层窄桥接（`packages/core/src/index.ts`）：
+
+1. **不能自己声明 `Context`**：`declare module 'cordis' { interface Context extends 我们的 Context }` 与 `我们的 Context extends cordis.Context` 互为基类型，TypeScript 直接报 TS2310（实测两条路都报）。更要紧的是：插件写 `ctx.plugin({ apply(ctx) { … } })` 时，内联 `apply` 的参数类型由上游的 `Plugin` 声明给出，**自己声明的 `Context` 在那种写法下看不见**（实测：合并进来的服务键访问不到）。所以 `Context` 直接再导出上游的，桥接到它上面。
+2. **桥接必须走别名**：`declare module 'cordis' { interface Events extends BridgedEvents }`，其中 `type BridgedEvents = Events`（指向本包的 `Events`）。若在 augmentation 块里直接写 `extends Events`，那个名字指的是被增补的 `Events` 自己 → TS2310。
+3. **服务键需要独立的名字 `Services`**：`Context` 这个名字已经被"ctx 的类型"占了，不能再兼任合并目标；两者都在 `@cambia/core` 上合并，插件侧不出现 `declare module 'cordis'`。
+
+**`FiberState` 的运行期真值**：上游把它声明成 `const enum`，运行期没有实体，插件与宿主没法写 `fiber.state === FiberState.ACTIVE`。本包因此导出一份真值（类型仍指向上游的枚举），数值由 `packages/core/test/semantics/status.test.ts` 的真实迁移钉住，并有一条契约测试盯着它别跟上游走散。
 
 上游隔离层三条规则各自的**机器强制检查点**（规则不能只写在文档里）：
 
 | 规则（kernel 5.3.1） | 强制检查点 | 手段 |
 |---|---|---|
 | 插件只 import `@cambia/core` | 作者侧 + 构建期 | 模板与 `@cambia/kit` 预设提供 eslint `no-restricted-imports`；kit 构建后断言产物中不含 cordis 副本（3.4） |
-| 声明合并目标只能是 `@cambia/core` | 类型层 | `Events` 由本包导出；lint 禁止 `declare module 'cordis'` |
+| 声明合并目标只能是 `@cambia/core` | 类型层 | `Events` / `Services` 由本包导出（插件侧的 `ctx.on` / `ctx.<服务键>` 都按它们推导）；lint 禁止 `declare module 'cordis'` |
 | `@cambia/core` 是最终包名 | 发布流程 | 包名不可变写入 CONTRIBUTING，改动视为 breaking |
 
 **vendor 触发条件**（把 kernel 5.3.1 的升级策略落到可执行层）：满足任一条即启动——① cordis 停在 rc 超过一个发布周期且需要的内核侧修补等不到上游；② 上游变更与 kernel 2 章语义冲突且协商不成；③ 需要为 WebView 环境打补丁而 PR 未被接受。流程：取 GitHub 固定 commit 的 `packages/core` 源码（**不能从 npm tarball 取**，事实 4）→ 落 `vendor/cordis/` → 记录上游版本/commit/改动日志 → 保留 MIT LICENSE → **包名不变**，对插件作者不可见。
 
 **构建与发布**：`tsup@8`（esbuild + dts、零配置、成熟稳定）为默认；`tsdown@0.23`（rolldown，更快但仍是 0.x）仅当构建耗时成为瓶颈时评估切换。发布前用 `publint` + `@arethetypeswrong/cli` 卡导出范围问题——本包又薄又是全体插件的地基，导出范围回归的代价极高。
+
+**本包是 ESM-only，attw 用 `--profile esm-only`**：插件 bundle 本来就在 WebView 里当 ES module 装载，上游 cordis 也只有 ESM 产物，补一个 CJS 入口既跑不起来（`require('cordis')` 不存在）也没有消费方。所以"从 CJS require"这条 resolution 是**有意不满足**的，用 profile 显式忽略它，而不是把警告当噪音压掉。
 
 ### 3.2 `@cambia/host` —— 宿主侧装载与运行时
 
@@ -314,6 +324,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 上游行为锁定测试（最关键） | vitest | kernel 2.2 / 2.3 的五种派发、effect 逆序撤销的顺序、`inject` 就绪、**未满足的 `inject` 不发 `internal/status` 且 `await ctx.plugin()` 立即 resolve**、**`apply` 一直等待则 then 不 settle、`state=1`**（这两条锁住上游行为——3.2(d) 的原因诊断与 3.2(g) 的超时都建立在它们之上）、waterfall 终止实现、`next` 二次调用抛错、漏传终止实现的两种 TypeError 形态、重复 `dispose()` 的返回值、`internal/dispatch` 对 `parallel` 的上报怪癖 | cordis 升级的唯一安全网；K1——**已落地**：`packages/core/test/semantics/`（44 条用例，`pnpm --filter @cambia/core test`） |
 | 单元 | vitest / cargo test | manifest 校验、激活匹配、**未激活原因诊断的输出（环 / 没有提供者 / 待定）**、journal 恢复、平台键映射 | K2 |
 | 契约一致性 | 同一批 fixtures 跑两侧 | JS 与 Rust 对同一 manifest 判定一致 | K2 |
+| 公开 API 契约（K1.2） | tsc（类型断言）+ vitest | 白名单有谁 / 没有谁、`Events` 与 `Services` 的声明合并生效、五种派发的签名、`FiberState` 六个值与上游一致、示例插件装载 → 卸载后服务键与监听者一起消失、effect 逆序撤销 | K1——**已落地**：`examples/hello-plugin/`（类型断言在 `test/contract.ts`，运行期在 `test/host.test.ts`；`pnpm --filter cambia-example-hello-plugin test`） |
 | 集成（无 Tauri） | vitest + happy-dom + 真实 `.tap` 目录的 headless 宿主 fixture | 装载 → 注册 → 卸载 → **监听数归零、占用的服务键消失**（kernel 6.2 验收项） | K2 |
 | 后端进程 | cargo test | spawn / 超时 / 重启 / 优雅关闭 / 宿主退出回收（Windows 上断言无孤儿进程） | K2 |
 | E2E | WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server，覆盖 Windows/Linux/macOS；直用 `tauri-driver` 只有 Windows/Linux） | 真 WebView 下的动态模块装载、CSP 生效、iframe 视图 | K2 / K3 |

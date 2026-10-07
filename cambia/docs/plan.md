@@ -70,7 +70,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 |---|---|
 | **交付物** | 白名单再导出（`Context` / `Service` / `Fiber` / `FiberState` / `Events` / 派发与 effect 类型）、`exports` 只保留 `"."`、`Events` 的声明合并目标、版本化契约规则（语义变更 = major）、类型测试（类型断言用例） |
 | **依赖** | K1.1（语义清楚之后才谈固定 API） |
-| **验收** | `examples/` 里的示例插件只用 `@cambia/core` 就能写出一个完整插件（inject + effect + 事件），并且**不 import cordis**；`publint` + `@arethetypeswrong/cli` 通过 |
+| **验收** | `examples/` 里的示例插件只用 `@cambia/core` 就能写出一个完整插件（inject + effect + 事件），并且**不 import cordis**；`publint` + `@arethetypeswrong/cli` 通过（本包 ESM-only，attw 用 `esm-only` profile，见 implementation.md 3.1） |
 
 ### K1.3 隔离规则的强制执行与发布流程
 

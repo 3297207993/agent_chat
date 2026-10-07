@@ -275,7 +275,16 @@ cambia/
 Cordis 自身 API 未稳定（README 明言，4.0 长期停在 rc），因此**插件面向的 API 由 Cambia 冻结，而不是透传 Cordis**。三条规则：
 
 1. **插件只 import `@cambia/core`**：`Context` / `Service` 由 `@cambia/core` 再导出；插件侧禁止 `import ... from 'cordis'`（用 lint 规则强制）
-2. **类型化事件的声明合并目标永远是 `@cambia/core`**：`declare module '@cambia/core' { interface Events { ... } }`。一旦插件写成 `declare module 'cordis'`，将来换实现（vendor、换内核、升大版本）就会导致全体插件一起碎——这是本决策里**唯一事后无法补救**的地方
+2. **声明合并目标永远是 `@cambia/core`**：事件名写进 `Events`，服务键写进 `Services`——两者的形状都由 `@cambia/core` 冻结，插件的 `ctx.on` / `ctx.emit` / `ctx.<服务键>` 都按它们推导：
+
+   ```ts
+   declare module '@cambia/core' {
+     interface Events { 'hello/greeted'(payload: Greeted): void }
+     interface Services { greeter: Greeter }
+   }
+   ```
+
+   一旦插件写成 `declare module 'cordis'`，将来换实现（vendor、换内核、升大版本）就会导致全体插件一起碎——这是本决策里**唯一事后无法补救**的地方
 3. **`@cambia/core` 现在就当作最终包名**：将来若改为 vendor 源码，只换内部实现、包名不变，对插件作者透明
 
 > 升级策略：Cordis 4.0 发布正式版后评估是否继续依赖；若长期停留在 rc，则照 DeepSeek Harness 的做法 vendor 源码（pin commit + 上游版本清单 + 本地修改日志 + 保留 MIT LICENSE）。两条路对插件作者都不可见。
