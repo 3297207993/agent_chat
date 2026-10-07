@@ -4,15 +4,32 @@
   "private": true,
   "type": "module",
   "description": "Cambia 插件内核：把插件面向的 API 在 Cordis 之上固定下来（公开 API 契约见 kernel.md 5.3.1）",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
   "scripts": {
+    "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:publish": "publint && attw --pack . --profile esm-only"
   },
   "dependencies": {
     "cordis": "4.0.0-rc.10"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "publint": "^0.3.25",
+    "tsup": "^8.5.1",
     "typescript": "~5.8.3",
     "vitest": "^5.0.3"
   }

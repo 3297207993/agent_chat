@@ -1,0 +1,24 @@
+{
+  "name": "cambia-example-hello-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "示例插件：只依赖 @cambia/core，作为 K1.2 公开 API 契约的验收载体",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "pnpm --filter @cambia/core build && vitest run",
+    "typecheck": "pnpm --filter @cambia/core build && tsc --noEmit"
+  },
+  "dependencies": {
+    "@cambia/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3",
+    "vitest": "^5.0.3"
+  }
+}

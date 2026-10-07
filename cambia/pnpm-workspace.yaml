@@ -3,6 +3,7 @@
 # 是独立 workspace、独立 CI 轨道（implementation.md 3.3(g)）。
 packages:
   - packages/*
+  - examples/*
 
 # pnpm 默认拦截依赖的构建脚本，esbuild 需要执行 postinstall 安装平台二进制
 allowBuilds:
