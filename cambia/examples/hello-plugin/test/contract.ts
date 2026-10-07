@@ -71,7 +71,8 @@ export function dispatchSignatures(ctx: Context) {
 export function serviceKeys(ctx: Context) {
   const greeting: string = ctx.greeter.greet('cambia')
   // @ts-expect-error 服务键没声明过
-  ctx.undeclaredService
+  const undeclared: unknown = ctx.undeclaredService
+  void undeclared
   return greeting
 }
 

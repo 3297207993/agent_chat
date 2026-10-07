@@ -9,6 +9,16 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "check": "pnpm -r build && pnpm -r typecheck && pnpm -r test"
+    "lint": "eslint .",
+    "check": "pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm lint",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm -r build && changeset publish"
+  },
+  "devDependencies": {
+    "@cambia/eslint-config": "workspace:*",
+    "@changesets/cli": "^3.0.3",
+    "eslint": "^10.12.0",
+    "typescript-eslint": "^8.71.1"
   }
 }
