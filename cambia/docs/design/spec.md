@@ -52,6 +52,7 @@ K2.1 只落上表三件。**不在本批**：控制面协议（K2.7 才写）、
 | 生成物与代码不一致 | 漂移检查失败 | 跑 `spec:generate` 重新生成并提交；**不许手改** `manifest.schema.json` |
 | 两侧键集合不一致 | 一致性检查失败 | 以 `error-codes.json` 为准改代码；确需加码时先改表，再改两侧 |
 | 生成器表达不出某条约束（zod 的 JSON Schema 转换覆盖不到） | 生成物里缺约束，Rust 侧漏判，**而且没有任何提示** | 把约束改写成可表达的形式（正则 / `propertyNames` / `additionalProperties`）；真的表达不出来时记进 [../implementation.md](../implementation.md) 3.8 的风险表，并在 [host.md](./host.md) 注明"这一条只有 JS 侧判"。**实测（K2.1）：`refine` 会被静默丢掉，不抛错**——所以"有没有漏"只能靠纪律与评审，产物测试帮不上（它只能发现生成物被手改） |
+| 生成物在检出时被改了行尾（Windows 上 `core.autocrlf=true` 很常见） | 漂移检查红灯，但与契约无关 | `cambia/.gitattributes` 把 `spec/**` 固定成 `eol=lf`：产物是**逐字节**比对的，行尾必须原样穿过检出 |
 | 版本策略变更（`engines.cambia` 语义、废弃窗口） | 老插件判定结论变化 | 属 spec 变更：K3.1 之前不做；变更必须同时改表与两侧代码 |
 
 ## 验收方式

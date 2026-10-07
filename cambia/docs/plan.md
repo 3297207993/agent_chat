@@ -53,7 +53,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 | **依赖** | 无 |
 | **验收** | 在还没有任何实现的情况下，`pnpm -r build` / `pnpm -r test` / `cargo test` 全部通过；CI 三平台跑通；npm `@cambia` scope 已注册占位（kernel.md 第 7 节的建议）；插件模板与仓库内部共用同一份 eslint 配置，并且故意写违规代码时真的会被拦下 |
 
-> **欠账（2026-10-07 核对）**：JS 侧已落地（pnpm workspace、`packages/core`、`packages/eslint-config`、changesets、`examples/hello-plugin`）；**Rust 侧与 CI 轨道还没建**——根 `Cargo.toml`、`crates/plugin-host`、`packages/kit`、`spec/`、`tsconfig.base.json`、cambia 的两条 CI 轨道。其中 `spec/` 是 K2.1 的落地位置，随 K2.1 补；其余随 K2.5 与 K2.6 补。**这笔欠账不阻塞 K2.1–K2.4**，但 `cargo test` 与 CI 三平台这两条 D0 验收在补完之前不算通过。
+> **欠账（2026-10-07 复核，K2.1 之后）**：JS 侧已落地（pnpm workspace、`packages/core`、`packages/eslint-config`、`packages/host`、changesets、`examples/hello-plugin`），`spec/` 随 K2.1 补齐。**还缺**：根 `Cargo.toml`、`crates/plugin-host`、`packages/kit`、`tsconfig.base.json`、cambia 的两条 CI 轨道——这些随 K2.5 与 K2.6 补。**这笔欠账不阻塞 K2.1–K2.4**，但 `cargo test` 与 CI 三平台这两条 D0 验收在补完之前不算通过。
 
 ---
 
@@ -102,7 +102,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 
 | 项 | 内容 |
 |---|---|
-| **交付物** | zod schema（kernel.md 3 的字段全集）+ 用 `z.toJSONSchema()` 生成 `spec/v1/manifest.schema.json` + CI 比对检查；`engines` 判定（JS 用 `semver` / Rust 用 `node-semver`）；**错误码表初稿**（JS 与 Rust 共用，决定两侧的命令集合） |
+| **交付物** | zod schema（kernel.md 3 的字段全集）+ 用 `z.toJSONSchema()` 生成 `spec/v1/manifest.schema.json` + CI 比对检查；`engines` 判定（JS 用 `semver` / Rust 用 `node-semver`）；**错误码表初稿**（JS 与 Rust 共用，决定两侧的命令集合）。**落地（2026-10-07）**：`packages/host` 建成（zod schema、`validateManifest` / `parseManifest` 的错误码映射、`engines` 判定、激活事件匹配器）；`spec/v1/manifest.schema.json` 是生成物（`pnpm --filter @cambia/host spec:generate`）、`spec/v1/error-codes.json` 是手写码表（14 个码；`manifest` / `engines` 两 stage 已实现，`load` 五个随表定稿、实现归 K2.5）；`examples/**/cambia.json` 全部通过校验；一致性由 `packages/host/test/spec.test.ts` 守（D0 欠账里的 `spec/` 随之补齐）。 |
 | **依赖** | K1.2 |
 | **验收** | `examples/` 全部通过校验；非法 manifest（路径越界、未知 parts、缺 `engines`、平台键不合法）各有对应错误码；schema 生成物与代码一致（由 CI 验证） |
 

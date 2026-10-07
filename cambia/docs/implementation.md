@@ -146,6 +146,7 @@
 - 不选"JSON Schema 优先 + ajv + json-schema-to-typescript"（VS Code 的路线）：类型与校验两份来源，改一次要动两处；zod 4 已内置 JSON Schema 转换（事实 6），足以只维护一份 TS 源。
 - Rust 侧也必须能校验：安装期就要拒绝畸形包，不能等 WebView 起来。但 Rust 侧**只做 schema 级校验**，不做语义判定——避免出现第三份判定实现。
 - CI 检查：`spec/` 里的 schema 是生成物，CI 重新生成并 diff，禁止手改。
+- **实测（K2.1）**：`z.toJSONSchema()` 对 `.regex()` → `pattern`、`z.record(键 schema, 值)` → `propertyNames`、`z.union` → `anyOf`、`strictObject` → `additionalProperties: false`、`default` / `describe` 都能产出对应关键字，所以"平台键"与"路径越界"这类规则能让 Rust 侧免费拿到；但 **`refine` 会被静默丢掉**（不抛错，约束直接消失）。由此得一条硬规则：**凡是必须被 Rust 看到的约束，都要写成 JSON Schema 可表达的形式**，语义阶段只留"正则表达不了"的判定（`engines` 的范围求值）。产物一致性由逐字节比对守住（`packages/host/test/spec.test.ts`）。
 
 #### (b) `engines` 版本约束
 
@@ -153,6 +154,7 @@
 
 - 目的很具体：让"安装期判定（Rust）"与"装载期判定（JS）"不会得出不同结论——这是 P4 的直接应用。
 - 职责划分：crate 只回答"这个范围与我的版本是否相交"；"不兼容时是否仍允许安装"、"不兼容怎么提示"属于宿主策略，内核只定义格式与判定时机（kernel 3）。
+- **实测（K2.1）**：`semver.validRange('')` 返回 `'*'`（空范围在 semver 眼里是"任何版本"），所以判定显式拒绝空串——"没写约束"不该被静默接受；`semver.satisfies()` 对非法范围**会抛**，所以 `checkEngines()` 先用 `validRange` 判，保证它对未校验的输入也是全函数。预发布按 semver 默认语义：范围里不显式写预发布标签时，预发布版本不算相交。
 
 #### (c) 激活事件匹配
 
@@ -161,6 +163,7 @@
 - `onCommand:` / `onView:` / `onService:` 这类是固定前缀 + 标识符的精确匹配，自研十几行比引库更可控，且能产出 spec 错误码。
 - `workspaceContains:` 这类 glob 交给 picomatch（Vite 系生态同款，行为已被广泛验证），**不自研 glob**。
 - 注意命名归属：事件形态由宿主定义（kernel 1.9），host 只提供**匹配器接口**，具体事件由宿主注册——这条决定避免 host 里出现领域概念。
+- **定案（K2.1）**：只有模式里出现 `*` / `?` / `[` / `{` 才走 glob，其余一律按字面比较——**包括以 `!` 开头的模式**（picomatch 默认把 `!` 当取反，这里显式不采用：一个字面量不该因首字符变义）。匹配器对形态不合规的条目**跳过**而不是抛错：拒绝它们是 manifest 校验的事，匹配器在装载路径上，不能成为新的崩溃点。
 
 #### (d) 未激活原因诊断（只做诊断，不建图）
 
@@ -306,6 +309,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 - 错误码表：单独成篇；JS 与 Rust 两侧各以常量映射同一份表，CI 校验两侧键集合一致。
 - 版本策略：`engines.cambia` 的语义化规则、v1 冻结条件、deprecation 窗口。
 - 契约测试：`examples/` 下所有 manifest 必须同时通过 JS（zod）与 Rust（`jsonschema`）校验，且**两侧判定结论一致**——这是 K2 的验收项（两侧判定不一致是这套架构最现实的故障模式）。
+- **已落地（K2.1）**：`spec/v1/manifest.schema.json`（生成物，`pnpm --filter @cambia/host spec:generate`）、`spec/v1/error-codes.json`（手写码表：14 个码，带 `stage` 标注，`manifest` / `engines` 已实现、`load` 五个随表定稿但实现归 K2.5）、`spec/README.md`。JS 侧一致性由 `packages/host/test/spec.test.ts` 守（生成物逐字节 + 码表键集合双向），Rust 侧随 `crates/plugin-host`（K2.6）补一份对称检查。**`examples/hello-plugin` 的 manifest 已随本批加上**，`examples/**/cambia.json` 全部通过校验。
 
 ### 3.6 仓库与工具链
 
@@ -322,10 +326,11 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 层级 | 工具 | 覆盖 | 对应验收 |
 |---|---|---|---|
 | 上游行为锁定测试（最关键） | vitest | kernel 2.2 / 2.3 的五种派发、effect 逆序撤销的顺序、`inject` 就绪、**未满足的 `inject` 不发 `internal/status` 且 `await ctx.plugin()` 立即 resolve**、**`apply` 一直等待则 then 不 settle、`state=1`**（这两条锁住上游行为——3.2(d) 的原因诊断与 3.2(g) 的超时都建立在它们之上）、waterfall 终止实现、`next` 二次调用抛错、漏传终止实现的两种 TypeError 形态、重复 `dispose()` 的返回值、`internal/dispatch` 对 `parallel` 的上报怪癖 | cordis 升级的唯一安全网；K1——**已落地**：`packages/core/test/semantics/`（44 条用例，`pnpm --filter @cambia/core test`） |
-| 单元 | vitest / cargo test | manifest 校验、激活匹配、**未激活原因诊断的输出（环 / 没有提供者 / 待定）**、journal 恢复、平台键映射 | K2 |
+| 单元 | vitest / cargo test | manifest 校验、激活匹配、**未激活原因诊断的输出（环 / 没有提供者 / 待定）**、journal 恢复、平台键映射 | K2——**部分已落地（K2.1）**：manifest 校验、`engines` 判定、激活匹配在 `packages/host/test/`（5 个文件、107 条；`pnpm --filter @cambia/host test`），四类非法 manifest 各命中对应错误码 |
 | 契约一致性 | 同一批 fixtures 跑两侧 | JS 与 Rust 对同一 manifest 判定一致 | K2 |
 | 公开 API 契约（K1.2） | tsc（类型断言）+ vitest | 白名单有谁 / 没有谁、`Events` 与 `Services` 的声明合并生效、五种派发的签名、`FiberState` 六个值与上游一致、示例插件装载 → 卸载后服务键与监听者一起消失、effect 逆序撤销 | K1——**已落地**：`examples/hello-plugin/`（类型断言在 `test/contract.ts`，运行期在 `test/host.test.ts`；`pnpm --filter cambia-example-hello-plugin test`） |
 | 规则集自证（K1.3） | vitest + ESLint Node API | 四种违规写法（import cordis / cordis 子路径 / `declare module 'cordis'` / `@cambia/core/*` 子路径）必须报在对应规则上且文案指回 kernel.md；合规写法与**真实的示例插件**必须零告警 | K1——**已落地**：`packages/eslint-config/test/rules.test.ts`（`pnpm --filter @cambia/eslint-config test`）；全仓门禁是 `pnpm lint` |
+| 契约与生成物（K2.1） | vitest | `spec/v1/manifest.schema.json` 与代码生成结果逐字节一致；`ERROR_CODES` 与 `spec/v1/error-codes.json` 键集合双向一致；生成物里确实带着 Rust 要用的关键字（`propertyNames` / `additionalProperties: false` / 路径 `pattern`） | K2——**已落地**：`packages/host/test/spec.test.ts`；门禁 `pnpm check`（内核 CI 轨道建起来后跑同一条命令） |
 | 集成（无 Tauri） | vitest + happy-dom + 真实 `.tap` 目录的 headless 宿主 fixture | 装载 → 注册 → 卸载 → **监听数归零、占用的服务键消失**（kernel 6.2 验收项） | K2 |
 | 后端进程 | cargo test | spawn / 超时 / 重启 / 优雅关闭 / 宿主退出回收（Windows 上断言无孤儿进程） | K2 |
 | E2E | WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server，覆盖 Windows/Linux/macOS；直用 `tauri-driver` 只有 Windows/Linux） | 真 WebView 下的动态模块装载、CSP 生效、iframe 视图 | K2 / K3 |
@@ -343,7 +348,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 6 | 孙进程孤儿 | 资源泄漏 | `process-wrap` Job Object / 进程组 + 宿主退出钩子 | 设计内 |
 | 7 | 两侧 manifest 判定不一致 | 装得上但载不动 | 同一份 schema + JS 与 Rust 两侧一致性测试 | 设计内 |
 | 8 | `tauri-plugin-shell` 能否用于运行期安装的任意二进制 | 影响 3.3(e) 的路径选择 | **已定案：不作为主路径**——`kill()` 不会杀掉整棵进程树、无 job object 选项、Rust 侧 spawn 的子进程不被退出回收（事实 9） | **已定案** |
-| 9 | `tsdown` 仍是 0.x；zod 4 的 JSON Schema 转换覆盖度（联合、递归） | 工具链与 codegen 风险 | 构建回落 `tsup`；schema 转换边界先在 `examples/` 验证 | 待验证 |
+| 9 | `tsdown` 仍是 0.x；zod 4 的 JSON Schema 转换覆盖度（联合、递归） | 工具链与 codegen 风险 | 已定 `tsup`（不引入 `tsdown`）。zod 一侧 **已实测（K2.1）**：正则 → `pattern`、record 键 → `propertyNames`、union → `anyOf`、`strictObject` → `additionalProperties: false`、`default` / `describe` 均落地；**`refine` 被静默丢弃**，所以约束必须写成可表达的形式（3.2(a)） | **zod 部分已验证（K2.1）**；`tsdown` 不再涉及 |
 | 10 | `asset:` 的 scope 是**全局**的：放行插件根目录后，应用内任何 webview 都能读该目录 | 与"全信任同进程"一致，但不满足将来要收窄的诉求 | 现在就写进文档（**不做安全承诺**）；若将来需要隔离，切自定义 scheme + 请求级路径校验 | 已知，接受 |
 | 11 | WKWebView 不允许注册 `http`/`https`，同一 scheme 也不能注册两次；Windows 上 WebView2 只对 http/https 触发资源拦截（wry 的 `http://<scheme>.localhost` 变通即由此而来） | 自定义 scheme 的命名与注册时机 | scheme 名唯一且避开 `http(s)`；**必须在 `Builder` 阶段注册**（app 级，无法按 webview） | **已定案** |
 | 12 | macOS 上不能靠 `tauri-driver` 做 E2E | CI 矩阵覆盖不到 macOS | 用 WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server） | **已定案** |
