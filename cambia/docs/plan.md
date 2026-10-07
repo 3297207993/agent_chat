@@ -47,7 +47,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 
 | 项 | 内容 |
 |---|---|
-| **交付物** | 独立仓库 `cambia`，目录按 kernel.md 5.1 的形态建好：`packages/{core,host,kit}`、`crates/plugin-host`、`crates/tauri-plugin-cambia`、`spec/`、`examples/`；pnpm workspace + Rust workspace（**根 workspace 里把适配层 `exclude` 掉**，它自己是独立 workspace）；CI 分两条轨道（内核那条不装 tauri、跑得快；适配层那条跑三个平台，见 implementation.md 3.6）；lint 规则集单独成包；`tsup` 与 `vitest` 的初始配置；changesets；CONTRIBUTING 里写进三条硬规定——"包名不可变""cordis 显式固定版本、不跟 dist-tag""内核实现层不出现 Tauri 符号" |
+| **交付物** | 独立仓库 `cambia`，目录按 kernel.md 5.1 的形态建好：`packages/{core,host,kit}`、`crates/plugin-host`、`crates/tauri-plugin-cambia`、`spec/`、`examples/`；pnpm workspace + Rust workspace（**根 workspace 里把适配层 `exclude` 掉**，它自己是独立 workspace）；CI 分两条轨道（内核那条不装 tauri、跑得快；适配层那条跑三个平台，见 implementation.md 3.6）；lint 规则集单独成包；`tsup` 与 `vitest` 的初始配置；changesets；`docs/design/` 建好并在 docs/README.md 里登记（一个模块一个文件，见 CONTRIBUTING 硬规定 4）；CONTRIBUTING 里写进四条硬规定——"包名不可变""cordis 显式固定版本、不跟 dist-tag""内核实现层不出现 Tauri 符号""先出设计文档、再写代码" |
 | **依赖** | 无 |
 | **验收** | 在还没有任何实现的情况下，`pnpm -r build` / `pnpm -r test` / `cargo test` 全部通过；CI 三平台跑通；npm `@cambia` scope 已注册占位（kernel.md 第 7 节的建议）；插件模板与仓库内部共用同一份 eslint 配置，并且故意写违规代码时真的会被拦下 |
 

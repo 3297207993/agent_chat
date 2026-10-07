@@ -1,10 +1,11 @@
 # 参与 Cambia
 
-## 三条硬规定
+## 四条硬规定
 
 1. **包名不可变**：`@cambia/core` 现在就是最终包名。将来若改为 vendor 源码，只换内部实现、包名不动（kernel.md 5.3.1 规则 3）。改包名视为 breaking。
 2. **cordis 显式固定版本、不跟 dist-tag**：`cordis@4.0.0-rc.10` 写死在 `packages/core/package.json`（不带 `^`）。升级必须跑通 `packages/core/test/semantics/` 的上游行为锁定测试，并把结论回写 implementation.md 的事实表。
 3. **内核实现层不出现 Tauri 符号**：`packages/*` 与 `crates/plugin-host` 不许 import Tauri。Tauri 接线只存在于 `crates/tauri-plugin-cambia`（独立 workspace、独立 CI 轨道，根 workspace 里已 `exclude`）。检验标准是**删掉整个适配层，内核测试仍然全绿**。
+4. **先出设计文档、再写代码**：动手实现任何模块（`packages/*`、`crates/*`、`spec/`）之前，先在 [docs/design/](docs/design/) 里产出这个模块的设计文档——边界、接口、数据流、失败路径、验收方式、未决项，缺一样都不算写完。**一个模块一个文件**（`packages/host` 就是 `docs/design/host.md`），**一份文档只写一个模块，不许把多个模块的设计塞进同一份**（更不许写进某个共用文件里）。**没有设计文档的模块实现不评审**。设计文档可以随实现改，但要先改文档再改代码；模块做完后把实际结论回写进文档（同 plan.md 第 0 节"每批结束时把结论补写回文档"）。必备内容与模板见 [docs/design/README.md](docs/design/README.md)。
 
 ## 语言约定
 
