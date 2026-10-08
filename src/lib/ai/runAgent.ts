@@ -2,7 +2,6 @@ import { createAgentStream } from "./agent";
 import { estimateTokens } from "./tokenizer";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
-import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { hostContext } from "@/plugin";
@@ -35,9 +34,8 @@ export function buildSystemPrompt(conversationId: string): string | undefined {
         .categories.find((c) => c.id === conversation.categoryId)
     : undefined;
 
-  const effectiveRules = useRuleStore
-    .getState()
-    .getEffectiveRules(conversation, currentCategory);
+  // 规则归 rule-setting 插件（pluginization.md §2）：宿主经 hostContext() 取服务，同步拿快照
+  const effectiveRules = hostContext().rules.getEffectiveRules(conversation, currentCategory);
   const rulesPrompt = effectiveRules.map((r) => r.content).join("\n\n");
   // 全局系统提示词归 prompt 插件持有（pluginization.md §2）；宿主非组件代码经 hostContext() 取服务
   const globalSystemPrompt = hostContext().prompt.getGlobalPrompt();

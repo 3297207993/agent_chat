@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRuleStore } from "@/stores/ruleStore";
-import { useCategoryStore } from "@/stores/categoryStore";
-import { useConversationStore } from "@/stores/conversationStore";
-import type { Rule, RuleScope, RuleType, RuleFormat } from "@/types/rule";
+import type { ContributionProps, Rule, RuleScope, RuleType, RuleFormat } from "../../vocabulary";
+import { useCategories, useConversations, useRules } from "./useSessions";
 import {
   BookOpen,
   ArrowLeft,
@@ -12,7 +10,6 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  Loader2,
   Globe,
   FolderOpen,
   MessageSquare,
@@ -65,14 +62,15 @@ function RuleDialog({
   open,
   onClose,
   editRule,
+  ctx,
 }: {
   open: boolean;
   onClose: () => void;
   editRule?: Rule;
+  ctx: ContributionProps["ctx"];
 }) {
-  const { addRule, updateRule } = useRuleStore();
-  const { categories } = useCategoryStore();
-  const { conversations } = useConversationStore();
+  const categories = useCategories(ctx);
+  const conversations = useConversations(ctx);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -128,9 +126,9 @@ function RuleDialog({
     };
 
     if (editRule) {
-      await updateRule(editRule.id, payload);
+      await ctx.rules.updateRule(editRule.id, payload);
     } else {
-      await addRule(payload);
+      await ctx.rules.addRule(payload);
     }
     onClose();
   };
@@ -416,19 +414,14 @@ function RuleCard({
 
 // ── 主页面 ──
 
-export default function RulesPage() {
+export default function RulesPage({ ctx }: ContributionProps) {
   const navigate = useNavigate();
-  const { rules, loadFromDB, deleteRule, toggleEnabled } = useRuleStore();
-  const { categories } = useCategoryStore();
+  const rules = useRules(ctx);
+  const categories = useCategories(ctx);
 
   const [showDialog, setShowDialog] = useState(false);
   const [editRuleId, setEditRuleId] = useState<string | null>(null);
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadFromDB().then(() => setLoading(false));
-  }, [loadFromDB]);
 
   const filteredRules = rules.filter((r) => {
     if (filterTab === "all") return true;
@@ -441,7 +434,7 @@ export default function RulesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这条规则吗？")) return;
-    await deleteRule(id);
+    await ctx.rules.deleteRule(id);
   };
 
   const editRule = editRuleId ? rules.find((r) => r.id === editRuleId) : undefined;
@@ -450,14 +443,6 @@ export default function RulesPage() {
     if (!categoryId) return undefined;
     return categories.find((c) => c.id === categoryId)?.name;
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 size={24} className="animate-spin text-app-text-muted" />
-      </div>
-    );
-  }
 
   return (
     <div className="h-full flex flex-col bg-app-bg">
@@ -541,7 +526,7 @@ export default function RulesPage() {
                 categoryName={getCategoryName(rule.categoryId)}
                 onEdit={() => setEditRuleId(rule.id)}
                 onDelete={() => handleDelete(rule.id)}
-                onToggle={() => toggleEnabled(rule.id)}
+                onToggle={() => ctx.rules.toggleEnabled(rule.id)}
               />
             ))}
           </div>
@@ -556,6 +541,7 @@ export default function RulesPage() {
           setEditRuleId(null);
         }}
         editRule={editRule}
+        ctx={ctx}
       />
     </div>
   );

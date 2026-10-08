@@ -2,9 +2,11 @@
 export { bootHost, hostContext } from "./host";
 export { PluginHostProvider, useGlobalSystemPrompt, useHost, useViewSlot } from "./react";
 export type {
+  ContributionProps,
+  MainPage,
+  PanelTab,
   PromptService,
   SettingsSection,
-  SettingsSectionProps,
   StorageService,
   TopbarAction,
   ViewItem,

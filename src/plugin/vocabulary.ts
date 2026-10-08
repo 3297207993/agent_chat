@@ -23,6 +23,29 @@ import type {
   MessagePatch,
   StoredMessage,
 } from "./builtin/message/types";
+import type { Rule, RuleDraft, RulePatch } from "./builtin/rule-setting/types";
+
+// 词汇表是插件可见的**唯一**宿主模块（§1.2），所以跨域类型也从这里出口：插件只要 import 它，
+// 不必去指另一个插件的内部路径
+export type {
+  Category,
+  CategoryDraft,
+  CategoryPatch,
+  Conversation,
+  ConversationDraft,
+  ConversationPatch,
+  MessageDraft,
+  MessagePatch,
+  StoredMessage,
+} from "./builtin/message/types";
+export type {
+  Rule,
+  RuleDraft,
+  RuleFormat,
+  RulePatch,
+  RuleScope,
+  RuleType,
+} from "./builtin/rule-setting/types";
 
 declare module "@cambia/core" {
   interface Services {
@@ -34,6 +57,8 @@ declare module "@cambia/core" {
     prompt: PromptService;
     /** 对话 / 消息 / 分类的存取（pluginization.md §2 的 message 插件）。 */
     sessions: SessionsService;
+    /** 规则数据与绑定解析（pluginization.md §2 的 rule-setting 插件）。 */
+    rules: RulesService;
   }
 
   interface Events {
@@ -173,18 +198,64 @@ export interface SessionsService {
 }
 
 /**
- * 设置分组的渲染 props。
+ * `ctx.rules`。
+ *
+ * 快照在内存里（插件激活时加载一次），所以 `snapshot()` / `getEffectiveRules()` 是同步的——
+ * 宿主装配 system prompt 时每一轮都要用，异步读表会把它拖成异步。变更用 `subscribe()` 通知，
+ * 它不需要走事件：这里的状态是**同步**的，事件那条通道留给"跨进程/异步的事实"（§2.1）。
+ */
+export interface RulesService {
+  /** 当前快照。调用方不要改它，改走 `addRule` / `updateRule`。 */
+  snapshot(): Rule[];
+  /** 快照变化通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
+  /** 重新从存储加载（激活时已经调过一次）。 */
+  reload(): Promise<void>;
+
+  addRule(draft: RuleDraft): Promise<string>;
+  updateRule(id: string, updates: RulePatch): Promise<void>;
+  deleteRule(id: string): Promise<void>;
+  toggleEnabled(id: string): Promise<void>;
+
+  /**
+   * 该对话当前生效的规则，按作用域具体程度排序（对话 > 引用 > 分类 > 全局）：越具体的越靠前，
+   * 拼进 system prompt 时占 recency 优势；同一条规则出现在多层时只保留最具体的那次。
+   */
+  getEffectiveRules(
+    conversation?: Conversation | null,
+    category?: Category | null,
+  ): Rule[];
+}
+
+/**
+ * 贡献项的渲染 props。
  *
  * 宿主把内核根 context 交给贡献项，而不是让插件 import 宿主模块：插件组件从这里取服务，与
  * 非组件代码走的是同一条通道。
  */
-export interface SettingsSectionProps {
+export interface ContributionProps {
   readonly ctx: Context;
 }
 
 /** 设置页上的一个分组。分组的容器与标题由组件自己渲染（外壳不追加包装，避免重复的间距约定）。 */
 export interface SettingsSection extends ViewItemBase {
-  readonly render: ComponentType<SettingsSectionProps>;
+  readonly render: ComponentType<ContributionProps>;
+}
+
+/**
+ * 一个路由页面。**路径归插件、容器归外壳**：插件给出 `path` 与组件，外壳把它挂进自己的 router
+ * （在 `AppLayout` 之内，于是页面自动获得外壳的框架）。
+ */
+export interface MainPage extends ViewItemBase {
+  readonly path: string;
+  readonly render: ComponentType<ContributionProps>;
+}
+
+/** 右侧面板上的一个页签。 */
+export interface PanelTab extends ViewItemBase {
+  readonly label: string;
+  readonly icon?: ComponentType<{ size?: number }>;
+  readonly render: ComponentType<ContributionProps>;
 }
 
 /**
@@ -194,6 +265,8 @@ export interface SettingsSection extends ViewItemBase {
 export interface ViewSlots {
   "topbar.action": TopbarAction;
   "settings.section": SettingsSection;
+  "main.page": MainPage;
+  "panel.tab": PanelTab;
 }
 
 export type ViewSlot = keyof ViewSlots;

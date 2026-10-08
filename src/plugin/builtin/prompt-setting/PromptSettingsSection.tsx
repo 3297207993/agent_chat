@@ -1,6 +1,6 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { Check, X } from "lucide-react";
-import type { SettingsSectionProps } from "../../vocabulary";
+import type { ContributionProps } from "../../vocabulary";
 
 /**
  * 「系统提示词」设置分组。原先在 `components/settings/SystemPromptSettings.tsx`，跟着它的插件搬进来。
@@ -9,7 +9,7 @@ import type { SettingsSectionProps } from "../../vocabulary";
  * 边界够不着它（右侧「上下文」面板仍在显示这个数）。等 llm 键位或宿主的配置表单渲染器（§3 第一层）
  * 就位再补回来。
  */
-export default function PromptSettingsSection({ ctx }: SettingsSectionProps) {
+export default function PromptSettingsSection({ ctx }: ContributionProps) {
   const prompt = ctx.prompt;
   // 订阅函数要稳定：内联箭头会让 useSyncExternalStore 每次渲染都退订再订阅一遍
   const subscribe = useCallback((listener: () => void) => prompt.subscribe(listener), [prompt]);

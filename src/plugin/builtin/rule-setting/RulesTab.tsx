@@ -1,21 +1,18 @@
-import { useConversationStore } from "@/stores/conversationStore";
-import { useCategoryStore } from "@/stores/categoryStore";
-import { useRuleStore } from "@/stores/ruleStore";
 import { Tag } from "lucide-react";
+import type { ContributionProps } from "../../vocabulary";
+import { useCategories, useCurrentConversation, useRules } from "./useSessions";
 
-export default function RulesTab() {
-  const { currentConversationId, conversations } = useConversationStore();
-  const { categories } = useCategoryStore();
-  const { getEffectiveRules } = useRuleStore();
+export default function RulesTab({ ctx }: ContributionProps) {
+  const currentConversation = useCurrentConversation(ctx);
+  const categories = useCategories(ctx);
+  // 只为订阅：规则快照一变就重渲染，下面再从服务同步取生效规则
+  useRules(ctx);
 
-  const currentConversation = currentConversationId
-    ? conversations.find((c) => c.id === currentConversationId)
-    : null;
   const currentCategory = currentConversation?.categoryId
-    ? categories.find((c) => c.id === currentConversation.categoryId)
+    ? (categories.find((c) => c.id === currentConversation.categoryId) ?? null)
     : null;
 
-  const effectiveRules = getEffectiveRules(currentConversation, currentCategory);
+  const effectiveRules = ctx.rules.getEffectiveRules(currentConversation, currentCategory);
 
   if (effectiveRules.length === 0) {
     return (
