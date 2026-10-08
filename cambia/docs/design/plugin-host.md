@@ -1,0 +1,130 @@
+# `crates/plugin-host` 设计
+
+> 状态：**草稿**（未开工；K2.5 / K2.6 动手前需评审）
+> 对应批次：K2.5（`.tap` 打包 / 校验 / 下载 / 原子安装）、K2.6（后端子进程托管、控制面协议）。K2.4 只用它的最小接线，不实现本模块。
+> 只写这一个模块。语义以 [../kernel.md](../kernel.md) 3.3 / 4 为准，选型以 [../implementation.md](../implementation.md) 3.3 为准，本文不重新定义它们。
+> 姊妹文档：TS 侧的端口清单在 [host.md](./host.md)（"与宿主运行时的接缝"）；Tauri 接线在 `tauri-plugin-cambia.md`（**尚未建**，动手前补）。
+
+## 边界
+
+**负责**（"必须比 WebView 活得久"或"要用 OS 权限"的那一半）：
+
+- **`.tap` 与安装**：打包与解包（**唯一实现**，可复现的打包规范）、sha256 校验、下载到 staging、原子替换、journal 恢复、卸载
+- **安装目录的权威**：布局、`<id>/<version>-<hash>` 命名、**"装了哪些"这一事实的唯一来源**
+- **文件读取**：端口 `readText` 的实现（本模块不解析 manifest 语义，只交字节）
+- **后端子进程托管**：spawn、启动超时、重启退避、优雅关闭、**宿主退出时的全量回收**
+- **控制面传输**：stdio 管道、帧、请求关联、超时/取消（**分工位置未决，见下**）
+- **平台键映射**：spec 的 `win|mac|linux` + `x64|arm64` → `std::env::consts::{OS, ARCH}` 的显式映射表
+
+**不负责**：
+
+| 不负责的东西 | 归谁 |
+|---|---|
+| manifest 的**语义**校验（`engines` 判定、激活匹配、错误码映射） | TS 侧 `@cambia/host`（[host.md](./host.md)，K2.1 已落地）。本模块只做 schema 级安装期校验，读 `spec/v1/manifest.schema.json` |
+| 插件前端模块的装载（`import()`、判定、卸载） | TS 侧 `@cambia/host`（K2.2 已落地） |
+| **编排策略**：何时装、何时起后端、失败怎么办 | TS 侧中枢（详见 [host.md](./host.md)"端口清单"的分工规则） |
+| 展示协议、服务键的**领域语义** | 宿主应用（[../kernel.md](../kernel.md) 1.9） |
+| Tauri 符号（协议注册、命令集合、权限文件） | 适配层 `crates/tauri-plugin-cambia`（独立 workspace / CI 轨道） |
+
+**硬约束**：crate **不出现任何 Tauri 符号**——内核实现层不依赖 Tauri（CONTRIBUTING 硬规定 3）。所以它能被纯 `cargo test` 完整覆盖，也能被任何 Rust 宿主复用。
+
+## 接口
+
+### 与 TS 端口的对应关系
+
+TS 声明端口，**实现在本 crate**，中间由适配层转成 Tauri 命令：
+
+```
+TS（@cambia/host）        端口           适配层（tauri-plugin-cambia）      本 crate
+loadPluginModule(url) ← moduleURL(rel) ← command          ← 路径与 scheme（asset: 由适配层做）
+parseManifest(text)   ← readText(rel)  ← command          ← 文件读取
+判定 → 编排            ← listInstalled() ← command          ← 安装目录 + journal
+                        ← spawn/kill                            ← 进程监督器
+                        ← call/onCall                           ← 控制面（位置未决）
+```
+
+| 端口 | Rust 侧对应 | 批次 |
+|---|---|---|
+| `readText(relPath)` | 读安装根目录下的文件，返回文本 | 待分配（建议 K2.5） |
+| `listInstalled()` | 扫安装目录 + 读 journal，返回 `[{id, version, hash, dir, enabled}]` | 待分配（建议 K2.5） |
+| `spawn(spec)` / `kill(id)` | 进程监督器 | K2.6 |
+| `call` / `onCall` | 控制面传输 | K2.6（位置未决） |
+
+**进程句柄不进 TS**：`spawn` 返回的是**标识**（id / 世代号），不是句柄；`kill(id)` 是**请求**。理由不是风格——见 [host.md](./host.md)"进程端口"一节：退出回收必须由 OS 级机制保证（Job Object / 进程组），"JS 调用 kill"这条路径在 WebView 崩了、窗口被关、应用被强杀时根本不会执行。`tauri-plugin-shell` 被否掉正是同一个坑（implementation.md 事实 9）。
+
+## 数据流与状态
+
+**安装（K2.5）**：
+
+```
+.tap → 下载到 staging → sha256 校验 → 解包到 staging/<id>/<version>-<hash>
+    → 写 journal（意图） → 同卷 rename 进 plugins/ → journal 提交
+```
+
+**状态权威（必须唯一）**：
+
+| 想知道 | 权威在哪 | 谁只是视图 |
+|---|---|---|
+| 装了哪些、哪些被禁用 | **本 crate**：安装目录 + journal | TS 侧（`listInstalled` 的返回值） |
+| 某个插件前端激活了没有 | TS 侧运行期：`Fiber.state`（[host.md](./host.md)） | — |
+| 某个插件后端在不在 | **本 crate**：进程表 | TS 侧（`BackendHandle.status`） |
+
+两份状态各说一套是必须避免的（[host.md](./host.md) 的"三处状态各有唯一来源"是同一条纪律）。所以 TS 侧**不缓存**"装了哪些"——它每次问 `listInstalled`，或接受它是缓存但明确写"以 crate 为准"。
+
+**进程（K2.6）**：进程表在本 crate，条目含 pid、世代号、job object / 进程组句柄、stderr 文件位置。回收走双保险：`RunEvent::ExitRequested` / `Exit` 钩子 **+** `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`（Windows）/ 进程组（Unix）——**不能只靠钩子**，钩子本身可能跑不到（implementation.md 3.3(e)）。
+
+## 失败路径
+
+| 失败 | 表现 | 本模块的行为 | 对应码 |
+|---|---|---|---|
+| 下载失败 / 中断 | 网络错误 | 留在 staging，不碰已装版本 | `INSTALL_*`（随 K2.5 的命令集合补） |
+| sha256 不符 | 校验失败 | 丢弃 staging，原子安装不开始 | 同上 |
+| 解包失败（不是 `.tap` / 结构不符） | 解包抛错 | 丢弃 staging | 同上 |
+| 打包格式的版本不认识 | 规范版本高于本宿主 | 明确拒绝，不"尽力而为" | 同上 |
+| 并发安装 / 更新 / 卸载同一插件 | 两个进程同时动 | 幂等；journal 保证只有一个赢 | 同上 |
+| 中途崩溃（进程被杀） | journal 停在"意图"阶段 | 下次启动按 journal 恢复（回滚或补完） | 同上 |
+| **Windows 文件占用**：更新时旧版本仍被进程占用 | rename 失败 | **先停该插件的后端再替换**（所以 crate 要知道"这个后端属于哪个插件"）；仍失败则推迟到下次启动 | 同上 |
+| 平台键无命中 | `bin` 里没有本平台的键 | **只禁用该插件的后端**，不降级到别的形态、不猜路径 | kernel.md 3.3 |
+| spawn 失败 / 启动超时 | 进程起不来或没上报就绪 | 记失败，按退避重试到上限 | K2.6 |
+| 后端崩溃 | 进程退出 | **只影响它自己**：回收 + 按策略重启，**不许连带停掉前端**；退出码与 stderr 留存 | K2.6 |
+| 后端起孙进程 | 只杀直接子进程会留孤儿 | Job Object / 进程组收拾整棵树——这是 K2.6 的验收项 | K2.6 |
+| 协议帧损坏 / 无响应 | 解析失败或超时 | 单次调用失败，不等于进程死亡 | K2.6 |
+
+## 验收方式
+
+| 手段 | 覆盖 | 对应验收 |
+|---|---|---|
+| `cargo test`（纯 Rust，无 Tauri） | `.tap` 往返、sha256、journal 恢复、平台键映射表、进程监督器的状态机 | K2.5 / K2.6 |
+| **两侧一致性** | JS 打的包能被 Rust 解开、Rust 打的包能被 JS 校验（同一批 fixtures 判定一致） | K2.5（[../plan.md](../plan.md) 4 节） |
+| 注入故障 | 并发安装 / 更新 / 卸载幂等；journal 恢复 | K2.5 |
+| Windows 断言 | 宿主退出后**没有孤儿进程**，含"后端再起孙进程"的用例 | K2.6 |
+| Windows 文件占用用例 | 先停后端再替换；失败则推迟 | K2.5 |
+| 双向协议用例 | 宿主→后端 与 后端→宿主 两个方向，Node 与 Python 两个 SDK 结论一致 | K2.6 |
+
+## 未决项
+
+| 未决项 | 现在怎么办 |
+|---|---|
+| **控制面薄层放哪一侧**（本 crate vs TS）——**开工前必须定** | 见下方专节 |
+| **无窗口时中枢还能不能在** | 若编排中枢在 WebView 里的 TS，"应用启动即起后端""托盘常驻、没有窗口也跑插件"就不成立。要么接受"没有 WebView 就没有插件"，要么在本 crate 留一个最小触发点：它只负责在 `Ready` 时**拉起**，不接管语义。这条会反过来影响上一条 |
+| 后端崩溃后重启的具体参数（退避曲线、次数上限、是否永久禁用） | 属实现细节，用测试把行为固定下来即可（[../plan.md](../plan.md) 第 7 节） |
+| 签名（minisign） | 后置；K2.5 只做 sha256（implementation.md 3.3(b)） |
+| stderr 日志的轮转策略与体量上限 | 本 crate 负责分文件与轮转（implementation.md 3.3(e)）；具体阈值随实现定 |
+| `.tap` 打包规范的版本号与兼容窗口 | 随 K2.5 定；"规范版本高于宿主即拒绝"这条行为要先写测试 |
+
+### 专节：控制面薄层放哪一侧
+
+现状文档把它定在本 crate（implementation.md 3.3(f)：JSONL 帧 + 请求关联 + 超时 + 取消，约 300 行）。另一种做法是搬进 TS，让 TS 直接从 stdin/stdout 读流。**两种都可行，但代价不同**：
+
+| 维度 | 在本 crate（现状） | 在 TS |
+|---|---|---|
+| 每帧成本 | 一次 WebView IPC | 一次 WebView IPC（相同） |
+| **超时/取消的可靠性** | 在别的线程上，插件把 JS 事件循环卡死也照样触发 | **被插件拖累**：没有 Worker 隔离，前端插件死循环会卡住整个应用，控制面的超时也跟着不准时 |
+| 背压处理 | Rust 侧可阻塞读 | JS 慢时要么积压要么丢，必须显式选 |
+| 双向分派（后端 → 宿主/前端） | 需要在 Rust 侧转一次 | 终点本来就在 JS，少一跳 |
+| 实现量 | 约 300 行 Rust | 差不多，但要在 JS 里维护 id 表与定时器 |
+| 与"内核语义不进 Rust"的关系 | 传输层，不含领域语义；方法名与路由仍由 TS 决定 | — |
+
+**建议的折中**（倾向，不是定论）：**帧与请求关联、超时/取消留在本 crate，服务契约与路由留在 TS**。Rust 对上暴露"已经关联好、已经带超时"的 `call(method, params) → Promise<result>`，TS 只回答"哪个方法名对应哪个服务键"。这样每帧仍然只跨一次 IPC，但 TS 侧不必自己维护 id 表与定时器，超时也不受插件卡顿影响。
+
+**定这条之前要做的**：把"后端 → 宿主/前端"这条反向调用路径**具体画一遍**（后端发起 → 谁解析 → 谁路由 → 前端哪个服务键 → 结果怎么回），标出每一跳的排队点。凭感觉选侧容易在 K2.6 返工。

@@ -86,17 +86,73 @@ manifest 的类型与校验在本模块，**唯一来源是 zod**（[../implemen
 - **判定用的 zod issue 形态**（错误码映射按此写）：缺键 = `invalid_type` 且该位置取值为 `undefined`；未知 parts = `unrecognized_keys`（带 `keys`）；非法平台键 = `invalid_key`；正则不符 = `invalid_format` + `format: 'regex'`。
 - **两处默认值**：`parts.frontend.main` 缺省 = `frontend/main.js`（kernel 3 的默认）；`activationEvents` 缺省 = `['always']`——不让"没声明激活条件"静默变成"永远不激活"。后者 spec 没写明，记在 [spec.md](./spec.md) 的未决项里，K3.1 复核。
 
-### 与宿主运行时的接缝：`PluginHostBridge`
+### 与宿主运行时的接缝：端口清单
+
+**分工规则（一条，且可判定）**：
+
+> **"必须比 WebView 活得久"或"要过 CSP、要用 OS 权限"的归 Rust；其余归 TS。**
+
+它的推论有三条，构成本模块与 Rust 侧的分界：
+
+1. **TS 是编排中枢**：何时装、何时起、何时停、失败怎么办，全部由 TS 决定。它掌握的是**策略**；
+2. **Rust 是能力的唯一提供者，也是最终所有者**：文件、进程、**退出回收**只有 Rust 能做对（理由见下）。协议传输的分工位置**尚未定**——那是 [plugin-host.md](./plugin-host.md) 的未决项，不在本节的结论里；
+3. **端口声明在 TS，实现在适配层**（`crates/tauri-plugin-cambia` 或 `crates/plugin-host`）。这不是新范式——硬规定 3（内核实现层不出现 Tauri 符号）本来就把端口声明逼到了这一侧，`moduleURL` 已经是这么长出来的第一根。
+
+| 端口 | 签名 | 实现方 | 为什么在这一侧 | 失败形态 | 批次 |
+|---|---|---|---|---|---|
+| `moduleURL` | `(relPath) => Promise<string>` | 适配层 | 平台分叉（`http://asset.localhost/…` / `asset://localhost/…`）与 `asset:` scope 都是 Tauri 的知识 | 协议层失败（403 / 404），本层不分类 | **K2.2 已落地** |
+| `readText` | `(relPath) => Promise<string>` | crate | **必须与 `moduleURL` 分开**，见下 | 读不到 = 安装损坏 | 待分配（见"未分配的一项"） |
+| `listInstalled` | `() => Promise<InstalledPlugin[]>` | crate | 安装目录、`<version>-<hash>` 布局、journal 都在 crate 手里，它是"装了哪些"的**权威** | 目录读不动 / journal 不一致 | 待分配（同上） |
+| `spawn` / `kill` | `(spec) => Promise<BackendHandle>` / `(id) => void` | crate | 进程句柄的所有权与回收**不能**依赖 JS，见下 | 启动超时 / 退出码 / 孤儿进程 | K2.6（K2.5 铺安装） |
+| `call` / `onCall` | RPC 方法调用与反向分派 | **位置未决** | 见 [plugin-host.md](./plugin-host.md) 的未决项 | 超时 / 取消 / 协议错误 | K2.6 |
+
+#### 为什么 `readText` 与 `moduleURL` 必须分开
+
+文档里已经写明一条后果（K2.4 要实测的前提之一，本文"两条环境前提"）：**`asset:` 取文件是 fetch 语义**，只放行 `script-src` 时会被 `connect-src` 挡掉、诊断静默降级。所以：
+
+- **只有"要被 `import()` 的那一个 bundle"**该走 `moduleURL`——它必须穿过 CSP，这是它的代价也是它的用途；
+- **内部文件读取不该穿过 CSP**。读 `cambia.json` 走 `readText`（Rust 文件读取），不会被 CSP 挡、也不会因为宿主 CSP 配置不同而行为不一致。
+
+还有一条顺带的结论值得单独写下来：**manifest 的读取与 K2.4 那个未验的通道无关**——它不经过 `fetch`、不经过 `asset:`，只走 Rust 的文件读取。所以"通道还没验"不妨碍读 manifest、也不妨碍判定（K2.1 的整条链已经可用）。
+
+#### `ManifestReader` 应拆成三件，不是一件
+
+"读文件 + 枚举目录 + 解析"看起来像一个接口，但这三件的归属不同：
+
+| 你要的能力 | 落在哪 | 现状 |
+|---|---|---|
+| 枚举"装了哪些" | `listInstalled`（Rust） | 不存在——**这是本次讨论发现的洞** |
+| 读某个文件的文本 | `readText`（Rust） | 不存在 |
+| 解析 + 校验 + 版本判定 + 激活匹配 | TS | **K2.1 已全部就位**（`parseManifest` / `checkEngines` / `createActivationMatcher`） |
+
+也就是说第三件已经做完了，缺的只是"文本从哪来"。把它合成一个端口会让 Rust 侧去理解 manifest 语义——那是 TS 的事（`spec/*/manifest.schema.json` 是生成物，Rust 只做安装期 schema 级校验）。
+
+#### 进程端口：TS 发**请求**，Rust 给**保证**
 
 ```ts
-export interface PluginHostBridge {
-  /** 插件根目录下的相对路径 → 可被 import() 的 URL */
-  moduleURL(relativePath: string): Promise<string>
+interface BackendSupervisor {
+  spawn(spec: BackendSpec): Promise<BackendHandle>   // 句柄所有权在 Rust
+  kill(id: string): void                             // TS 发起的是一次请求，不是回收的保证
 }
 ```
 
-- URL 的生成在适配层，**平台分叉收在一个 URL 助手**里：Windows/Android 是 `http://asset.localhost/<…>`，macOS/iOS/Linux 是 `asset://localhost/<…>`（[../implementation.md](../implementation.md) 事实 7）。本模块**不拼 URL、不出现 `asset` / `tauri` 字样**（CONTRIBUTING 硬规定 3）。
-- 现在只有一个方法是有意的：这个接缝存在的理由是隔离宿主，不是造通用适配框架。K2.5 的安装编排与 K2.6 的进程托管各自按需加方法，不为假想的第二宿主预留。
+这条边界不是风格问题，是三个具体后果：
+
+1. **"应用退出 ⇒ 整棵进程树必被回收"不能依赖 JS 调用**。[../implementation.md](../implementation.md) 3.3(e) 已经写明：`RunEvent::ExitRequested` / `Exit` 钩子**本身可能跑不到**，所以 Job Object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`）/ 进程组是双保险而不是备选。WebView 崩了、窗口被关、应用被强杀——这几种情况下"TS 调用 kill"这条路径根本不会执行，只有 OS 级机制能收拾插件后端自己起的孙进程。
+2. **这正是 `tauri-plugin-shell` 被否掉的理由**（implementation.md 事实 9）：Rust 侧 spawn 的子进程不进它的退出回收表，`CommandChild::kill()` 也不杀进程树。让 JS 掌握句柄会把同一个坑再踩一遍。
+3. **stdin/stdout 是 OS 管道**，读的一端要处理背压。JS 侧读意味着每一帧都跨一次 WebView IPC。
+
+#### 对已有代码的影响
+
+- `moduleURL` **不变**——它本来就是对的。两条既有约束也照旧：URL 的生成在适配层，**平台分叉收在一个 URL 助手**里（Windows/Android 是 `http://asset.localhost/<…>`，macOS/iOS/Linux 是 `asset://localhost/<…>`，implementation.md 事实 7）；本模块**不拼 URL、不出现 `asset` / `tauri` 字样**（CONTRIBUTING 硬规定 3），这条对后面新增的端口一样适用。
+- 本节原有一句话"现在只有一个方法是有意的"要改成"**方法的数量跟着真实需求长**"：`readText` / `listInstalled` 落地时，`PluginHostBridge` 会长到 2–3 个方法。理由没变（这个接缝是为了隔离宿主，不是为了造通用适配框架），但"只留一个"不再是承诺。
+- **K2.3 不需要这些端口**：遗漏诊断只读运行期事实（`ctx.registry` 枚举 fiber 的 `inject`、以及谁的 `provide` 已注册），全程不碰磁盘（[../implementation.md](../implementation.md) 3.2(d)）。所以这两个端口晚定不会拖住 K2.3。
+
+#### 未分配的一项（本次讨论发现的洞）
+
+plan.md 的 K2.2 交付物原文是"loader（**读 manifest** → … → `import()` → `ctx.plugin()`）"，但 K2.2 实际交付的是**从"路径"起步**的 [`load(ctx, path)`](../../packages/host/src/loader.ts)。**"枚举已装插件 + 读 manifest 文本 → 判定 → 装载"这段编排目前不属于任何批次**（`listInstalled` + `readText` + 一个把二者与 K2.1 的判定串起来的入口）。
+
+**建议归 K2.5**：它本来就拥有安装目录与 journal，是"装了哪些"的权威；在那之前 K2.3 不受影响、K2.4 也不受影响（通道验证只需要一个 URL，不需要枚举）。**这条需要你点头**——它会改变 K2.5 的交付物清单。
 
 ### 装载层（K2.2 交付）
 
@@ -226,14 +282,36 @@ PluginRef{id,version,hash} → pluginModulePath() → 相对路径
 
 失败时同一路径反向产出 `PluginLoadError`（码 + URL + 探测结果）。整条路径上没有 Tauri、没有磁盘布局假设。
 
-装载层不持有任何"插件状态副本"，三处状态各有唯一来源：
-
 **本模块不持有插件状态副本**，三处"状态"各有唯一来源：
 
 | 想知道 | 读哪里 |
 |---|---|
 | 这个插件激活了没有 | `Fiber.state`，变化由 `internal/status` 派发（观测方式见 [../implementation.md](../implementation.md) 3.2 开头的词表） |
 | 这个插件还在不在 | `Fiber.uid`（`null` = 已卸载）。**不能看 state**：从未激活的插件卸载后停在 `PENDING` 而不是 `DISPOSED`（K1.1 锁定） |
+
+#### 一个插件 = 一条记录，两条独立生命周期
+
+前端与后端应该聚合在**同一条记录**里（按插件 id 键控），而不是"前端一份、后端一份、互不知晓"——文档里已经有好几处需要这种聚合：代理 Service 要挂在正确的插件名下、失败要定位到"哪个插件的哪个文件"、K2.5 的验收写着"Windows 文件占用时**先停后端再替换**"（那得知道这个后端属于谁）。
+
+但聚合必须是**数据，不是控制器**：
+
+```
+PluginRecord = {
+  id, ref, manifest,                          // 契约层（K2.1）
+  frontend?: { url, module, fiber, state },   // K2.2 已落地（就是现在的 LoadedPlugin）
+  backend?:  { handle, status, proxyKeys },   // K2.6
+}
+```
+
+三条理由说明为什么不能"一起启停"：
+
+1. **触发时机不同**：前端随 `activationEvents` 懒激活（同进程）；后端由宿主按策略 spawn。前端激活了不等于后端该起，反之亦然。
+2. **失败语义不同**：后端崩溃"只影响它自己，宿主只需回收与重启"（[../kernel.md](../kernel.md) 3.3）——**不许连带下架前端**；平台不支持时"只禁用该插件的后端，不降级到别的形态"（同章）。
+3. **manifest 里两部分各自可选**：只有前端、只有后端、两者都有、都没有（只有 `contributes` 的声明型）都是合法形态。
+
+**顺序是现成的，不需要编排字段**：如果后端起好之后宿主才 `provide` 那个代理 Service，那么 `inject` 该键的前端插件会自然停在 `PENDING`，等它就位再激活（事实 11 的迟到激活）。manifest 里本来也没有 `dependsOn`——依赖只用服务键表达（[../kernel.md](../kernel.md) 1.4）。
+
+**对已有代码的影响**：现状 `LoadedPlugin` 是**前端那一半**的记录，形状不冲突——K2.6 落地时它是 `PluginRecord.frontend`。名字在那一刻改（`LoadedPlugin` 听起来像"整个插件"，实际只是前端部分），**现在不改**：后端记录还不存在，提前改名只是空转。
 
 **两条环境前提**（本批实测后回写为事实 13–15，写进实现而非假设）：
 
@@ -286,7 +364,12 @@ K2.4 的完成定义不含"写多少代码"，只含"证明主路径成立并留
 
 | 未决项 | 现在怎么办 |
 |---|---|
-| 命令集合（`install` / `uninstall` / `list` / `enable`）与 `INSTALL_*` 一类错误码 | 都不在本批：命令集合归适配层（K2.5），码表的安装语义随之补——**命令要报的错必须先有码**（[../plan.md](../plan.md) 第 1 节） |
+| **RPC 薄层放哪一侧**（Rust 传输层 vs TS）：帧与请求关联、超时/取消、双向分派 | **未决，且会决定 K2.6 的接口形状**——对比与推荐见 [plugin-host.md](./plugin-host.md) 的未决项。开工前必须先定，否则会在"谁维护 id 表"上返工 |
+| **无窗口时中枢还能不能在**：若编排中枢是 WebView 里的 TS，"应用启动即起后端""托盘常驻、没有窗口也跑插件"这类形态就不成立 | 需要先定，它会反过来影响上一条（K3.3 的"第二宿主"验证会撞上它）。要么接受"没有 WebView 就没有插件"，要么在 Rust 侧留一个最小触发点（只负责拉起，不接管语义） |
+| **状态权威在哪**：若中枢在 TS，"装了哪些 / 哪些被禁用 / 失败名单"的**权威副本**是谁 | 建议写死为：磁盘上 crate 管的那份（安装目录 + journal）是权威，TS 侧只是视图 + 编排。这是本文"三处状态各有唯一来源"那条纪律的延伸——同一件事只能有一个权威副本，否则就会出现两份状态各说一套（[../plan.md](../plan.md) 第 0 节"不允许代码和文档各说一套"是同一条纪律的另一面） |
+| **新增端口（`readText` / `listInstalled`）与装载编排归哪批** | 见上文"未分配的一项"：建议归 K2.5（它拥有安装目录与 journal）。**需要确认**，它改变 K2.5 的交付物清单 |
+| **`LoadedPlugin` → `PluginRecord.frontend` 的改名时机** | 等 K2.6 把后端记录做出来再改；现在前端记录是唯一一半，提前改名是空转 |
+| 命令集合（`install` / `uninstall` / `list` / `enable`）与 `INSTALL_*` 一类错误码 | 都不在本批：命令集合归适配层（K2.5），码表的安装语义随之补——**命令要报的错必须先有码**（[../plan.md](../plan.md) 第 1 节）。注意 `list` 命令与 `listInstalled` 端口是同一件事的两面，别做成两份 |
 | `spec/v1/manifest.schema.json` 的 `$id` 归属（域名 / registry 未定） | 生成物现在只带 `$schema`，不带 `$id`；等"公开发布还是私有 registry"定案（[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）再补 |
 | 平台键要不要覆盖 `android` / `ios` | 现在只认 `win` / `mac` / `linux` + `*`（适配层把移动端标为不支持）；要支持移动端时再扩词汇，属 spec 变更 |
 | `contributes` 的宿主级 schema | 本模块只保证它是对象；具体字段、验证及是否用于展示均由宿主定义 |
