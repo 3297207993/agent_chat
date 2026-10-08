@@ -31,24 +31,28 @@
 
 > 键位名与事件名沿用设计蓝本的命名（出处见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 第 8 节）；**分法与粒度是本项目自己的**——蓝本按 capability 把同一块切成 definition / provider / consumer 三类包（`packages/` 下五十余个分组），本项目按现有功能模块切，暂不做三元分离（见 §6）。
 
-| 分组 | 插件 | 键位 | 职责（迁移自） |
-|---|---|---|---|
-| core | **message** | `ctx.sessions` | 对话 + 消息 + **分类**的大粒度管理：对话列表、当前对话、分类 CRUD（`stores/conversationStore.ts`、`stores/categoryStore.ts`、`lib/db/` 的 conversation / message / category 三张表）。消息内容按**不透明字符串**存取，不解释格式 |
-| core | **storage** | `ctx.storage` | Dexie 引擎与版本声明、`reset()`。由**宿主**提供；表定义暂集中在宿主（`lib/db/database.ts`），插件登记表定义见 §2.2 待定 |
-| core | **llm** | `ctx.llm` | provider 适配与模型解析（`lib/ai/providers.ts`、`registry.ts`）、**消息与流的词汇表**、上下文裁剪（`lib/ai/window.ts`） |
-| agent | **agent-loop** | `ctx.agentLoop` | Agent 生命周期、turn/step 驱动（`lib/ai/agent.ts`、`chat.ts`、`messages.ts`） |
-| agent | **chat-view** | 无 | 对话展示与输入（`components/chat/`）：观察 `agent/*` 事件拿流式增量，经 `ctx.views` 挂到外壳。**不认领键位** |
-| tools | **tools** | `ctx.tools` | 工具注册表、schema 汇集、受守卫的执行管线（`lib/ai/tools.ts`） |
-| tools | **approval** | `ctx.approvals` | 监听 `tools/pre-execute` 的策略插件（`requirePermission` + `stores/toolStore.ts` 的审批部分）。与 tools **平级**，可单独启停 |
-| platform | **platform** | `ctx.fs`、`ctx.shell`、`ctx.app` | Tauri 命令桥：文件系统（`commands/file.rs`、`search.rs`、`security.rs`）、命令执行（`commands/shell.rs`）、应用目录（`commands/system.rs`）。tools 与 skills 共用 |
-| prompt | **prompt** | `ctx.prompt` | prompt section 装配（`lib/ai/runAgent.ts` 的 `buildSystemPrompt`）；各插件贡献 section |
-| prompt | **prompt-setting** | 无 | 注册 settings section（`components/settings/SystemPromptSettings.tsx`）。**不认领键位** |
-| prompt | **rule-setting** | `ctx.rules` | 规则数据与**绑定解析**（`stores/ruleStore.ts`、`lib/db/ruleDB.ts`；解析 `conversations.ruleIds` / `categories.ruleIds`） |
-| extension | **mcp** | `ctx.mcp` | MCP Server 连接管理、工具发现（`lib/mcp/`，含 `mcp_*` 命令族），向 `ctx.tools` 贡献工具 |
-| extension | **skills** | `ctx.skills` | 技能扫描、解析与执行（`lib/skills/parser.ts`、`services/skillService.ts`、`stores/skillStore.ts`），向 `ctx.tools` 贡献工具 |
-| 宿主 | **app-shell** | `ctx.views`、`ctx.renderers` | 外壳与注册点：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位（`components/layout/`、`pages/`、路由）。由宿主作为**不可卸载的内置插件**提供 |
+> **哪一列是"已有的"**：只有「迁移自（现有实现）」是仓库里已经存在的代码。插件名与 `ctx.*` 键位是**目标形态**——其中 `ctx.storage` / `ctx.views` 已在 P1 骨架落地（[src/plugin/](../src/plugin/)），其余键位现在还不存在，正是这次迁移要新建的。
 
-**不算插件**：`lib/ai/tokenizer.ts` 是零依赖纯函数，留作宿主共享工具；`memory` 现在是占位空壳，暂不切（见 §2.2）。
+| 分组 | 插件（目标） | 键位（目标） | 迁移自（现有实现） | 职责 |
+|---|---|---|---|---|
+| core | **message** | `ctx.sessions` | `stores/conversationStore.ts`、`stores/categoryStore.ts`、`lib/db/` 的 `conversationDB.ts` / `messageDB.ts` / `categoryDB.ts`、`components/layout/Sidebar.tsx`（整个是对话管理，外壳只留容器） | 对话 + 消息 + **分类**的大粒度管理：对话列表、当前对话、分类 CRUD。消息内容按**不透明字符串**存取，不解释格式 |
+| core | **storage** | `ctx.storage` | **新增**（引擎来自 `lib/db/database.ts`） | Dexie 引擎与版本声明、`reset()`。由宿主提供；表定义暂集中在宿主，插件登记表定义见 §2.2 待定 |
+| core | **llm** | `ctx.llm` | `lib/ai/providers.ts`、`lib/ai/registry.ts`、`lib/ai/window.ts`、`stores/providerStore.ts` | provider 适配与模型解析、**消息与流的词汇表**（`types/chat.ts` 的 `Message` / `MessageContent`）、上下文裁剪 |
+| agent | **agent-loop** | `ctx.agentLoop` | `lib/ai/agent.ts`、`lib/ai/chat.ts`、`lib/ai/messages.ts`、`lib/ai/runAgent.ts` 的 `startAgentRun` / `stopStreaming` / `regenerateAssistant` | Agent 生命周期、turn/step 驱动 |
+| agent | **chat-view** | 无 | `components/chat/`（ChatView / MessageList / ChatMessage / ChatInput / ReasoningBlock / ToolCallCard / CodeBlock） | 对话展示与输入：观察 `agent/*` 事件拿流式增量，经 `ctx.views` 挂到外壳 |
+| tools | **tools** | `ctx.tools` | `lib/ai/tools.ts`（注册表与内置工具）、`stores/toolStore.ts` 的注册/禁用部分、`components/layout/rightPanel/ToolsTab.tsx` | 工具注册表、schema 汇集、受守卫的执行管线 |
+| tools | **approval** | `ctx.approvals` | `lib/ai/tools.ts` 的 `requirePermission`（第 10 行起）、`stores/toolStore.ts` 的审批部分、`components/settings/ToolPermissionSettings.tsx` | 监听 `tools/pre-execute` 的策略插件。与 tools **平级**，可单独启停 |
+| platform | **platform** | `ctx.fs`、`ctx.shell`、`ctx.app` | `src-tauri/src/commands/` 的 `file.rs` / `search.rs` / `shell.rs` / `system.rs`（`security.rs` 是路径守卫）；前端调用点在 `lib/ai/tools.ts` 与 `services/skillService.ts` | Tauri 命令桥：文件系统、命令执行、应用目录。tools 与 skills 共用 |
+| prompt | **prompt** | `ctx.prompt` | `lib/ai/runAgent.ts` 的 `buildSystemPrompt` | prompt section 装配；各插件贡献 section |
+| prompt | **prompt-setting** | 无 | `components/settings/SystemPromptSettings.tsx`；`globalSystemPrompt` 现在寄生在 `stores/uiStore.ts` | 注册 settings section |
+| prompt | **rule-setting** | `ctx.rules` | `stores/ruleStore.ts`、`lib/db/ruleDB.ts`、`pages/RulesPage.tsx`、`components/layout/rightPanel/RulesTab.tsx` | 规则数据与**绑定解析**（`conversations.ruleIds` / `categories.ruleIds`） |
+| extension | **mcp** | `ctx.mcp` | `lib/mcp/`、`stores/mcpStore.ts`、`lib/db/mcpDB.ts`、`pages/McpPage.tsx`、`components/layout/rightPanel/McpTab.tsx`、`src-tauri/src/commands/mcp.rs` 与 `src-tauri/src/mcp/` | MCP Server 连接管理、工具发现（含 `mcp_*` 命令族），向 `ctx.tools` 贡献工具 |
+| extension | **skills** | `ctx.skills` | `lib/skills/parser.ts`、`services/skillService.ts`、`stores/skillStore.ts`、`pages/SkillPage.tsx`、`components/layout/rightPanel/SkillsTab.tsx` | 技能扫描、解析与执行，向 `ctx.tools` 贡献工具 |
+| 宿主 | **app-shell** | `ctx.views`、`ctx.renderers` | **已落地**（`src/plugin/`）；外壳代码 `App.tsx`、`components/layout/` 的 `AppLayout` / `TopBar` / `RightPanel`、`pages/` 的路由、`components/settings/ThemeSettings.tsx`；`stores/uiStore.ts` 的主题 / 布局 / 面板开关 | 外壳与注册点：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位。由宿主作为**不可卸载的内置插件**提供 |
+
+`types/*.ts` 按同样的域跟随各自插件（`types/chat.ts` 按 §2.2 拆给 llm 与 message）。
+
+**不算插件**：`lib/ai/tokenizer.ts` 是零依赖纯函数，留作宿主共享工具；`memory` 现在是占位空壳（`pages/MemoryPage.tsx`、`components/layout/rightPanel/MemoryTab.tsx`），暂不切（见 §2.2）。
 
 **分组只是组织概念**（目录与文档归类）：运行时一律是平级插件，分组不表示父子挂载，也不改变生命周期。
 
