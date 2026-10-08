@@ -187,6 +187,9 @@ importers:
       '@ai-sdk/xai':
         specifier: ^4.0.20
         version: 4.0.20(zod@4.4.3)
+      '@cambia/core':
+        specifier: link:./cambia/packages/core
+        version: link:cambia/packages/core
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@4.4.3)

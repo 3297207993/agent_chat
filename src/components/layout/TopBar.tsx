@@ -3,16 +3,12 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useUIStore } from "@/stores/uiStore";
 import { useProviderStore } from "@/stores/providerStore";
 import { APP_NAME } from "@/lib/constants";
+import { useViewSlot } from "@/plugin";
 import {
   Settings,
   PanelRightOpen,
   PanelRightClose,
   Sidebar,
-  BookOpen,
-  Plug,
-  Zap,
-  Brain,
-  Bug,
   ChevronDown,
   Check,
 } from "lucide-react";
@@ -23,6 +19,7 @@ export default function TopBar() {
   const { sidebarOpen, toggleSidebar, rightPanelOpen, toggleRightPanel } = useUIStore();
   const { providers, activeProviderId, activeModelId, setActiveModel } = useProviderStore();
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const topbarActions = useViewSlot("topbar.action");
 
   const activeProvider = providers.find((p) => p.id === activeProviderId);
   const activeModel = activeProvider?.models.find((m) => m.id === activeModelId);
@@ -39,62 +36,25 @@ export default function TopBar() {
         {APP_NAME}
       </button>
 
-      {/* Management buttons */}
-      <button
-        onClick={() => navigate("/rules")}
-        className={`w-7 h-7 flex items-center justify-center rounded-md text-xs ${
-          isActive("/rules")
-            ? "bg-app-elevated text-app-accent"
-            : "text-app-text-muted hover:bg-app-elevated hover:text-app-text"
-        }`}
-        title="规则管理"
-      >
-        <BookOpen size={15} />
-      </button>
-      <button
-        onClick={() => navigate("/mcp")}
-        className={`w-7 h-7 flex items-center justify-center rounded-md text-xs ${
-          isActive("/mcp")
-            ? "bg-app-elevated text-app-accent"
-            : "text-app-text-muted hover:bg-app-elevated hover:text-app-text"
-        }`}
-        title="MCP 管理"
-      >
-        <Plug size={15} />
-      </button>
-      <button
-        onClick={() => navigate("/skills")}
-        className={`w-7 h-7 flex items-center justify-center rounded-md text-xs ${
-          isActive("/skills")
-            ? "bg-app-elevated text-app-accent"
-            : "text-app-text-muted hover:bg-app-elevated hover:text-app-text"
-        }`}
-        title="Skill 管理"
-      >
-        <Zap size={15} />
-      </button>
-      <button
-        onClick={() => navigate("/memory")}
-        className={`w-7 h-7 flex items-center justify-center rounded-md text-xs ${
-          isActive("/memory")
-            ? "bg-app-elevated text-app-accent"
-            : "text-app-text-muted hover:bg-app-elevated hover:text-app-text"
-        }`}
-        title="记忆管理"
-      >
-        <Brain size={15} />
-      </button>
-      <button
-        onClick={() => navigate("/debug")}
-        className={`w-7 h-7 flex items-center justify-center rounded-md text-xs ${
-          isActive("/debug")
-            ? "bg-app-elevated text-app-accent"
-            : "text-app-text-muted hover:bg-app-elevated hover:text-app-text"
-        }`}
-        title="调试"
-      >
-        <Bug size={15} />
-      </button>
+      {/* Management buttons — registered through ctx.views, so a plugin can add its own */}
+      {topbarActions.map((action) => {
+        const Icon = action.icon;
+        const active = isActive(action.path);
+        return (
+          <button
+            key={action.id}
+            onClick={() => navigate(action.path)}
+            className={`w-7 h-7 flex items-center justify-center rounded-md text-xs ${
+              active
+                ? "bg-app-elevated text-app-accent"
+                : "text-app-text-muted hover:bg-app-elevated hover:text-app-text"
+            }`}
+            title={action.label}
+          >
+            {Icon ? <Icon size={15} /> : <span>{action.label.slice(0, 1)}</span>}
+          </button>
+        );
+      })}
 
       <div className="w-px h-5 bg-app-border mx-1" />
 

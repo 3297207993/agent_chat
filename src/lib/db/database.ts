@@ -64,7 +64,7 @@ export interface RuleRow {
   updatedAt: number;
 }
 
-class AgentChatDB extends Dexie {
+export class AgentChatDB extends Dexie {
   conversations!: EntityTable<ConversationRow, "id">;
   messages!: EntityTable<MessageRow, "id">;
   categories!: EntityTable<CategoryRow, "id">;

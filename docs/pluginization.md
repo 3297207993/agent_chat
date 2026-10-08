@@ -34,7 +34,7 @@
 | 分组 | 插件 | 键位 | 职责（迁移自） |
 |---|---|---|---|
 | core | **message** | `ctx.sessions` | 对话 + 消息 + **分类**的大粒度管理：对话列表、当前对话、分类 CRUD（`stores/conversationStore.ts`、`stores/categoryStore.ts`、`lib/db/` 的 conversation / message / category 三张表）。消息内容按**不透明字符串**存取，不解释格式 |
-| core | **storage** | `ctx.storage` | Dexie 引擎与版本声明、`reset()`（`lib/db/database.ts`）。由**宿主**提供，表定义由各插件登记 |
+| core | **storage** | `ctx.storage` | Dexie 引擎与版本声明、`reset()`。由**宿主**提供；表定义暂集中在宿主（`lib/db/database.ts`），插件登记表定义见 §2.2 待定 |
 | core | **llm** | `ctx.llm` | provider 适配与模型解析（`lib/ai/providers.ts`、`registry.ts`）、**消息与流的词汇表**、上下文裁剪（`lib/ai/window.ts`） |
 | agent | **agent-loop** | `ctx.agentLoop` | Agent 生命周期、turn/step 驱动（`lib/ai/agent.ts`、`chat.ts`、`messages.ts`） |
 | agent | **chat-view** | 无 | 对话展示与输入（`components/chat/`）：观察 `agent/*` 事件拿流式增量，经 `ctx.views` 挂到外壳。**不认领键位** |
@@ -65,7 +65,7 @@
 - **词汇表归属**：`Message` / `MessageContent` / `role` 取值 / tool-call 结构归 **llm**；`Conversation` / `Category` 归 **message**（`src/types/chat.ts` 按此拆分）。message 侧不 import llm 的类型
 - **`tokenCount` 挪位**：算它必须懂内容格式，所以不再由 message 侧计算——改为写入前由 llm 侧算好传入，或去掉该字段
 - **依赖方向**（无环）：`chat-view → agentLoop + sessions + llm + views`；`agent-loop → llm + tools + prompt`；`prompt → rules`；`rule-setting → sessions`；`tools → platform`；`skills → platform`；`mcp → tools`
-- **待定**：`memory` 何时切；Dexie 下运行时登记新表需要 bump version + 重开（第三方插件加表时才撞上，归 P5）；`prompt` / `prompt-setting` / `rule-setting` 三者的接口细节
+- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地（第三方插件加表归 P5）；`memory` 何时切；`prompt` / `prompt-setting` / `rule-setting` 三者的接口细节
 
 ---
 
