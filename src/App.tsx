@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import ChatPage from "@/pages/ChatPage";
 import SettingsPage from "@/pages/SettingsPage";
@@ -8,6 +8,7 @@ import SkillPage from "@/pages/SkillPage";
 import MemoryPage from "@/pages/MemoryPage";
 import DebugPage from "@/pages/DebugPage";
 import { useHost, useViewSlot } from "@/plugin";
+import { setNavigator } from "@/plugin/navigation";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { useMcpStore } from "@/stores/mcpStore";
@@ -20,6 +21,12 @@ function App() {
   const ctx = useHost();
   // 插件贡献的页面（路径与组件都在插件里，外壳只把它们挂进 router）
   const pages = useViewSlot("main.page");
+
+  // 路由归外壳（§6）：把 navigate 交给宿主接缝，插件经 ctx.views.navigate 请求跳转
+  const navigate = useNavigate();
+  useEffect(() => {
+    setNavigator(navigate);
+  }, [navigate]);
 
   useEffect(() => {
     loadConversations();

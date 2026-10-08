@@ -1,4 +1,5 @@
 import type { Context } from "@cambia/core";
+import { navigate } from "../../navigation";
 import type { ViewItemBase, ViewsService } from "../../vocabulary";
 
 export const name = "views";
@@ -62,6 +63,9 @@ function createViewsService(): ViewsService {
         listeners.delete(listener);
       };
     },
+
+    // 路由归外壳（§6）：这里只是把请求转给宿主登记的导航器
+    navigate,
   };
 
   return registry as ViewsService;

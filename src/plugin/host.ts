@@ -8,10 +8,12 @@ import {
   parseManifest,
   type Manifest,
 } from "@cambia/host";
+import storageManifest from "./builtin/storage/cambia.json";
+import viewsManifest from "./builtin/views/cambia.json";
 import "./vocabulary";
 
 /**
- * 宿主的身份。manifest 的 `engines.host` 必须匹配它——版本改了却不改这里，内置插件会在启动时
+ * 宿主的身份。manifest 的 `engines.host` 必须匹配它——版本改了却不改这里，插件会在启动时
  * **响亮地**失败（engines 判定不通过），而不是悄悄跑在错误的宿主上。
  */
 const HOST_ID = "agent-chat";
@@ -20,11 +22,25 @@ const HOST_VERSION = "0.1.0";
 /** 运行的内核版本，对应 `cambia/packages/core/package.json`。 */
 const CAMBIA_VERSION = "0.1.0";
 
+/** 插件目录的清单（由 `scripts/build-plugins.mjs` 扫描产出），相对应用根。 */
+const CATALOG_PATH = "plugins/index.json";
+
 /**
- * 内置插件的入口在编译期解析，所以文件名固定；manifest 的 `parts.frontend.main` 必须写它。
- * 第三方插件的入口由 manifest 指向磁盘上的 bundle，走 `asset:` 通道（P5）。
+ * 宿主件的入口：**编译进应用**的模块（pluginization.md §2 / §6）。
+ *
+ * 它们是宿主自己的一部分，没有包也没有 URL，所以入口在这里静态映射——这是"宿主件"与"插件包"
+ * 唯一的区别。功能插件一律从插件目录装载：读 manifest 文本 → 校验 → 解析入口 URL → import。
  */
-const BUILTIN_ENTRY = "index.ts";
+const HOST_MODULES: Record<string, () => Promise<unknown>> = {
+  storage: () => import("./builtin/storage"),
+  views: () => import("./builtin/views"),
+};
+
+/** 宿主件自己的 manifest。宿主件没有磁盘包，所以走编译期导入（`resolveJsonModule` 已开）。 */
+const HOST_MANIFEST_TEXT: Record<string, string> = {
+  storage: JSON.stringify(storageManifest),
+  views: JSON.stringify(viewsManifest),
+};
 
 /** 内置插件只支持随应用启动。按需激活（`<prefix>:<pattern>`）宿主侧还没实现。 */
 const ACTIVATION_ALWAYS = "always";
@@ -38,19 +54,6 @@ const ACTIVATION_ALWAYS = "always";
 const MOUNT_TIMEOUT_MS = 5_000;
 
 /**
- * 内置插件的发现：`builtin/<name>/` 一个目录 = 一个插件包（`cambia.json` + 入口）。
- *
- * manifest 读**文本**再解析，与从磁盘装载那条路一致（先拿字节、再解析、再校验）；
- * 入口用编译期的动态 import——内置插件在 bundle 里，没有磁盘路径，也就不需要 `asset:` 通道。
- */
-const manifests = import.meta.glob("./builtin/*/cambia.json", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
-const entries = import.meta.glob("./builtin/*/index.ts") as Record<string, () => Promise<unknown>>;
-
-/**
  * 已启动的宿主 context。
  *
  * 组件树走 `<PluginHostProvider>` + `useHost()`；**非组件代码**（如 `lib/ai/runAgent.ts` 的 prompt
@@ -60,44 +63,34 @@ const entries = import.meta.glob("./builtin/*/index.ts") as Record<string, () =>
 let bootedHost: Context | null = null;
 
 /**
- * 宿主启动：创建内核根 context，装载内置插件（pluginization.md 的 P1）。
+ * 装载一个插件包：**读 manifest 文本 → 解析 → 校验 → engines 判定 → 解析入口 → 装载**。
  *
- * 每个插件都要过一遍与第三方相同的关：读 manifest 文本 → 校验 → engines 判定 → 解析入口 →
- * 等 `ACTIVE` / `FAILED`。返回时它们**已经激活**，所以调用方可以直接渲染。
+ * 这里没有"编译期解析入口"这条特殊路：功能插件一律是磁盘上的包，入口就是 manifest 里写的相对路径。
+ * 宿主件（`storage` / `views`）只在"入口从哪来"上不同——它们是宿主自己的模块，走 `HOST_MODULES`。
+ */
+async function loadPlugin(ctx: Context, item: MountPlanItem) {
+  const manifest = readManifest(item.name, item.manifestText);
+  const entry = (await item.loadEntry(manifest)) as PluginEntry;
+  return mount(ctx, manifest, entry);
+}
+
+/**
+ * 宿主启动：创建内核根 context，装载宿主件与插件目录里的全部插件（pluginization.md 的 P1）。
  *
- * 挂载顺序不由宿主规定：依赖写在插件的 `inject` 里、由内核解析，所以这里先把所有插件挂上去，
- * 再统一等判定。
+ * 两类**走同一套关**（读文本 → 校验 → engines → 等 `ACTIVE` / `FAILED`），差别只在入口来源：
+ * 宿主件是编译进来的模块，其余是插件目录里由 manifest 指定的 bundle。装载顺序不由宿主规定——
+ * 依赖写在插件的 `inject` 里、由内核解析，所以先把所有插件挂上去，再统一等判定。
  */
 export async function bootHost(): Promise<Context> {
   const ctx = new Context();
   const mounting: Promise<void>[] = [];
   const failures: string[] = [];
 
-  for (const path of Object.keys(manifests).sort()) {
+  const plan = await planMounts();
+
+  for (const item of plan) {
     try {
-      const manifest = readManifest(path, manifests[path]);
-      const main = manifest.parts?.frontend?.main ?? DEFAULT_ENTRY;
-
-      if (main !== BUILTIN_ENTRY) {
-        throw new PluginError({
-          code: ERROR_CODES.MANIFEST_FIELD_INVALID,
-          path,
-          message: `${manifest.id} 的 parts.frontend.main 是 "${main}"；内置插件的入口在编译期解析，必须写 "${BUILTIN_ENTRY}"`,
-        });
-      }
-
-      const entry = `${path.slice(0, path.lastIndexOf("/"))}/${BUILTIN_ENTRY}`;
-      const load = entries[entry];
-
-      if (load === undefined) {
-        throw new PluginError({
-          code: ERROR_CODES.LOAD_FETCH_FAILED,
-          path,
-          message: `找不到 ${manifest.id} 的入口模块 ${entry}`,
-        });
-      }
-
-      mounting.push(mount(ctx, manifest, load));
+      mounting.push(loadPlugin(ctx, item));
     } catch (error) {
       failures.push(describe(error));
     }
@@ -108,11 +101,74 @@ export async function bootHost(): Promise<Context> {
   }
 
   if (failures.length > 0) {
-    throw new Error(`内置插件装载失败：\n- ${failures.join("\n- ")}`);
+    throw new Error(`插件装载失败：\n- ${failures.join("\n- ")}`);
   }
 
   bootedHost = ctx;
   return ctx;
+}
+
+interface MountPlanItem {
+  /** 目录名（宿主件就是它的名字），只用于报错定位。 */
+  readonly name: string;
+  readonly manifestText: string;
+  /** 入口来源：宿主件返回编译进来的模块，插件包按 manifest 里的相对路径取 URL 再 import。 */
+  readonly loadEntry: (manifest: Manifest) => Promise<unknown>;
+}
+
+/**
+ * 装配清单：先宿主件，再扫插件目录的清单。
+ *
+ * 插件目录里的清单是**构建期扫描的产物**（`scripts/build-plugins.mjs` 扫 `cambia.json` 得到），
+ * 运行期只管消费它——所以"内置"与"外部装进来"在宿主眼里是同一个东西。
+ */
+async function planMounts(): Promise<MountPlanItem[]> {
+  const plan: MountPlanItem[] = Object.keys(HOST_MODULES).map((name) => ({
+    name,
+    manifestText: HOST_MANIFEST_TEXT[name],
+    loadEntry: HOST_MODULES[name],
+  }));
+
+  const base = new URL(CATALOG_PATH, document.baseURI);
+
+  let catalog: { plugins?: unknown };
+  try {
+    const response = await fetch(base);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    catalog = (await response.json()) as { plugins?: unknown };
+  } catch (error) {
+    throw new Error(`读不到插件目录清单 ${base.href}：${describe(error)}。先跑 pnpm build:plugins`);
+  }
+
+  const names = Array.isArray(catalog.plugins) ? (catalog.plugins as unknown[]) : [];
+  for (const name of names) {
+    if (typeof name !== "string") continue;
+
+    const dir = new URL(`${name}/`, base);
+    plan.push({
+      name,
+      manifestText: await fetchText(new URL("cambia.json", dir)),
+      // 入口由 manifest 说了算（相对插件目录），宿主不猜文件名
+      loadEntry: (manifest) => {
+        const entry = manifest.parts?.frontend?.main ?? DEFAULT_ENTRY;
+        return import(/* @vite-ignore */ new URL(entry, dir).href);
+      },
+    });
+  }
+
+  return plan;
+}
+
+async function fetchText(url: URL): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new PluginError({
+      code: ERROR_CODES.LOAD_FETCH_FAILED,
+      path: url.pathname,
+      message: `读不到 ${url.href}（HTTP ${response.status}）`,
+    });
+  }
+  return response.text();
 }
 
 /** 取已启动的宿主 context；给非组件代码用（组件用 `useHost()`）。 */
@@ -171,10 +227,19 @@ function readManifest(path: string, text: string): Manifest {
  * `await ctx.plugin()` 等的是惯性、不是激活（cambia 的 K1.1 事实 10），所以判定只能自己观察：
  * 先订阅 `internal/status`、再重读一次 `fiber.state`，关掉"订阅之前已经迁移"的窗口。
  */
-async function mount(ctx: Context, manifest: Manifest, loadEntry: () => Promise<unknown>): Promise<void> {
+/** 入口模块的形状（按入口约定检查，不假设它是什么类型）。 */
+interface PluginEntry {
+  apply?: unknown;
+}
+
+/**
+ * 挂一个插件并**等它真的激活**。
+ *
+ * `await ctx.plugin()` 等的是惯性、不是激活（cambia 的 K1.1 事实 10），所以判定只能自己观察：
+ * 先订阅 `internal/status`、再重读一次 `fiber.state`，关掉"订阅之前已经迁移"的窗口。
+ */
+async function mount(ctx: Context, manifest: Manifest, entry: PluginEntry): Promise<void> {
   const id = manifest.id;
-  // 入口是任意模块：下面只按入口约定检查它，不假设它是什么类型
-  const entry = (await loadEntry()) as { apply?: unknown };
 
   if (typeof entry.apply !== "function") {
     throw new PluginError({

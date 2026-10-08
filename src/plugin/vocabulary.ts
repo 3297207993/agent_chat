@@ -86,12 +86,6 @@ declare module "@cambia/core" {
      * 会话数据的 UI 必须跟着它走，否则会拿着上一个对话的数据渲染。
      */
     "session/current-changed"(conversationId: string | null): void;
-
-    /**
-     * 当前对话的选择变化。它不是数据变更（没有东西落库），所以不并进 `session/changed`——但依赖
-     * 会话数据的 UI 必须跟着它走，否则会拿着上一个对话的数据渲染。
-     */
-    "session/current-changed"(conversationId: string | null): void;
   }
 }
 
@@ -281,4 +275,9 @@ export interface ViewsService {
   list<K extends ViewSlot>(slot: K): readonly ViewItem<K>[];
   /** 任何注册或撤销之后通知一次；返回退订函数。 */
   subscribe(listener: () => void): () => void;
+  /**
+   * 跳到某个宿主路由。路由本身归外壳（§6），插件只能请求跳转——插件包是独立 bundle，用不了宿主
+   * 那份 `react-router`。
+   */
+  navigate(path: string): void;
 }

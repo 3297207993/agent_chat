@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import type { ContributionProps, Rule, RuleScope, RuleType, RuleFormat } from "../../vocabulary";
 import { useCategories, useConversations, useRules } from "./useSessions";
 import {
@@ -415,7 +414,6 @@ function RuleCard({
 // ── 主页面 ──
 
 export default function RulesPage({ ctx }: ContributionProps) {
-  const navigate = useNavigate();
   const rules = useRules(ctx);
   const categories = useCategories(ctx);
 
@@ -449,7 +447,7 @@ export default function RulesPage({ ctx }: ContributionProps) {
       <div className="flex items-center justify-between px-6 py-4 border-b border-app-border">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => ctx.views.navigate("/")}
             className="p-1.5 rounded-md text-app-text-muted hover:bg-app-elevated hover:text-app-text"
           >
             <ArrowLeft size={16} />

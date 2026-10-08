@@ -25,7 +25,11 @@
 - 本项目选择**全信任同进程**形态：第三方插件与宿主同 realm、同一 `ctx`，插件不受能力限制（无门控、无审批），防线是"只装可信插件"（见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 1.7 / 4）
 - UI 框架绑定在宿主侧：React 渲染器由本项目提供，内核不依赖 React
 
-**边界怎么守**：插件包只许依赖 `@cambia/core`（类型）与宿主词汇表的类型，不许 import 宿主内部模块。这条由 `tsconfig.plugins.json` 机械保障——它继承主配置后把 `paths` 清空，于是 `@/*` 别名在插件侧解析不到，`import "@/stores/uiStore"` 直接编译失败（`pnpm run check:plugins`，已挂在 `prebuild` 上）。
+**边界怎么守**：插件包只许依赖 `@cambia/core`（类型）与宿主词汇表的类型，不许 import 宿主内部模块。这条由 `tsconfig.plugins.json` 机械保障——它继承主配置后把 `paths` 清空，于是 `@/*` 别名在插件侧解析不到，`import "@/stores/uiStore"` 直接编译失败（`pnpm run check:plugins`，已挂在 `prebuild` 上）。构建流水线再补一道：插件产物必须**自包含**（不许残留任何裸导入），否则浏览器根本解析不了。
+
+**形态（2026-10-08 起）**：功能插件是**预装的插件包**——`scripts/build-plugins.mjs` 扫 `cambia.json` 把每个插件打成单文件 ESM 放进 `public/plugins/<name>/`（dev 由 Vite 静态服务，app build 时原样拷进 `dist`），宿主启动时**读清单 → 逐个读 manifest 文本 → 校验 → 解析 manifest 里的入口 → 动态 import**。宿主代码里**没有编译期的插件表**：装载什么由插件目录的清单说了算，所以"内置"与"外部装进来"走的是同一条路，替换内置插件 = 换目录内容（实测：从清单里去掉一个插件，它的 UI 与功能随之消失，宿主代码一行不动）。
+
+**宿主件是唯一的例外**：`storage` / `views`（以及外壳自身）由宿主**编译进来**，不可卸载（§2 / §6）。它们不能成为独立包——`storage` 要拿宿主的 Dexie 引擎，打进去就是第二个实例、同一个库被打开两次。它们的入口在 `src/plugin/host.ts` 的 `HOST_MODULES` 里静态映射，其余（读 manifest、engines 判定、等 `ACTIVE`）与插件包完全同一套关。
 
 **如实说明它的边界**：这个检查只认别名形式，**刻意的相对路径逃逸（`../../../stores/uiStore`）不会被拦住**（实测确认）。要挡住那种写法得靠模块图的规则（如 `import/no-restricted-paths` 或一个小脚本），等第一个插件单测落地时再一起加。位置不决定边界——能解析到什么才决定。
 
@@ -74,8 +78,11 @@
 - **`tokenCount` 挪位（已落地）**：算它必须懂内容格式，所以不再由 message 侧计算——改由调用方（llm 侧）算好、写进 `MessageDraft.tokenCount`。`StoredMessage.content` 就是那个不透明字符串，两侧各自负责编解码
 - **依赖方向**（无环）：`chat-view → agentLoop + sessions + llm + views`；`agent-loop → llm + tools + prompt`；`prompt → rules`；`rule-setting → sessions`；`tools → platform`；`skills → platform`；`mcp → tools`。**已落地的两条实测口径**：`rule-setting → sessions` 走的是"`ctx.sessions` 的异步读 + `session/changed` / `session/current-changed` 事件重取"（插件自己搭一层薄壳，见 `useSessions.ts`）；`agent-loop`（宿主里的 `runAgent.buildSystemPrompt`）→ `rules` 走的是同步快照 `ctx.rules.getEffectiveRules()`
 - **prompt 与 prompt-setting 的接口已定（2026-10-08 落地）**：键位归 **prompt**——`ctx.prompt` 目前只做两件事：持有全局系统提示词、广播变更，section 的装配仍留在 `lib/ai/runAgent.ts`；**prompt-setting** 不认领键位，只往 `ctx.views` 的 `settings.section` 槽位注册编辑界面。两者靠 `inject` 表达依赖，且**必须把用到的服务全列上**：cordis 的 `inject` 是可访问服务的白名单，漏列就报 `cannot get property "views" without inject`（漏 `views` 是首次实跑踩到的）
-- **内置插件的形态**：`src/plugin/builtin/<name>/` 一个目录 = 一个插件包（`cambia.json` + 入口 `index.ts`）。启动时它们走**与第三方同一套关**：读 manifest 文本 → 校验 → `engines` 判定 → 解析入口 → 等 `ACTIVE` / `FAILED`，任何一步不过都带 spec 错误码报错并阻止启动（不是悄悄跳过）。入口按内核约定写成模块本体导出 `apply`（可选 `name` / `inject`），`parts.frontend.main` 固定为 `index.ts`。宿主身份（`engines.host` 要比对的 `agent-chat@0.1.0`）写在 [src/plugin/host.ts](../src/plugin/host.ts)
-- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地；`ctx.sessions` 的**投影读取**——事件已经发了（§2.1），但读还是"每次回表 + 内存投影"，P1b 才改成日志 + 投影；**内置装载与第三方装载的汇合点**——内置入口是编译期解析（Vite glob），第三方走 `asset:` 通道（`bridge.moduleURL`），两条路要到 P5 才合成一条；`memory` 何时切；**token 估算何时对插件可见**——它现在是宿主共享工具（`lib/ai/tokenizer.ts`），插件按 §1.2 的边界够不着，所以 prompt-setting 的分组暂时不显示"约 N tokens"（右侧「上下文」面板仍在算，因为那是宿主代码）
+- **内置插件的形态**：功能插件是**预装的插件包**（见 §1.2 的"形态"）：`src/plugin/builtin/<name>/` 是源码，`scripts/build-plugins.mjs` 把它打成 `public/plugins/<name>/`（`cambia.json` + `index.js`），宿主启动时扫清单逐个装载。运行时走**同一套关**：读 manifest 文本 → 校验 → `engines` 判定 → 解析入口 → 等 `ACTIVE` / `FAILED`，任何一步不过都带 spec 错误码报错并阻止启动（不是悄悄跳过）。入口按内核约定写成模块本体导出 `apply`（可选 `name` / `inject`）。宿主身份（`engines.host` 要比对的 `agent-chat@0.1.0`）写在 [src/plugin/host.ts](../src/plugin/host.ts)
+- **共享运行时依赖（新增，2026-10-08 落地）**：插件包是独立 bundle，`react` 既不能留成裸导入（浏览器解析不了），也不能自带一份（两份 React → hooks 抛 invalid hook call、context 读不到同一棵树）。做法是**宿主注入全局 + 构建期改写 import**：宿主先把自己那份放到 `globalThis.__AGENT_CHAT_SHARED__`，**再** import 插件包（顺序是硬要求：lucide-react 这类包在**模块初始化时**就用 React）；构建期把 `import { useState } from "react"` 改写成 `import __r from "<shim>"; const useState = __r.useState`，即运行时属性访问。**必须改写而不是逐名转发**：React 的具名导出里有类（`Component`，会被 `class X extends Component` 用）和符号（`Fragment` / `Suspense`），转发成函数就废了。JSX 运行时同样转发宿主那份官方运行时——用 `createElement` 自己拼会丢掉 React 对静态子元素的标记，冒出一堆假的 key 警告
+- **两条构建后断言**（`scripts/build-plugins.mjs`）：产物**不带任何外部导入**（用 Rollup 的 chunk 账本判断，不是扫文本——扫文本会被"生成 import 语句的字符串模板"骗到，react-router 里就有），且**能带着真 React 求值并导出 `apply`**
+- **宿主导航接缝（新增）**：插件包用不了宿主那份 `react-router`（第二份 router = 另一个 context，`useNavigate` 直接抛"不在 Router 里"）。所以路由留在外壳，插件经 `ctx.views.navigate(path)` 请求跳转（外壳渲染时把 `useNavigate()` 交给 `src/plugin/navigation.ts`）
+- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地；`ctx.sessions` 的**投影读取**——事件已经发了（§2.1），但读还是"每次回表 + 内存投影"，P1b 才改成日志 + 投影；**第三方装载的入口**——现在插件包从 `public/plugins/`（应用同源）装载，`.tap` + `asset:` 通道与 CSP 放行归 P5；**类型分发**——词汇表仍是宿主源码（`src/plugin/vocabulary.ts`），外部插件拿不到它的类型，要发包才能让第三方写出带类型的插件；**Tailwind 的硬边界**——宿主 CSS 只含构建时扫描到的类名，后续安装的第三方插件用自己的类名会没有样式（只能自带 CSS 或走声明式 schema 让宿主渲染）；**插件构建与 dev 循环**——改插件源码要重跑 `pnpm build:plugins`（`predev` 会跑一次），还没有 `vite build --watch` + `reloadPlugin(id)` 的热重载；`memory` 何时切；**token 估算何时对插件可见**——它现在是宿主共享工具（`lib/ai/tokenizer.ts`），插件按 §1.2 的边界够不着，所以 prompt-setting 的分组暂时不显示"约 N tokens"（右侧「上下文」面板仍在算，因为那是宿主代码）
 
 ---
 
@@ -112,7 +119,9 @@
 
 依赖：P1–P4 需要内核核心就绪，P5–P6 需要内核的装载运行时与生态件就绪。
 
-**P1 进度（2026-10-08）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、四个槽位（`topbar.action` / `settings.section` / `main.page` / `panel.tab`）、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`、`message` 的数据层与当前对话边界（`ctx.sessions` + 会话事件，见 §2.1）、`rule-setting`（`ctx.rules` + 页面 + 页签 + 顶栏入口）已落地。**还差**：`ctx.renderers`（结构化渲染器键位），以及 `turn/*` / `step/*` / `tool/*` / `agent/*` 那些事件（要等它们所属的域进插件，P2/P3）。其余 P1 项已达成，对话 / 规则 / 设置三条链路都实跑验证过。
+**P1 进度（2026-10-08）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、四个槽位（`topbar.action` / `settings.section` / `main.page` / `panel.tab`）、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`、`message` 的数据层与当前对话边界（`ctx.sessions` + 会话事件，见 §2.1）、`rule-setting`（`ctx.rules` + 页面 + 页签 + 顶栏入口）已落地。**插件形态已改为预装的插件包**（§1.2 的"形态"）：宿主侧不再有编译期的插件表，功能插件全部构建成独立 bundle 由清单装载。**还差**：`ctx.renderers`（结构化渲染器键位），以及 `turn/*` / `step/*` / `tool/*` / `agent/*` 那些事件（要等它们所属的域进插件，P2/P3）。其余 P1 项已达成，对话 / 规则 / 设置三条链路都实跑验证过（dev 与生产产物各一遍）。
+
+**P5 的前置被提前消化了一部分**：`@cambia/core` 与 `cordis` 的 external 约定、同 realm 共享依赖（React）、依赖图之外的部分（manifest 校验 / engines / 激活判定 / 入口解析）现在由宿主自己的流水线走通。P5 剩下的核心是 `.tap` 安装、`asset:` 通道与 CSP、以及宿主侧管理界面。
 
 ---
 

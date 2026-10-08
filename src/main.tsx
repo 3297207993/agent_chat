@@ -3,9 +3,12 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { bootHost, PluginHostProvider } from "./plugin";
+import { provideSharedRuntime } from "./plugin/shared";
 import "./index.css";
 
-// 先起内核，再渲染：注册点与引擎要在第一次渲染之前就位
+// 先注入共享依赖（插件包在模块初始化时就要它），再起内核（装载插件），最后渲染
+provideSharedRuntime();
+
 bootHost().then(
   (host) => {
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

@@ -6,9 +6,10 @@
   "packageManager": "pnpm@12.5.1",
   "scripts": {
     "cambia:core": "pnpm --dir cambia --filter @cambia/core --filter @cambia/host build",
+    "build:plugins": "node scripts/build-plugins.mjs",
     "check:plugins": "tsc -p tsconfig.plugins.json",
-    "predev": "pnpm run cambia:core",
-    "prebuild": "pnpm run cambia:core && pnpm run check:plugins",
+    "predev": "pnpm run cambia:core && pnpm run build:plugins",
+    "prebuild": "pnpm run cambia:core && pnpm run build:plugins && pnpm run check:plugins",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

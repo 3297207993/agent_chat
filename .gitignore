@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# 插件构建产物（scripts/build-plugins.mjs 生成；dev/build 前会重建）
+public/plugins
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
