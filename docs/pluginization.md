@@ -67,7 +67,8 @@
 - **词汇表归属**：`Message` / `MessageContent` / `role` 取值 / tool-call 结构归 **llm**；`Conversation` / `Category` 归 **message**（`src/types/chat.ts` 按此拆分）。message 侧不 import llm 的类型
 - **`tokenCount` 挪位**：算它必须懂内容格式，所以不再由 message 侧计算——改为写入前由 llm 侧算好传入，或去掉该字段
 - **依赖方向**（无环）：`chat-view → agentLoop + sessions + llm + views`；`agent-loop → llm + tools + prompt`；`prompt → rules`；`rule-setting → sessions`；`tools → platform`；`skills → platform`；`mcp → tools`
-- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地（第三方插件加表归 P5）；`memory` 何时切；`prompt` / `prompt-setting` / `rule-setting` 三者的接口细节
+- **内置插件的形态**：`src/plugin/builtin/<name>/` 一个目录 = 一个插件包（`cambia.json` + 入口 `index.ts`）。启动时它们走**与第三方同一套关**：读 manifest 文本 → 校验 → `engines` 判定 → 解析入口 → 等 `ACTIVE` / `FAILED`，任何一步不过都带 spec 错误码报错并阻止启动（不是悄悄跳过）。入口按内核约定写成模块本体导出 `apply`（可选 `name` / `inject`），`parts.frontend.main` 固定为 `index.ts`。宿主身份（`engines.host` 要比对的 `agent-chat@0.1.0`）写在 [src/plugin/host.ts](../src/plugin/host.ts)
+- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地；**内置装载与第三方装载的汇合点**——内置入口是编译期解析（Vite glob），第三方走 `asset:` 通道（`bridge.moduleURL`），两条路要到 P5 才合成一条；`memory` 何时切；`prompt` / `prompt-setting` / `rule-setting` 三者的接口细节
 
 ---
 
@@ -94,7 +95,7 @@
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| **P1 首次接入** | 引入内核；宿主提供 `ctx.storage` 与 `ctx.views`/`ctx.renderers`（内置、不可卸载）；**message 插件化——只划边界，数据层保持现有 Dexie 结构**；外壳注册点就位（topbar 导航、sidebar 页、settings section）；首个带 UI 的功能插件（rule-setting 或 prompt）验证"服务+事件+视图"三链路 | 对话功能零回归 |
+| **P1 首次接入** | 引入内核；内置插件以插件包形态落地（`cambia.json` + 入口），启动走 manifest 校验与装载编排；宿主提供 `ctx.storage` 与 `ctx.views`/`ctx.renderers`（内置、不可卸载）；**message 插件化——只划边界，数据层保持现有 Dexie 结构**；外壳注册点就位（topbar 导航、sidebar 页、settings section）；首个带 UI 的功能插件（rule-setting 或 prompt）验证"服务+事件+视图"三链路 | 对话功能零回归 |
 | **P1b 会话日志化** | message 的数据层改为**追加式会话事件日志 + 投影读取**（§2.1 的会话事件真正落进日志），并迁移既有历史数据 | 日志与投影行为等价于现版本，旧数据不丢 |
 | **P2 tools** | builtinTools 逐个搬进 tools 插件，其依赖的 fs/shell 能力先经 platform 键位；requirePermission 变 waterfall/bail 监听 | 工具调用 + 审批流零回归 |
 | **P3 agent-loop** | createAgentStream 插件化，暴露 `agent/request`、`tools/*` waterfall | 流式对话零回归 |

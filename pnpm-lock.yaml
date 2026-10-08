@@ -190,6 +190,9 @@ importers:
       '@cambia/core':
         specifier: link:./cambia/packages/core
         version: link:cambia/packages/core
+      '@cambia/host':
+        specifier: link:./cambia/packages/host
+        version: link:cambia/packages/host
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@4.4.3)

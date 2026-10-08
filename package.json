@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@12.5.1",
   "scripts": {
-    "cambia:core": "pnpm --dir cambia --filter @cambia/core build",
+    "cambia:core": "pnpm --dir cambia --filter @cambia/core --filter @cambia/host build",
     "predev": "pnpm run cambia:core",
     "prebuild": "pnpm run cambia:core",
     "dev": "vite",
@@ -22,6 +22,7 @@
     "@ai-sdk/react": "^4.0.34",
     "@ai-sdk/xai": "^4.0.20",
     "@cambia/core": "link:./cambia/packages/core",
+    "@cambia/host": "link:./cambia/packages/host",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",

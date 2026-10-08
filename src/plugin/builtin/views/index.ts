@@ -1,18 +1,17 @@
-import type { Context, Plugin } from "@cambia/core";
-import type { ViewItemBase, ViewsService } from "./vocabulary";
+import type { Context } from "@cambia/core";
+import type { ViewItemBase, ViewsService } from "../../vocabulary";
+
+export const name = "views";
 
 /**
- * 宿主提供 `ctx.views`：外壳的注册点（pluginization.md §6）。
+ * `ctx.views`：外壳的注册点（pluginization.md §6）。
  *
  * 外壳（组件与路由）留在宿主代码里，插件只能"往里放东西"——注册项是纯数据加一个可选的图标组件，
  * 怎么渲染由外壳决定。内置插件与将来的第三方插件走同一套注册机制。
  */
-export const viewsPlugin = {
-  name: "views",
-  apply(ctx: Context) {
-    ctx.provide("views", createViewsService());
-  },
-} satisfies Plugin;
+export function apply(ctx: Context) {
+  ctx.provide("views", createViewsService());
+}
 
 /**
  * 槽位注册表。
