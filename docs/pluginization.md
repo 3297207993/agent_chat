@@ -29,24 +29,43 @@
 
 ## 2. 服务键位规划（迁移映射）
 
-| 键位 | 拥有者（迁移自） | 职责 |
-|---|---|---|
-| `ctx.llm` | llm 插件（`lib/ai/providers.ts` + `registry.ts`） | 模型适配器注册、模型解析 |
-| `ctx.tools` | tools 插件（`lib/ai/tools.ts`） | 工具注册表、schema 汇集、受守卫的执行管线 |
-| `ctx.sessions` | sessions 插件（`stores/conversationStore.ts` + `lib/db/`） | 追加式会话事件日志（真相源）、投影读取 |
-| `ctx.agents` / `ctx.agentLoop` | agent-loop 插件（`lib/ai/agent.ts`） | Agent 生命周期、turn/step 驱动 |
-| `ctx.approvals` | 审批插件（`requirePermission` + `toolStore`） | 监听 `tools/pre-execute` 的策略插件 |
-| `ctx.mcp` | mcp 插件（`lib/mcp/manager.ts`） | MCP Server 连接管理、工具发现 |
-| `ctx.skills` / `ctx.memory` / `ctx.rules` | 对应功能插件 | 各自领域服务 |
-| `ctx.views` / `ctx.renderers` | app-shell 插件 | UI 插槽注册、结构化数据渲染器键位 |
+> 键位名与事件名沿用设计蓝本的命名（出处见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 第 8 节）；**分法与粒度是本项目自己的**——蓝本按 capability 把同一块切成 definition / provider / consumer 三类包（`packages/` 下五十余个分组），本项目按现有功能模块切，暂不做三元分离（见 §6）。
+
+| 分组 | 插件 | 键位 | 职责（迁移自） |
+|---|---|---|---|
+| core | **message** | `ctx.sessions` | 对话 + 消息 + **分类**的大粒度管理：对话列表、当前对话、分类 CRUD（`stores/conversationStore.ts`、`stores/categoryStore.ts`、`lib/db/` 的 conversation / message / category 三张表）。消息内容按**不透明字符串**存取，不解释格式 |
+| core | **storage** | `ctx.storage` | Dexie 引擎与版本声明、`reset()`（`lib/db/database.ts`）。由**宿主**提供，表定义由各插件登记 |
+| core | **llm** | `ctx.llm` | provider 适配与模型解析（`lib/ai/providers.ts`、`registry.ts`）、**消息与流的词汇表**、上下文裁剪（`lib/ai/window.ts`） |
+| agent | **agent-loop** | `ctx.agentLoop` | Agent 生命周期、turn/step 驱动（`lib/ai/agent.ts`、`chat.ts`、`messages.ts`） |
+| agent | **chat-view** | 无 | 对话展示与输入（`components/chat/`）：观察 `agent/*` 事件拿流式增量，经 `ctx.views` 挂到外壳。**不认领键位** |
+| tools | **tools** | `ctx.tools` | 工具注册表、schema 汇集、受守卫的执行管线（`lib/ai/tools.ts`） |
+| tools | **approval** | `ctx.approvals` | 监听 `tools/pre-execute` 的策略插件（`requirePermission` + `stores/toolStore.ts` 的审批部分）。与 tools **平级**，可单独启停 |
+| platform | **platform** | `ctx.fs`、`ctx.shell`、`ctx.app` | Tauri 命令桥：文件系统（`commands/file.rs`、`search.rs`、`security.rs`）、命令执行（`commands/shell.rs`）、应用目录（`commands/system.rs`）。tools 与 skills 共用 |
+| prompt | **prompt** | `ctx.prompt` | prompt section 装配（`lib/ai/runAgent.ts` 的 `buildSystemPrompt`）；各插件贡献 section |
+| prompt | **prompt-setting** | 无 | 注册 settings section（`components/settings/SystemPromptSettings.tsx`）。**不认领键位** |
+| prompt | **rule-setting** | `ctx.rules` | 规则数据与**绑定解析**（`stores/ruleStore.ts`、`lib/db/ruleDB.ts`；解析 `conversations.ruleIds` / `categories.ruleIds`） |
+| extension | **mcp** | `ctx.mcp` | MCP Server 连接管理、工具发现（`lib/mcp/`，含 `mcp_*` 命令族），向 `ctx.tools` 贡献工具 |
+| extension | **skills** | `ctx.skills` | 技能扫描、解析与执行（`lib/skills/parser.ts`、`services/skillService.ts`、`stores/skillStore.ts`），向 `ctx.tools` 贡献工具 |
+| 宿主 | **app-shell** | `ctx.views`、`ctx.renderers` | 外壳与注册点：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位（`components/layout/`、`pages/`、路由）。由宿主作为**不可卸载的内置插件**提供 |
+
+**不算插件**：`lib/ai/tokenizer.ts` 是零依赖纯函数，留作宿主共享工具；`memory` 现在是占位空壳，暂不切（见 §2.2）。
+
+**分组只是组织概念**（目录与文档归类）：运行时一律是平级插件，分组不表示父子挂载，也不改变生命周期。
 
 ### 2.1 事件域规划
 
-- **会话事件**（持久事实，追加进日志）：`turn/*`、`step/*`、`user/message`、`assistant/message`、`tool/call`、`tool/result`
-- **Agent 事件**（进行中的工作，可观察可拦截）：`agent/pre-step`、`agent/request`、`agent/assistant-stream`
-- **能力事件**（向接缝挂策略/适配器）：`tools/pre-execute`、`tools/execute`、`tools/post-execute`、`fs/*`
+- **会话事件**（持久事实）：`turn/*`、`step/*`、`user/message`、`assistant/message`、`tool/call`、`tool/result`——**"追加进日志"是 message 数据层改造（§5 的 P1b）之后的事**；P1 只划边界，这些事件按可广播形式发出，存储仍是现有 Dexie 结构
+- **Agent 事件**（进行中的工作，可观察可拦截）：`agent/pre-step`、`agent/request`、`agent/assistant-stream`——`chat-view` 以观察者身份订阅它取流式增量，这是"展示"与"驱动"分开的接口
+- **能力事件**（向接缝挂策略/适配器）：`tools/pre-execute`、`tools/execute`、`tools/post-execute`、`fs/*`、`shell/*`
 
-`waterfall` 用于拦截点（`agent/request`、`tools/pre-execute`），`emit` 用于观察点，`bail` 用于审批决策。
+`waterfall` 用于拦截点（`agent/request`、`tools/pre-execute`），`emit` 用于观察点（`agent/assistant-stream` 等），`bail` 用于审批决策。
+
+### 2.2 连带结论与待定项
+
+- **词汇表归属**：`Message` / `MessageContent` / `role` 取值 / tool-call 结构归 **llm**；`Conversation` / `Category` 归 **message**（`src/types/chat.ts` 按此拆分）。message 侧不 import llm 的类型
+- **`tokenCount` 挪位**：算它必须懂内容格式，所以不再由 message 侧计算——改为写入前由 llm 侧算好传入，或去掉该字段
+- **依赖方向**（无环）：`chat-view → agentLoop + sessions + llm + views`；`agent-loop → llm + tools + prompt`；`prompt → rules`；`rule-setting → sessions`；`tools → platform`；`skills → platform`；`mcp → tools`
+- **待定**：`memory` 何时切；Dexie 下运行时登记新表需要 bump version + 重开（第三方插件加表时才撞上，归 P5）；`prompt` / `prompt-setting` / `rule-setting` 三者的接口细节
 
 ---
 
@@ -73,8 +92,9 @@
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| **P1 首次接入** | 引入内核；sessions 插件化（追加事件 + stores 变投影），首个带 UI 的功能插件（memory 或 rules）验证"服务+事件+视图"三链路 | 对话功能零回归 |
-| **P2 tools** | builtinTools 逐个搬进工具插件；requirePermission 变 waterfall/bail 监听 | 工具调用 + 审批流零回归 |
+| **P1 首次接入** | 引入内核；宿主提供 `ctx.storage` 与 `ctx.views`/`ctx.renderers`（内置、不可卸载）；**message 插件化——只划边界，数据层保持现有 Dexie 结构**；外壳注册点就位（topbar 导航、sidebar 页、settings section）；首个带 UI 的功能插件（rule-setting 或 prompt）验证"服务+事件+视图"三链路 | 对话功能零回归 |
+| **P1b 会话日志化** | message 的数据层改为**追加式会话事件日志 + 投影读取**（§2.1 的会话事件真正落进日志），并迁移既有历史数据 | 日志与投影行为等价于现版本，旧数据不丢 |
+| **P2 tools** | builtinTools 逐个搬进 tools 插件，其依赖的 fs/shell 能力先经 platform 键位；requirePermission 变 waterfall/bail 监听 | 工具调用 + 审批流零回归 |
 | **P3 agent-loop** | createAgentStream 插件化，暴露 `agent/request`、`tools/*` waterfall | 流式对话零回归 |
 | **P4 llm + 周边迁移** | llm 适配器、MCP、skills 迁移为插件 | 全功能等价 |
 | **P5 第三方装载接入** | 接入内核的 `@cambia/host`（manifest 规范化 + 依赖图 + 激活 + `.tap` 安装 + CSP/保险丝）；宿主侧补管理界面 | 外部插件注册工具跑通 |
@@ -86,6 +106,7 @@
 
 ## 6. 本项目明确不做 / 后置
 
-- **宿主外壳插件化**：窗口、路由、主题、插槽容器先留在宿主代码——用插件系统开发插件系统的自举困境会拖垮迭代速度
+- **宿主外壳插件化**：窗口、路由、主题、插槽容器留在宿主代码——用插件系统开发插件系统的自举困境会拖垮迭代速度。外壳**只暴露注册点**（`ctx.views` / `ctx.renderers`：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位），由宿主作为**不可卸载的内置插件**提供；插件往里注册，外壳自身不参与启停
+- **提前做 capability 三元分离**：蓝本把同一能力切成 definition / provider / consumer 三类包；本项目暂不这么切——当某个能力**真的出现第二个提供者**（例如远程或沙箱 fs）再拆包，现在拆只是为用不到的灵活性付样板成本。但**键位该独立的仍然独立**（`ctx.fs` / `ctx.shell` 从一开始就是接缝，不能塞进 tools）
 - **为覆盖率而迁移**：迁移按功能推进，未迁移部分保持普通模块形态；不为了"看起来全插件化"做无收益的搬运
 - **第三方插件的降权执行区**：本项目选择全信任同进程，不引入 Worker/WASM 隔离，也不为它预留架构；若将来要分发不受信插件再评估（见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 5.3）
