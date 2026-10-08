@@ -73,6 +73,16 @@ TS --command `respond`({ callId, result | error })--> crate --response--> 后端
 - **权限**：默认集只有只读的 `allow-module-url`；`spawn` / `kill` / `call` / `respond` 各自有自动生成的 `allow-*`，但**不进默认集**——默认集放宽等于对 WebView 里的一切内容开口子。
 - **`package_info()` / `manage()` / `asset_protocol_scope()` 都要 `tauri::Manager`** 在作用域里（一个容易漏的 import）。
 
+#### 把这套东西接进真 Tauri 项目要做什么（2026-10-08 实测，`examples/tauri-app` 已按此改好）
+
+脚手架留下的示例工程此前**根本编译不了**，修好它一共踩到三处宿主侧硬要求——都写在这里，因为 K3.4 的接入文档要照抄：
+
+1. **适配层的工作区要 `exclude` 示例工程**。适配层自带 `[workspace]`，而示例 app 在它目录里，cargo 于是报 `current package believes it's in a workspace when it's not` 并拒绝编译。修法是在适配层的 `[workspace]` 里写 `exclude = ["examples/tauri-app/src-tauri"]`（示例 app 是自带 lockfile 的独立应用）。
+2. **宿主自己必须开 `tauri` 的 `protocol-asset` feature**，只靠适配层开**不够**：`tauri-build` 会拿 `tauri.conf.json` 的 `app.security.assetProtocol.enable` 去比对**宿主 app 自己的依赖 feature**，不一致就拒绝构建（报 `The tauri dependency features … does not match the allowlist defined under tauri.conf.json`）。这条推翻了我先前在适配层 `Cargo.toml` 里写的"feature 是加性的、宿主不必自己开"——编译 API 是加性的，构建期校验不是。
+3. **插件根只能在 `setup` 里知道**，所以注册要走 `AppHandle::plugin(...)` 而不是 `Builder::plugin(...)`（`app.path()` 此时才存在）。写成本地目录的默认值不行——那是给"插件根"造第二个权威。
+4. 前端包名要跟 kernel.md 5.3.2 对齐（`@cambia/plugin-cambia`）；本地未发布时用 `link:../../` 而不是 `file:../../`——pnpm 对指向带 `node_modules` 的目录的 `file:` 依赖会创建失败（`ERR_PNPM_PACKAGE_MANAGER_CREATE_NODE_MODULES_DIR`）。
+5. CSP 与 scope：`app.security.assetProtocol.enable = true`，CSP 里 `script-src` 与 `connect-src` **都要**放行 `http://asset.localhost`（Windows 上 `asset:` 的实际 scheme 是 http）**与** `asset:`（macOS / Linux）。
+
 **端口 ↔ 命令的对应关系以 [host.md](./host.md) 的端口清单为准**（那边是声明方，本模块只是实现方）。命令要报的错必须先出现在码表里（[../plan.md](../plan.md) 第 1 节），所以上表凡是"未落地"的行都不算承诺。
 
 `module_url` 的入参**不是任意绝对路径**：本模块把它拼到插件根上，并**拒绝越出根**的路径（`.` / `..` / 绝对路径 / 反斜杠）。理由不是"Tauri scope 会兜住"——把不合法输入挡在拼 URL 之前，才不用赌 scope 的默认行为。

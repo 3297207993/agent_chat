@@ -1,54 +1,87 @@
 <script>
-  import Greet from './lib/Greet.svelte'
-  import { ping } from 'tauri-plugin-cambia-api'
+  import { moduleURL, spawn, call, kill } from '@cambia/plugin-cambia'
 
-	let response = $state('')
+  let log = $state('')
+  let backend = $state(null)
 
-	function updateResponse(returnValue) {
-		response += `[${new Date().toLocaleTimeString()}] ` + (typeof returnValue === 'string' ? returnValue : JSON.stringify(returnValue)) + '<br>'
-	}
+  function record(value) {
+    log = `[${new Date().toLocaleTimeString()}] ${typeof value === 'string' ? value : JSON.stringify(value)}\n` + log
+  }
 
-	function _ping() {
-		ping("Pong!").then(updateResponse).catch(updateResponse)
-	}
+  async function askForModuleUrl() {
+    try {
+      // The `moduleURL` port: a plugin-root-relative path becomes something `import()` can fetch.
+      // Whatever this answers is a URL into the asset protocol, i.e. exactly what K2.4 has to prove.
+      record(await moduleURL('demo/1.0.0-abc123/frontend/main.js'))
+    } catch (error) {
+      record(`moduleURL failed: ${JSON.stringify(error)}`)
+    }
+  }
+
+  async function startBackend() {
+    try {
+      // A backend in its argv form: a system interpreter plus a script. The script below is the
+      // smallest thing that can hold a conversation — it answers the `$/initialize` handshake and then
+      // echoes whatever it is asked.
+      const script = `
+        const rl = require('readline').createInterface({ input: process.stdin })
+        rl.on('line', (line) => {
+          const m = JSON.parse(line)
+          const result = m.method === '$/initialize' ? { protocolVersion: 1 } : m.params
+          process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + '\\n')
+        })
+      `
+
+      // Starting it waits for the handshake: this call resolves once the backend is *ready*, or throws
+      // with a spec code. There is no "starting" state to poll for.
+      backend = await spawn({
+        pluginId: 'demo',
+        pluginVersion: '1.0.0',
+        bin: ['node', '-e', script],
+        root: '.',
+        startTimeoutMs: 10_000,
+        stopTimeoutMs: 5_000,
+        restart: { maxAttempts: 3, baseDelayMs: 200, maxDelayMs: 5_000 },
+      })
+
+      record(`backend ready: generation ${backend.generation}, protocol ${backend.protocolVersion}`)
+
+      // The frame loop, the timeout and the cancellation all happen on the Rust side.
+      const echoed = await call({
+        pluginId: 'demo',
+        generation: backend.generation,
+        method: 'test/echo',
+        params: { from: 'the webview' },
+        timeoutMs: 5_000,
+      })
+
+      record(`echo: ${JSON.stringify(echoed)}`)
+    } catch (error) {
+      record(`spawn/call failed: ${JSON.stringify(error)}`)
+    }
+  }
+
+  async function stopBackend() {
+    if (!backend) return
+
+    try {
+      const reason = await kill({ pluginId: 'demo', timeoutMs: 5_000 })
+      record(`stopped: ${JSON.stringify(reason)}`)
+      backend = null
+    } catch (error) {
+      record(`kill failed: ${JSON.stringify(error)}`)
+    }
+  }
 </script>
 
 <main class="container">
-  <h1>Welcome to Tauri!</h1>
+  <h1>Cambia in a real Tauri app</h1>
 
   <div class="row">
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo vite" alt="Vite Logo" />
-    </a>
-    <a href="https://tauri.app" target="_blank">
-      <img src="/tauri.svg" class="logo tauri" alt="Tauri Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank">
-      <img src="/svelte.svg" class="logo svelte" alt="Svelte Logo" />
-    </a>
+    <button onclick={askForModuleUrl}>moduleURL(…)</button>
+    <button onclick={startBackend} disabled={backend !== null}>spawn backend</button>
+    <button onclick={stopBackend} disabled={backend === null}>kill backend</button>
   </div>
 
-  <p>
-    Click on the Tauri, Vite, and Svelte logos to learn more.
-  </p>
-
-  <div class="row">
-    <Greet />
-  </div>
-
-  <div>
-    <button onclick="{_ping}">Ping</button>
-    <div>{@html response}</div>
-  </div>
-
+  <pre>{log || 'Nothing yet.'}</pre>
 </main>
-
-<style>
-  .logo.vite:hover {
-    filter: drop-shadow(0 0 2em #747bff);
-  }
-
-  .logo.svelte:hover {
-    filter: drop-shadow(0 0 2em #ff3e00);
-  }
-</style>

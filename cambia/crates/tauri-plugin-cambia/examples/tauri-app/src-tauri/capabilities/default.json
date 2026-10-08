@@ -7,6 +7,10 @@
   ],
   "permissions": [
     "core:default",
-    "cambia:default"
+    "cambia:default",
+    "cambia:allow-spawn",
+    "cambia:allow-kill",
+    "cambia:allow-call",
+    "cambia:allow-respond"
   ]
 }

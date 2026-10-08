@@ -18,6 +18,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", default-features = false }
 
 [dependencies]
-tauri = { version = "2.11.3" }
+# `protocol-asset` must be enabled **by the application**, not only by this plugin crate: `tauri-build`
+# compares the app's `tauri.conf.json` (`app.security.assetProtocol.enable`) against the app's own
+# dependency features and refuses to build when they disagree. Measured on the example app — the
+# adapter enabling the feature is not enough, because that check reads the app's manifest.
+tauri = { version = "2.11.3", features = ["protocol-asset"] }
 tauri-plugin-cambia = { path = "../../../" }
 

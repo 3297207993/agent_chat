@@ -12,13 +12,19 @@ links = "tauri-plugin-cambia"
 # build can never leak into the kernel's fast track — that exclusion is what makes "the kernel
 # implementation layer has zero Tauri dependencies" structural rather than aspirational
 # (implementation.md 3.6, CONTRIBUTING hard rule 3).
+#
+# `examples/tauri-app` is excluded in turn: it is a standalone application with its own lockfile, and
+# without this line cargo refuses to build it at all ("current package believes it's in a workspace
+# when it's not").
 [workspace]
+exclude = ["examples/tauri-app/src-tauri"]
 
 [dependencies]
-# `protocol-asset` is required by the one piece of wiring this crate owns: extending the `asset:`
-# scope so the webview can fetch plugin files (implementation.md 3.2(e)). Cargo features are
-# additive, so the host does not have to enable it itself. If K2.4 concludes that `asset:` does not
-# hold and a custom scheme takes over, this feature goes with it.
+# `protocol-asset` is what makes `Manager::asset_protocol_scope()` exist at all, so this crate needs it
+# to compile. **The host application needs it too** — `tauri-build` compares the app's `tauri.conf.json`
+# (`app.security.assetProtocol.enable`) against the app's own dependency features and refuses to build
+# when they disagree, so enabling it here is not enough (measured on the example app). If K2.4
+# concludes that `asset:` does not hold and a custom scheme takes over, this feature goes with it.
 tauri = { version = "2.11.3", features = ["protocol-asset"] }
 serde = "1.0"
 serde_json = "1.0"
