@@ -29,6 +29,29 @@ export type {
   PluginModule,
 } from './loader'
 
+export {
+  DEFAULT_BACKEND_POLICY,
+  backendErrorCode,
+  createProxyService,
+  registerProxies,
+  startBackend,
+  stopBackend,
+} from './backend'
+export type {
+  BackendCallDispatch,
+  BackendHandle,
+  BackendPlan,
+  BackendPolicy,
+  BackendRestartPolicy,
+  BackendStatus,
+  BackendSupervisor,
+  BackendTarget,
+  BinTarget,
+  ExitReason,
+  PluginTransport,
+  ProxySpec,
+} from './backend'
+
 export { checkEngines, isValidRange, isValidVersion, parseHostEngine } from './engines'
 export type { EngineMismatch, EnginesVerdict, HostEngine, RuntimeVersions } from './engines'
 
