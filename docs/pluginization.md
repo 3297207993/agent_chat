@@ -37,7 +37,7 @@
 
 | 分组 | 插件 | 键位 | 职责（迁移自） |
 |---|---|---|---|
-| core | **message** | `ctx.sessions` | 对话 + 消息 + **分类**的大粒度管理：对话列表、当前对话、分类 CRUD（迁移自 `stores/conversationStore.ts`、`stores/categoryStore.ts`、`lib/db/` 的 conversation / message / category 三张表、`components/layout/Sidebar.tsx`）。消息内容按**不透明字符串**存取，不解释格式。**已落地**：三张表的**数据层**（含行编码与排序）搬进插件、经 `ctx.sessions` 唯一可达，写入时广播 §2.1 的会话事实与 `session/changed`；store 与 UI 仍是宿主代码（过渡态），它们已改走键位 |
+| core | **message** | `ctx.sessions` | 对话 + 消息 + **分类**的大粒度管理：对话列表、当前对话、分类 CRUD（迁移自 `stores/conversationStore.ts`、`stores/categoryStore.ts`、`lib/db/` 的 conversation / message / category 三张表、`components/layout/Sidebar.tsx`）。消息内容按**不透明字符串**存取，不解释格式。**已落地**：三张表的**数据层**（含行编码与排序）与**当前对话**搬进插件、经 `ctx.sessions` 唯一可达，写入时广播 §2.1 的会话事实与 `session/changed`；`conversationStore` 退化成它的订阅方（组件照旧读 `currentConversationId`） |
 | core | **storage** | `ctx.storage` | Dexie 引擎与版本声明、`reset()`。由**宿主**提供（**新增**，引擎来自 `lib/db/database.ts`）；表定义暂集中在宿主，插件登记表定义见 §2.2 待定 |
 | core | **llm** | `ctx.llm` | provider 适配与模型解析（`lib/ai/providers.ts`、`registry.ts`、`stores/providerStore.ts`）、**消息与流的词汇表**（`types/chat.ts` 的 `Message` / `MessageContent`）、上下文裁剪（`lib/ai/window.ts`） |
 | agent | **agent-loop** | `ctx.agentLoop` | Agent 生命周期、turn/step 驱动（`lib/ai/agent.ts`、`chat.ts`、`messages.ts`、`runAgent.ts` 的 `startAgentRun` / `stopStreaming` / `regenerateAssistant`） |
@@ -66,7 +66,7 @@
 
 `waterfall` 用于拦截点（`agent/request`、`tools/pre-execute`），`emit` 用于观察点（`agent/assistant-stream` 等），`bail` 用于审批决策。
 
-**已落地（2026-10-08）**：`user/message` / `assistant/message` 由 message 插件在消息落库时 `emit`，负载就是持久化形状 `StoredMessage`（P1b 里它就是日志条目的形状）；其他 role 没有对应的事实名，只发下面那条通知。此外补了一个 `session/changed`（`{ kind, action, id }`，`id` 是重取的键：对话 / 分类是自身 id，消息是所属对话 id）覆盖对话 / 分类 / 消息的**每次**写入——它是**失效通知**，不是持久事实（P1b 的日志不追加它），存在的理由是：没有它，任何依赖会话数据的插件 UI 都只能轮询服务。`turn/*`、`step/*`、`tool/*`、`agent/*` 仍等 P2/P3（那些域还没搬进插件）。
+**已落地（2026-10-08）**：`user/message` / `assistant/message` 由 message 插件在消息落库时 `emit`，负载就是持久化形状 `StoredMessage`（P1b 里它就是日志条目的形状）；其他 role 没有对应的事实名，只发下面那条通知。此外补了一个 `session/changed`（`{ kind, action, id }`，`id` 是重取的键：对话 / 分类是自身 id，消息是所属对话 id）覆盖对话 / 分类 / 消息的**每次**写入——它是**失效通知**，不是持久事实（P1b 的日志不追加它），存在的理由是：没有它，任何依赖会话数据的插件 UI 都只能轮询服务。还有 `session/current-changed`（`string | null`）报"当前对话换了谁"——它不是数据变更（没有东西落库），但依赖会话数据的 UI 必须跟着它走。`turn/*`、`step/*`、`tool/*`、`agent/*` 仍等 P2/P3（那些域还没搬进插件）。
 
 ### 2.2 连带结论与待定项
 
@@ -112,7 +112,7 @@
 
 依赖：P1–P4 需要内核核心就绪，P5–P6 需要内核的装载运行时与生态件就绪。
 
-**P1 进度（2026-10-08）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、`topbar.action` 槽位、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`（`settings.section` 槽位）、`message` 的数据层边界（`ctx.sessions` + 会话事件，见 §2.1）已落地。**还差**：`turn/*` / `step/*` / `tool/*` / `agent/*` 那些事件（要等它们所属的域进插件）、`ctx.renderers`、`rule-setting`，以及外壳的 sidebar 页 / panel tab 两个槽位。
+**P1 进度（2026-10-08）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、`topbar.action` 槽位、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`（`settings.section` 槽位）、`message` 的数据层与当前对话边界（`ctx.sessions` + 会话事件，见 §2.1）已落地。**还差**：`turn/*` / `step/*` / `tool/*` / `agent/*` 那些事件（要等它们所属的域进插件）、`ctx.renderers`、`rule-setting`，以及外壳的 sidebar 页 / panel tab 两个槽位。
 
 ---
 

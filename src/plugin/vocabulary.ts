@@ -55,6 +55,18 @@ declare module "@cambia/core" {
      * 它。观察者靠它知道"该重取了"，不靠它重建状态（重建状态是重建投影，P1b 之后走日志）。
      */
     "session/changed"(change: SessionChange): void;
+
+    /**
+     * 当前对话的选择变化。它不是数据变更（没有东西落库），所以不并进 `session/changed`——但依赖
+     * 会话数据的 UI 必须跟着它走，否则会拿着上一个对话的数据渲染。
+     */
+    "session/current-changed"(conversationId: string | null): void;
+
+    /**
+     * 当前对话的选择变化。它不是数据变更（没有东西落库），所以不并进 `session/changed`——但依赖
+     * 会话数据的 UI 必须跟着它走，否则会拿着上一个对话的数据渲染。
+     */
+    "session/current-changed"(conversationId: string | null): void;
   }
 }
 
@@ -147,6 +159,11 @@ export interface SessionsService {
   deleteMessages(conversationId: string): Promise<void>;
   /** 该对话最后写入的一条；流式期的临时负 id 回填靠它兜底。 */
   latestMessage(conversationId: string): Promise<StoredMessage | undefined>;
+
+  /** 当前选中的对话。它归 message（§2 表），不落库：每次启动都是"没选"。 */
+  getCurrentId(): string | null;
+  /** 切换当前对话；广播 `session/current-changed`。 */
+  setCurrent(conversationId: string | null): void;
 
   /** 按 `sortOrder` 升序。 */
   listCategories(): Promise<Category[]>;

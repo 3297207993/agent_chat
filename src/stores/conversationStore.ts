@@ -9,6 +9,23 @@ import { useUIStore } from "@/stores/uiStore";
 /** 数据层的唯一通道：message 插件通过 `ctx.sessions` 提供（pluginization.md §2）。 */
 const sessions = () => hostContext().sessions;
 
+/** 镜像订阅只装一次（`loadFromDB` 是宿主启动后的第一个入口）。 */
+let mirroring = false;
+
+/**
+ * 当前对话的**权威在 `ctx.sessions`**（§2 表：这一项归 message），本 store 只镜像它：服务侧一
+ * 变就跟着变，组件照旧读 `currentConversationId`，不用知道它搬过家。
+ */
+function mirrorSelection() {
+  if (mirroring) return;
+  mirroring = true;
+  hostContext().on("session/current-changed", (id) => {
+    useConversationStore.setState((state) =>
+      state.currentConversationId === id ? state : { currentConversationId: id },
+    );
+  });
+}
+
 /** 持久化消息 → 内存消息：内容是不透明字符串，解回结构是 llm 侧的事（§2.2）。 */
 function toMessage(row: StoredMessage): Message {
   return {
@@ -95,9 +112,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   // ── Init ──
 
   loadFromDB: async () => {
+    mirrorSelection();
     try {
       const conversations = await sessions().listConversations();
-      set({ conversations, initialized: true });
+      set({
+        conversations,
+        currentConversationId: sessions().getCurrentId(),
+        initialized: true,
+      });
     } catch {
       // 数据库升级失败时重置
       await resetDatabase();
@@ -108,7 +130,10 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   // ── Navigation ──
 
   setCurrentConversation: async (id) => {
-    set({ currentConversationId: id });
+    // 权威在服务：先切它（事件回来会镜像），本地再补一次以免订阅还没装上
+    sessions().setCurrent(id);
+    set((state) => (state.currentConversationId === id ? state : { currentConversationId: id }));
+
     if (id) {
       // 按需加载当前对话的消息
       const { messages } = get();
@@ -158,9 +183,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
     set((state) => ({
       conversations: [conversation, ...state.conversations],
-      currentConversationId: id,
       messages: { ...state.messages, [id]: [] },
     }));
+    sessions().setCurrent(id);
 
     void sessions().createConversation(conversation);
 
@@ -210,6 +235,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   deleteConversation: async (id) => {
+    const wasCurrent = get().currentConversationId === id;
     set((state) => {
       const { [id]: _, ...restMessages } = state.messages;
       return {
@@ -219,6 +245,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           state.currentConversationId === id ? null : state.currentConversationId,
       };
     });
+    if (wasCurrent) sessions().setCurrent(null);
+
     await Promise.all([sessions().deleteConversation(id), sessions().deleteMessages(id)]);
   },
 

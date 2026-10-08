@@ -14,12 +14,22 @@ import type { SessionChange, SessionsService, StorageService } from "../../vocab
  */
 export function createSessionsService(ctx: Context): SessionsService {
   const db: StorageService["db"] = ctx.storage.db;
+  /** 当前对话归本插件持有（§2 表），但不落库：每次启动都是"没选"。 */
+  let currentId: string | null = null;
 
   const changed = (kind: SessionChange["kind"], action: SessionChange["action"], id: string) => {
     ctx.emit("session/changed", { kind, action, id });
   };
 
   return {
+    getCurrentId: () => currentId,
+
+    setCurrent(conversationId) {
+      if (conversationId === currentId) return;
+      currentId = conversationId;
+      ctx.emit("session/current-changed", conversationId);
+    },
+
     async listConversations() {
       const rows = await db.conversations.orderBy("updatedAt").reverse().toArray();
       return rows.map((row) => ({
