@@ -31,8 +31,8 @@
 | `packages/eslint-config` | [eslint-config.md](./eslint-config.md) | 有（实现后补写） |
 | `packages/host` | [host.md](./host.md) | 有（草稿：契约层（K2.1）、装载判定与卸载（K2.2）与可行性验证（K2.4）写全，K2.3 待其批次实现前补写） |
 | `packages/kit` | `kit.md` | 没有——动手前建 |
-| `crates/plugin-host` | [plugin-host.md](./plugin-host.md) | 有（草稿：边界 / 端口对应 / 状态权威 / 失败路径写全；**控制面薄层位置未决**） |
-| `crates/tauri-plugin-cambia` | `tauri-plugin-cambia.md` | 没有——动手前建 |
+| `crates/plugin-host` | [plugin-host.md](./plugin-host.md) | 有（草稿：边界 / 端口对应 / 状态权威 / 失败路径写全；**控制面薄层位置 2026-10-08 定案**；骨架已建、实现随 K2.5 / K2.6） |
+| `crates/tauri-plugin-cambia` | [tauri-plugin-cambia.md](./tauri-plugin-cambia.md) | 有（草稿：最小接线已落地并自测，命令集合 / 退出回收未落地） |
 | `spec/` | [spec.md](./spec.md) | 有（草稿：K2.1 的产物清单写全，K3.1 定稿） |
 
 ## 必备内容
