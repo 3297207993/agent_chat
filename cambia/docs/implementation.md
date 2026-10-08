@@ -256,6 +256,7 @@ crate 是 Rust 侧唯一的包管理实现，也是"插件完全能力"的来源
 
 - 需要覆盖的能力（决定"薄"到哪）：双向 request/response（宿主→后端调用、后端→宿主暴露的服务/方法调用）与通知、请求 id 关联、超时、取消、错误码表（进 spec）、大块数据**不走协议**（临时文件或共享内存，kernel 3.3）、stderr 只作日志、写入背压。具体可调用的方法由宿主定义，不在通用协议里预置领域 API。
 - 多语言 SDK：协议进 spec 后，v1 只提供 Node（零依赖）与 Python 两个最小实现放 `examples/`，作为"协议可被第二种语言实现"的实证；其余语言后置。
+- **已写进 spec（2026-10-08）**：[../spec/v1/protocol.md](../spec/v1/protocol.md) —— 帧、消息形状、两个方向各一套 id 空间、`$/` 保留方法（`$/initialize` 握手即就绪信号、`$/shutdown`、`$/cancel`）、超时与取消的归属、断开与背压、v1 明确不做的清单；协议码值随表进 `error-codes.json`（`protocol` / `process` 两组）。**薄层的位置也已定案**：帧 / 请求 id / 超时 / 取消在本 crate，服务契约与方法名↔服务键的路由在 TS（[design/plugin-host.md](design/plugin-host.md) 的专节）。
 
 #### (g) 宿主适配层（Tauri 版）：`tauri-plugin-cambia`
 

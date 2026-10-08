@@ -41,7 +41,7 @@ loadPluginModule(url) ← moduleURL(rel) ← command          ← 路径与 sche
 parseManifest(text)   ← readText(rel)  ← command          ← 文件读取
 判定 → 编排            ← listInstalled() ← command          ← 安装目录 + journal
                         ← spawn/kill                            ← 进程监督器
-                        ← call/onCall                           ← 控制面（位置未决）
+                        ← call/onCall                           ← 控制面（分层已定案）
 ```
 
 | 端口 | Rust 侧对应 | 批次 |
@@ -49,9 +49,57 @@ parseManifest(text)   ← readText(rel)  ← command          ← 文件读取
 | `readText(relPath)` | 读安装根目录下的文件，返回文本 | 待分配（建议 K2.5） |
 | `listInstalled()` | 扫安装目录 + 读 journal，返回 `[{id, version, hash, dir, enabled}]` | 待分配（建议 K2.5） |
 | `spawn(spec)` / `kill(id)` | 进程监督器 | K2.6 |
-| `call` / `onCall` | 控制面传输 | K2.6（位置未决） |
+| `call` / `onCall` | 控制面传输 | K2.6（**分层已定案**，见专节） |
 
-**进程句柄不进 TS**：`spawn` 返回的是**标识**（id / 世代号），不是句柄；`kill(id)` 是**请求**。理由不是风格——见 [host.md](./host.md)"进程端口"一节：退出回收必须由 OS 级机制保证（Job Object / 进程组），"JS 调用 kill"这条路径在 WebView 崩了、窗口被关、应用被强杀时根本不会执行。`tauri-plugin-shell` 被否掉正是同一个坑（implementation.md 事实 9）。
+**进程句柄不进 TS**：`spawn` 返回的是**标识**（插件 id + 世代号），不是句柄；`kill(id)` 是**请求**。理由不是风格——见 [host.md](./host.md)"进程端口"一节：退出回收必须由 OS 级机制保证（Job Object / 进程组），"JS 调用 kill"这条路径在 WebView 崩了、窗口被关、应用被强杀时根本不会执行。`tauri-plugin-shell` 被否掉正是同一个坑（implementation.md 事实 9）。
+
+### 进程与控制面（K2.6 交付）
+
+形状如下；**签名在实现时可以调，语义不可调**（语义以本节与 [../../spec/v1/protocol.md](../../spec/v1/protocol.md) 为准）。
+
+```rust
+/// 一次运行实例的标识：插件 id + 世代号。TS 拿到的就是它，不是句柄。
+pub struct BackendId { plugin: String, generation: u64 }
+
+pub struct SpawnSpec {
+  plugin: String,
+  /// manifest 的 `backend.bin` 里平台键命中的那条：字符串 = 相对安装目录的可执行文件；数组 = argv
+  target: BinTarget,
+  /// 安装目录；`target` 里的相对路径以它为根解析（越界拒绝，规则与 K2.4 的路径净化同源）
+  root: PathBuf,
+  protocol: ProtocolName,   // v1 只有 "jsonrpc-stdio"；不认识就拒绝，不猜
+}
+
+/// **值由 TS 给**（策略在编排层），执行在本 crate。
+pub struct StartPolicy { start_timeout: Duration, restart: RestartPolicy }
+pub struct RestartPolicy { max_attempts: u32, base_delay: Duration, max_delay: Duration, jitter: bool }
+
+pub enum BackendStatus { Spawning, Handshaking, Ready, Stopping, Exited(ExitReason) }
+pub struct ExitReason { code: Option<i32>, signal: Option<i32>, expected: bool, generation: u64 }
+
+impl Supervisor {
+  /// 立刻返回标识；**不 await 就绪**（与前端 `load` 的纪律相反，因为这里要的是"进程已接管"）
+  fn spawn(&self, spec: SpawnSpec, policy: StartPolicy) -> BackendId;
+  /// 后台推进：exec → `$/initialize` → Ready，或按 `RestartPolicy` 退避重试
+  fn status(&self, id: &BackendId) -> BackendStatus;
+  fn stop(&self, id: &BackendId, timeout: Duration) -> StopOutcome;
+  /// 宿主退出时全量回收（适配层的钩子调它）
+  fn reclaim_all(&self);
+  /// 退出 / 世代变化 / 退避用尽，交给 TS 决定"要不要再起"
+  fn subscribe(&self, sink: ExitSink);
+}
+
+impl Transport {
+  /// 关联 + 超时 + 取消都在这里（专节定案）；`timeout` 必填
+  fn call(&self, id: &BackendId, method: &str, params: Value, timeout: Duration) -> CallFuture;
+  /// 后端反向调用 → 交给 TS 路由（服务契约是宿主的词汇表）
+  fn set_inbound(&self, dispatch: InboundDispatch);
+}
+```
+
+适配层把它转成命令（`spawn` / `kill` / `call` / `respond`），命令集合见 [tauri-plugin-cambia.md](./tauri-plugin-cambia.md)。
+
+**`spawn` 命令等到真结论才返回**：crate 内部在"Ready 或失败"之后才让命令返回（失败带 `PROCESS_SPAWN_FAILED` / `PROCESS_START_TIMEOUT` / `PROCESS_PLATFORM_UNSUPPORTED`）。这样 TS 的 `startBackend` 天然 await 到一个可信状态，不需要自己轮询 `status`——与 K2.2 的"判定只在 `ACTIVE` / `FAILED` 上返回"是同一条纪律。
 
 ## 数据流与状态
 
@@ -72,7 +120,42 @@ parseManifest(text)   ← readText(rel)  ← command          ← 文件读取
 
 两份状态各说一套是必须避免的（[host.md](./host.md) 的"三处状态各有唯一来源"是同一条纪律）。所以 TS 侧**不缓存**"装了哪些"——它每次问 `listInstalled`，或接受它是缓存但明确写"以 crate 为准"。
 
-**进程（K2.6）**：进程表在本 crate，条目含 pid、世代号、job object / 进程组句柄、stderr 文件位置。回收走双保险：`RunEvent::ExitRequested` / `Exit` 钩子 **+** `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`（Windows）/ 进程组（Unix）——**不能只靠钩子**，钩子本身可能跑不到（implementation.md 3.3(e)）。
+**进程（K2.6）：状态机、世代号、退出码、退避**
+
+进程表在本 crate，条目含 `plugin`、`generation`、pid、job object / 进程组句柄、stdout/stderr 位置、`$/initialize` 状态与在途请求表。状态机只有五个状态：
+
+```
+                     spawn()
+   (absent) ───────────────────► Spawning ──exec 成功──► Handshaking ──$/initialize 应答──► Ready
+                                   │                        │                                │
+                                   │ exec 失败               │ 超时／版本不接受／提前退出        │ $/shutdown
+                                   ▼                        ▼                                ▼
+                              Exited(SPAWN_FAILED)     Exited(START_TIMEOUT / VERSION)     Stopping ──退出──► Exited(expected)
+                                                                                            │
+   Ready 期间进程自己退出（崩溃）─────────────────────────────────────────────────────────► Exited(crashed)
+                                                                                            
+   Exited ──(TS 策略允许重启 && 未超上限)──► 退避等待 ──► Spawning（generation + 1）
+   Exited ──(上限用尽)──► 上报 PROCESS_RESTART_EXHAUSTED，**不自己禁用**（禁用是 TS 的策略）
+```
+
+- **启动超时是"一个总时限"**（exec + 握手），因为对使用者而言只有一个问题——"它起来没有"；失败原因用两个码区分：`PROCESS_SPAWN_FAILED`（exec 就没起来）与 `PROCESS_START_TIMEOUT`（起来了但握手没完成）。
+- **世代号**每次 spawn 单调 +1，进程表按 `(plugin, generation)` 键控。**迟到的退出事件按世代号丢弃**——否则上一世代的退出会被算成这一世代的崩溃，进而多重启一次。stderr 也按世代分文件：`<plugin>/<generation>.log`。
+- **退出码语义**（决定要不要进退避，因此必须写死）：
+
+| 退出情况 | 判定 |
+|---|---|
+| `code = 0` 且是 `Stopping` 期间（我们要求的） | 预期退出，**不进退避** |
+| `code = 0` 但不是我们要求的（后端自己退出） | 异常终止，进退避 |
+| `code != 0` | 崩溃，进退避，留 `code` |
+| 被信号杀死（`signal` 非空） | 崩溃，留 `signal` |
+
+- **退避的参数由 TS 给、执行在本 crate**：TS 决定策略（`maxAttempts` / `baseDelay` / `maxDelay` / `jitter`，以及"上限用尽后要不要永久禁用"），crate 决定时机——它同时看得到 exec 失败与退出码，重试不必回一趟 JS。**不做"TS 驱动的重试"**：那会把重试状态拆到两处（crate 知道进程没了、TS 记着第几次），而每次重试都要跨一次 WebView IPC。
+- **优雅关闭**：`$/shutdown` → 等 `shutdownTimeout` → 关 stdin → 等进程退出 → 收拾整棵进程树（job object / 进程组）→ 确认回收。退出时**缩短预算**：应用正在退出，不能因为一个不回消息的后端把关闭流程挂住。
+- **全量回收走双保险**：`RunEvent::ExitRequested` / `Exit` 钩子 **+** `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`（Windows）/ 进程组（Unix）——**不能只靠钩子**，钩子本身可能跑不到（implementation.md 3.3(e)）。这正是"句柄不进 TS"的理由：WebView 崩了、窗口被关、应用被强杀时，只有 OS 级机制能收拾后端自己起的孙进程。
+- **`reclaim_all()` 的顺序**：先停止接受新的 spawn → 对每个 `Ready` / `Handshaking` 尝试优雅关闭（短预算）→ 收拾进程树 → 清空进程表。已在 `Exited` 的条目只清表。
+- **stderr**：按 `<plugin>/<generation>.log` 落盘并按体量轮转（阈值随实现定）；stdout **永不落日志**（它是协议通道，见 [../../spec/v1/protocol.md](../../spec/v1/protocol.md) §1）。
+
+**"没有 WebView 时后端还能不能活着"——v1 的答案**：**不能，而且这是选择而不是遗漏**。spawn 由 TS 中枢发起，所以"应用启动即起后端""托盘常驻、没有窗口也跑插件"在 v1 不成立；**回收不需要 WebView**（上面那条双保险）。支撑这个选择的理由：插件后端的生命周期由宿主策略决定，而策略在 TS；让 crate 自己决定"该起谁"等于把编排语义搬进内核实现层。后置选项是"在本 crate 留一个 `Ready` 时的最小触发点，只负责拉起、不接管语义"——真要常驻再定，别顺手做。
 
 ## 失败路径
 
@@ -85,11 +168,11 @@ parseManifest(text)   ← readText(rel)  ← command          ← 文件读取
 | 并发安装 / 更新 / 卸载同一插件 | 两个进程同时动 | 幂等；journal 保证只有一个赢 | 同上 |
 | 中途崩溃（进程被杀） | journal 停在"意图"阶段 | 下次启动按 journal 恢复（回滚或补完） | 同上 |
 | **Windows 文件占用**：更新时旧版本仍被进程占用 | rename 失败 | **先停该插件的后端再替换**（所以 crate 要知道"这个后端属于哪个插件"）；仍失败则推迟到下次启动 | 同上 |
-| 平台键无命中 | `bin` 里没有本平台的键 | **只禁用该插件的后端**，不降级到别的形态、不猜路径 | kernel.md 3.3 |
-| spawn 失败 / 启动超时 | 进程起不来或没上报就绪 | 记失败，按退避重试到上限 | K2.6 |
-| 后端崩溃 | 进程退出 | **只影响它自己**：回收 + 按策略重启，**不许连带停掉前端**；退出码与 stderr 留存 | K2.6 |
-| 后端起孙进程 | 只杀直接子进程会留孤儿 | Job Object / 进程组收拾整棵树——这是 K2.6 的验收项 | K2.6 |
-| 协议帧损坏 / 无响应 | 解析失败或超时 | 单次调用失败，不等于进程死亡 | K2.6 |
+| 平台键无命中 | `bin` 里没有本平台的键 | **只禁用该插件的后端**，不降级到别的形态、不猜路径（kernel.md 3.3） | `PROCESS_PLATFORM_UNSUPPORTED` |
+| spawn 失败 / 启动超时 | exec 失败，或起来了但 `$/initialize` 没在时限内完成 | 记失败，按 `RestartPolicy` 退避重试到上限；上限用尽只**上报**，是否禁用由 TS 决定 | `PROCESS_SPAWN_FAILED` / `PROCESS_START_TIMEOUT` / `PROCESS_RESTART_EXHAUSTED` |
+| 后端崩溃 | 进程退出（非预期） | **只影响它自己**：回收 + 按策略重启，**不许连带停掉前端**；退出码与 stderr 留存 | `PROCESS_EXITED` |
+| 后端起孙进程 | 只杀直接子进程会留孤儿 | Job Object / 进程组收拾整棵树——这是 K2.6 的验收项 | —（进程层，无码） |
+| 协议帧损坏 / 无响应 | 解析失败或超时 | 单次调用失败，**不等于进程死亡**；解析失败则断开并让监督器回收 | `PROTOCOL_CALL_TIMEOUT` / `PROTOCOL_PARSE_ERROR` 等（见 [../../spec/v1/protocol.md](../../spec/v1/protocol.md) §6） |
 
 ## 验收方式
 
@@ -102,15 +185,24 @@ parseManifest(text)   ← readText(rel)  ← command          ← 文件读取
 | Windows 文件占用用例 | 先停后端再替换；失败则推迟 | K2.5 |
 | 双向协议用例 | 宿主→后端 与 后端→宿主 两个方向，Node 与 Python 两个 SDK 结论一致 | K2.6 |
 
+#### 两个最小 SDK 与"结论一致"怎么落地
+
+验收里有一条"两种语言的 SDK 跑同一组双向协议用例，结论一致"（[../plan.md](../plan.md) K2.6）。要让它不是空话，做法必须定死：
+
+- **SDK 是"最小的后端"**，放 `examples/backend-sdk-node/`（`backend.mjs`，零依赖）与 `examples/backend-sdk-python/`（`backend.py`，只用标准库）。每个都要会五件事（[../../spec/v1/protocol.md](../../spec/v1/protocol.md) §11）：一行一帧、应答 `$/initialize` / `$/shutdown` 并回写原 id、自己分配出站 id 并维护在途表、丢弃未知 id 的应答、退出前让在途请求失败。除这些之外只加一个**测试用的回声方法**（`test/echo`）与一条**反向请求**用例，不实现任何领域方法。
+- **用例只有一份**：`crates/plugin-host/tests/protocol.rs` 里**同一段断言**，参数化成"× 两个命令"跑两次（`node examples/backend-sdk-node/backend.mjs`、`python3 examples/backend-sdk-python/backend.py`）。"结论一致"因此是**机械成立**的——同一段断言跑两个进程，不是人工比对两份报告。
+- **解释器缺失时用例失败并说明要装什么**，不静默跳过：静默跳过会让这条验收变成空话（本地确实没有 python 的人用 `cargo test -- --skip protocol` 显式跳过——跳过是人的决定，不是测试的默认）。
+- 用例集至少覆盖：握手成功 / 版本不接受、宿主→后端调用、后端→宿主反向调用、通知、超时（含"超时不等于进程死亡"）、`$/cancel` 后被取消方的失败形态、未知 id 的应答被丢弃、进程退出让在途请求以 `PROCESS_EXITED` 失败、单帧超限被拒。
+
 ## 未决项
 
 | 未决项 | 现在怎么办 |
 |---|---|
 | ~~控制面薄层放哪一侧~~（本 crate vs TS）——**已定案 2026-10-08** | 帧 / id 关联 / 超时 / 取消在本 crate，服务契约与路由在 TS。逐跳依据见下方专节 |
-| **无窗口时中枢还能不能在**（**已被上一条收窄，见专节末尾**） | 若编排中枢在 WebView 里的 TS，"应用启动即起后端""托盘常驻、没有窗口也跑插件"就不成立。分层定案后，不依赖窗口的只有"帧 / 超时 / 回收"；**"落点是 TS 服务键的入站请求"仍必须有 WebView**。所以本项现在要回答的问题变小了：要不要让"后端 → 宿主原生能力"与"后端 ↔ 后端"**绕过 WebView**。随 K2.6 的接口形状定，先量化 |
-| 后端崩溃后重启的具体参数（退避曲线、次数上限、是否永久禁用） | 属实现细节，用测试把行为固定下来即可（[../plan.md](../plan.md) 第 7 节） |
+| **无窗口时中枢还能不能在** | **已定 2026-10-08（v1）**：不能——spawn 由 TS 中枢发起，所以"应用启动即起后端""托盘常驻"在 v1 不成立；**回收不需要 WebView**（job object / 进程组双保险，见"进程"一节）。后置选项是在本 crate 留一个 `Ready` 时的最小触发点（只拉起、不接管语义），要常驻时再定 |
+| 后端崩溃后重启的具体参数（退避曲线、次数上限、是否永久禁用） | **已定 2026-10-08**：**值由 TS 给**（`RestartPolicy`）、**执行在本 crate**（它看得到 exec 失败与退出码，重试不必回 JS）；"上限用尽后是否永久禁用"归 TS，crate 只上报 `PROCESS_RESTART_EXHAUSTED`。曲线形状（base × 2ⁿ、cap、jitter）用测试固定 |
 | 签名（minisign） | 后置；K2.5 只做 sha256（implementation.md 3.3(b)） |
-| stderr 日志的轮转策略与体量上限 | 本 crate 负责分文件与轮转（implementation.md 3.3(e)）；具体阈值随实现定 |
+| stderr 日志的轮转策略与体量上限 | 本 crate 负责分文件（`<plugin>/<generation>.log`）与轮转（implementation.md 3.3(e)）；具体阈值随实现定 |
 | `.tap` 打包规范的版本号与兼容窗口 | 随 K2.5 定；"规范版本高于宿主即拒绝"这条行为要先写测试 |
 
 ### 专节：控制面薄层放哪一侧（**已定案 2026-10-08**）

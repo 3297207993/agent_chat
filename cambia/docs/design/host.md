@@ -95,7 +95,7 @@ manifest 的类型与校验在本模块，**唯一来源是 zod**（[../implemen
 它的推论有三条，构成本模块与 Rust 侧的分界：
 
 1. **TS 是编排中枢**：何时装、何时起、何时停、失败怎么办，全部由 TS 决定。它掌握的是**策略**；
-2. **Rust 是能力的唯一提供者，也是最终所有者**：文件、进程、**退出回收**只有 Rust 能做对（理由见下）。协议传输的分工位置**尚未定**——那是 [plugin-host.md](./plugin-host.md) 的未决项，不在本节的结论里；
+2. **Rust 是能力的唯一提供者，也是最终所有者**：文件、进程、**退出回收**只有 Rust 能做对（理由见下）。协议传输的分工**已定案（2026-10-08）**：帧 / 请求 id / 超时 / 取消在 Rust，服务契约与方法名↔服务键的路由在 TS——逐跳依据见 [plugin-host.md](./plugin-host.md) 的专节；
 3. **端口声明在 TS，实现在适配层**（`crates/tauri-plugin-cambia` 或 `crates/plugin-host`）。这不是新范式——硬规定 3（内核实现层不出现 Tauri 符号）本来就把端口声明逼到了这一侧，`moduleURL` 已经是这么长出来的第一根。
 
 | 端口 | 签名 | 实现方 | 为什么在这一侧 | 失败形态 | 批次 |
@@ -103,8 +103,8 @@ manifest 的类型与校验在本模块，**唯一来源是 zod**（[../implemen
 | `moduleURL` | `(relPath) => Promise<string>` | 适配层 | 平台分叉（`http://asset.localhost/…` / `asset://localhost/…`）与 `asset:` scope 都是 Tauri 的知识 | 协议层失败（403 / 404），本层不分类 | **K2.2 已落地** |
 | `readText` | `(relPath) => Promise<string>` | crate | **必须与 `moduleURL` 分开**，见下 | 读不到 = 安装损坏 | 待分配（见"未分配的一项"） |
 | `listInstalled` | `() => Promise<InstalledPlugin[]>` | crate | 安装目录、`<version>-<hash>` 布局、journal 都在 crate 手里，它是"装了哪些"的**权威** | 目录读不动 / journal 不一致 | 待分配（同上） |
-| `spawn` / `kill` | `(spec) => Promise<BackendHandle>` / `(id) => void` | crate | 进程句柄的所有权与回收**不能**依赖 JS，见下 | 启动超时 / 退出码 / 孤儿进程 | K2.6（K2.5 铺安装） |
-| `call` / `onCall` | RPC 方法调用与反向分派 | **位置未决** | 见 [plugin-host.md](./plugin-host.md) 的未决项 | 超时 / 取消 / 协议错误 | K2.6 |
+| `spawn` / `kill` | `(spec) => Promise<BackendHandle>` / `(id) => Promise<void>` | crate | 进程句柄的所有权与回收**不能**依赖 JS，见下 | `PROCESS_SPAWN_FAILED` / `PROCESS_START_TIMEOUT` / `PROCESS_EXITED` / 孤儿进程 | K2.6（K2.5 铺安装） |
+| `call` / `onCall` | RPC 方法调用与反向分派 | **crate**（已定案） | 帧 / id 关联 / 超时 / 取消必须在对端把 JS 主线程卡死时仍然准时；路由仍归 TS | `PROTOCOL_CALL_TIMEOUT` / `PROTOCOL_CANCELLED` / `PROCESS_EXITED` / 协议错误 | K2.6 |
 
 #### 为什么 `readText` 与 `moduleURL` 必须分开
 
@@ -240,6 +240,64 @@ export interface KernelContext {
 
 **判定顺序即可靠性顺序**：先认 UA 的明确信号（语法、MIME），再问"这个 URL 到底取不取得到、取到的是不是 JS"（一次显式探测；调用方已探测过就传进来，不重复探），取得到且是 JS 仍抛错才归求值期。**为什么要探测**：`import()` 自己的报错分不出"这个模块取不到"和"它的依赖取不到"，也分不出 MIME 与 CORS——`asset:` 下的相对说明符失败正是后者：抛错来自模块图里的另一个文件，而不是被装载的那个。每条错误都带 URL 与探测结果，因为这类问题必须在 UI 里定位到具体插件与文件路径。
 
+### 后端层（K2.6 交付）
+
+**端口按能力切开**，不塞进一个 interface——理由已在"组合发生在哪一层"写过：`createFrontendLoader` 的入参类型不能声称它能起进程，否则每个前端装载测试都得伪造一个进程管理器。
+
+| 端口 | 签名 | 为什么在这一侧 |
+|---|---|---|
+| `BackendSupervisor` | `{ spawn(spec) => Promise<BackendHandle>, kill(id) => Promise<void> }` | 起停两个动作；**句柄留在 Rust**（见"进程端口"一节） |
+| `PluginTransport` | `{ call(id, method, params, timeoutMs) => Promise<unknown>, onCall(dispatch) }` | 帧 / id 关联 / 超时 / 取消在 Rust，路由在 TS（[plugin-host.md](./plugin-host.md) 专节） |
+
+**原语**（各自只吃自己需要的端口）：
+
+```ts
+startBackend(target: BackendTarget, supervisor: BackendSupervisor, policy: BackendPolicy): Promise<BackendHandle>
+stopBackend(handle: BackendHandle, supervisor: BackendSupervisor): Promise<void>
+```
+
+```ts
+interface BackendTarget { pluginId: string; bin: BinTarget; root: string; protocol: string }
+interface BackendPolicy {
+  startTimeoutMs: number                                   // 一个总时限：exec + $/initialize 握手
+  restart: { maxAttempts: number; baseDelayMs: number; maxDelayMs: number; jitter: boolean }
+}
+interface BackendHandle {
+  pluginId: string
+  generation: number                                        // 每次 spawn +1；迟到的退出按它丢弃
+  status: BackendStatus                                     // 只是视图，权威在 crate 的进程表
+  protocolVersion: number
+  lastExit?: { code?: number; signal?: number; expected: boolean }
+}
+```
+
+四条硬约束：
+
+1. **`startBackend` 只在一个真结论上返回**：`Ready`（`$/initialize` 已完成）或失败（`PROCESS_SPAWN_FAILED` / `PROCESS_START_TIMEOUT` / `PROCESS_PLATFORM_UNSUPPORTED`）。与前端 `load` 的"只在 `ACTIVE` / `FAILED` 上返回"是同一套纪律；所以**没有 `starting` 这个返回态**——`starting` 只出现在 `status` 查询与事件里。
+2. **`bin` 的挑选在 Rust，"哪条是 bin"在 TS**：平台键映射（`<os>-<arch>` → `<os>` → `*`）是 crate 的纯函数（K2.6 前置已落地并单测）；而"这个后端要用哪条 target"由 TS 从 manifest 的 `parts.backend.bin` 取。这样 crate 不必理解 manifest 语义（K2.1 的分工）。
+3. **退避的"值"在 TS、"时机"在 crate**：`BackendPolicy.restart` 是宿主策略；重试的执行在 crate，因为它同时看得到 exec 失败与退出码，重试不必回一趟 JS（[plugin-host.md](./plugin-host.md)"进程"一节）。
+4. **`BackendHandle.status` 是视图**，权威在 crate——与"三处状态各有唯一来源"一致。
+
+**编排**（宿主按策略调用）：
+
+```ts
+loadPlugin(target, host, policy) -> PluginRecord { id, ref, manifest, frontend?, backend? }
+```
+
+- `policy` 决定这一轮起哪一半（`frontend-only` / `backend-only` / `both`）；两半**并发起、各自按自己的判据定案**。
+- **任何一半失败都不回滚另一半**：后端失败只禁它自己，前端照旧（kernel.md 3.3）；平台键无命中同理（只禁该插件的后端，不降级、不猜）。
+- `frontend` 就是 K2.2 的 `LoadedFrontend`，`backend` 是 `BackendHandle`；**聚合是数据，不是控制器**（见"一个插件 = 一条记录"）。
+
+#### 代理 Service：让别的插件看不见"后端"
+
+kernel.md 3.3 要求"宿主为后端注册的服务键挂一个**代理 Service**，其他插件按 `ctx.<key>` 调用，与内置服务无差别"。落成三条规则：
+
+1. **映射由宿主给，Cambia 不猜**：服务键 → 后端方法的对应关系是宿主词汇（`contributes` 或宿主自己的配置）。`@cambia/host` 只提供"挂代理"的机制，不解释映射内容——这正是 K2.1 把 `contributes` 定为不透明的原因。
+2. **`provide` 发生在 `Ready` 之后**：于是 `inject` 该键的前端插件会自然停在 `PENDING`，等服务就位再激活（事实 11 的迟到激活）——顺序不需要任何额外的编排字段，manifest 里也没有 `dependsOn`。`stopBackend` 时撤销注册，代理键随之消失。
+3. **失败语义要分清**：后端未 `Ready` 或已退出时调用代理 → `PROCESS_EXITED`；**单次调用超时是 `PROTOCOL_CALL_TIMEOUT`，不等于进程死亡**。两者混成一个错误会让"重启一次"和"这一次慢了"变得无法区分。
+
+**反向调用**（后端 → 宿主/前端）：`onCall(dispatch)` 收到 `{ method, params }`，按路由表找到服务键与调用方，把结果或错误交回传输层。Rust 侧怎么把它转成 IPC 见 [tauri-plugin-cambia.md](./tauri-plugin-cambia.md)（事件 + `respond` 命令）。
+
 ## 数据流与状态
 
 **K2.1 的契约层数据流**（纯函数、无状态）：
@@ -368,6 +426,15 @@ PluginRecord = {
 | 插件 `apply` 抛错 | `await ctx.plugin()` 以原错误 reject，fiber 落到 `FAILED`（`0→1→5→3`） | `load` 把错误记进 `LoadedFrontend.error` 并按 `FAILED` 返回（**不抛**——"装不上"与"装上了但没激活"是两种形态）；**失败不会被自动回收，`uid` 还在，要显式卸载** | **K2.2 装载层单测** |
 | 依赖等不到（环 / 拼错服务键） | `state=0`、无事件、无报错、`await ctx.plugin()` 立即 resolve | **本模块不处理**：K2.3 做聚合诊断（这是 kernel 1.4 承诺的落实点）。代价是这期间 `load` **永不返回**——它不会误报成功，但也没有结论 | K2.3 |
 | 插件在 `apply` 里一直等 | `state=1`、then 永不 settle | **本模块不处理**：K2.3 的激活超时。同上：`load` 永远等下去，等的是超时来给它一个结论 | K2.3 |
+| 后端起不来（exec 失败） | 命令返回错误 | `PROCESS_SPAWN_FAILED`：**只禁该插件的后端**，前端照旧；不降级、不猜路径 | K2.6 |
+| 后端起来了但 `$/initialize` 没在时限内完成 | 命令返回错误 | `PROCESS_START_TIMEOUT`：回收进程，按 `policy.restart` 退避重试到上限（值由 TS 给） | K2.6 |
+| 平台键无命中 | manifest 的 `bin` 里没有本平台的键 | `PROCESS_PLATFORM_UNSUPPORTED`：**只禁该插件的后端**（kernel.md 3.3），不算"插件装载失败" | K2.6 |
+| 后端崩溃（非预期退出） | 退出事件带 code / signal | `PROCESS_EXITED`：在途调用失败、按策略重启用**新世代**；**绝不连带停前端**，退出码与 stderr 留存 | K2.6 |
+| 后端留下孙进程 | 只杀直接子进程会留孤儿 | 不在 JS 侧解决：job object / 进程组收拾整棵树 | K2.6（Windows 断言） |
+| 调用超时 | 到点没有应答 | `PROTOCOL_CALL_TIMEOUT`：发 `$/cancel`、**不动进程**；迟到的应答按"未知 id"丢弃 | K2.6 |
+| 对端取消了在途请求 | 收到 `$/cancel` | 以 `PROTOCOL_CANCELLED` 让等待中的调用失败 | K2.6 |
+| 帧解析不出来 / 单帧超限 | 通道已不可信 | 断开并让监督器回收进程；**不"重连"**（重启 = 新世代的新进程） | K2.6 |
+| 重启预算用尽 | 退避到上限 | 报 `PROCESS_RESTART_EXHAUSTED`；**是否永久禁用是宿主的策略**，本模块只上报 | K2.6 |
 | 卸载一个卡在 `LOADING` 的插件 | `dispose()` 永不 settle，且不发事件 | 卸载路径**不 await `dispose()`**（否则会被死等的插件拖死） | **K2.2 已落地**（装载层单测） |
 | 卸载两次 | 第二次 `dispose()` 返回 `undefined` 而不是 promise（K1.1 锁定） | `unloadFrontend` **不在返回值上调用 `.then()`**，所以二次卸载无害 | **K2.2 已落地**（装载层单测） |
 | 重复 `import()` 同一个 specifier | 命中模块图里的同一实例 | 不是失败，但它定死了"换路径才能换实例"这条设计 | 装载层单测 |
@@ -385,6 +452,10 @@ PluginRecord = {
 | 不依赖 Tauri 的宿主 fixture（vitest） | 装载 → 注册 → 卸载 → **监听器数量归零、占用的服务键消失**；装载判定不依赖 `await ctx.plugin()` 的回归用例（事实 10 + 事实 11 的迟到激活） | **K2.2**（[../kernel.md](../kernel.md) 6.2） |
 | 状态字面量的漂移检查 | `FIBER_STATE` 与 `@cambia/core` 的 `FiberState` 逐值一致（上游重编号时先红） | K2.2 的实现前提 |
 | 诊断与超时用例 | 互相 `inject` 的两插件得到指名道姓的诊断（在等哪个键、谁在等谁）；`apply` 里死等的插件被超时判失败并记录 | K2.3 |
+| **后端进程用例**（`cargo test` + 宿主 fixture） | 状态机（exec 失败 / 握手超时 / 崩溃 / 优雅关闭）、世代号（迟到的退出被丢弃）、退出码语义、退避曲线 | K2.6 |
+| **双向协议用例** | 宿主→后端 与 后端→宿主 两个方向；Node 与 Python 两个 SDK 跑**同一组**用例、结论一致 | K2.6（[../plan.md](../plan.md) 4 节） |
+| **孤儿进程断言**（Windows） | 宿主退出后没有孤儿进程，含"后端再起孙进程"的用例 | K2.6（[../kernel.md](../kernel.md) 3.3 / 6.2） |
+| **代理 Service 用例** | `Ready` 之后才 `provide`；`inject` 该键的前端插件在服务就位后才激活；`stopBackend` 后键消失；后端退出时调用得到 `PROCESS_EXITED` 而不是超时（两者不能混） | K2.6 |
 | 仓库门禁 | `pnpm lint`（`examples/**` 只用 `@cambia/core`）；**删掉适配层后本模块测试仍全绿** | 硬规定 3 / 4 |
 
 K2.4 的完成定义不含"写多少代码"，只含"证明主路径成立并留下可重跑的最小复现"：验证设施（试验工程、fixture、脚本）与结论一起进仓库，结论按 plan.md 第 0 节回写 [../implementation.md](../implementation.md) 的事实表。
@@ -393,13 +464,13 @@ K2.4 的完成定义不含"写多少代码"，只含"证明主路径成立并留
 
 | 未决项 | 现在怎么办 |
 |---|---|
-| **RPC 薄层放哪一侧**（Rust 传输层 vs TS）：帧与请求关联、超时/取消、双向分派 | **未决，且会决定 K2.6 的接口形状**——对比与推荐见 [plugin-host.md](./plugin-host.md) 的未决项。开工前必须先定，否则会在"谁维护 id 表"上返工 |
-| **无窗口时中枢还能不能在**：若编排中枢是 WebView 里的 TS，"应用启动即起后端""托盘常驻、没有窗口也跑插件"这类形态就不成立 | 需要先定，它会反过来影响上一条（K3.3 的"第二宿主"验证会撞上它）。要么接受"没有 WebView 就没有插件"，要么在 Rust 侧留一个最小触发点（只负责拉起，不接管语义） |
+| ~~RPC 薄层放哪一侧~~（Rust 传输层 vs TS） | **已定案 2026-10-08**：帧 / 请求 id / 超时 / 取消在 Rust，服务契约与方法名↔服务键的路由在 TS；v1 一律经 TS 中转。逐跳依据见 [plugin-host.md](./plugin-host.md) 的专节。K2.6 的接口形状据此定（见上文"后端层"） |
+| **无窗口时中枢还能不能在** | **已定 2026-10-08（v1）**：不能——spawn 由 TS 发起，所以"应用启动即起后端""托盘常驻"在 v1 不成立；**回收不需要 WebView**。详见 [plugin-host.md](./plugin-host.md)"进程"一节的结论。它会撞上 K3.3 的"第二宿主"验证，到那时再考虑在 Rust 侧留最小触发点 |
 | **状态权威在哪**：若中枢在 TS，"装了哪些 / 哪些被禁用 / 失败名单"的**权威副本**是谁 | 建议写死为：磁盘上 crate 管的那份（安装目录 + journal）是权威，TS 侧只是视图 + 编排。这是本文"三处状态各有唯一来源"那条纪律的延伸——同一件事只能有一个权威副本，否则就会出现两份状态各说一套（[../plan.md](../plan.md) 第 0 节"不允许代码和文档各说一套"是同一条纪律的另一面） |
 | **`loadPlugin` 的默认 `policy`（组合层）** | 见上文"组合发生在哪一层"。目标形状已定（原语 + 编排两层）；**待确认**：宿主是否"两个永远一起起"。若不然，默认策略需要写成显式参数而不是默认值 |
 | **端口的切分粒度** | 已定原则：**按能力切分**（`moduleURL` / `readText` / `listInstalled` / `spawn` 各是独立小接口，组合类型是交集）。第二个端口落地时就要按这个切，不要再往 `PluginHostBridge` 里加方法——否则前端装载的入参类型会声称它能起进程 |
 | **新增端口（`readText` / `listInstalled`）与装载编排归哪批** | 见上文"未分配的一项"：建议归 K2.5（它拥有安装目录与 journal）。**需要确认**，它改变 K2.5 的交付物清单 |
-| **`LoadedFrontend` → `PluginRecord.frontend` 的落点** | 命名已在 2026-10-08 改清（见上文"对已有代码的影响"）；剩下的是 K2.6 把 `PluginRecord`（带 `backend`）做出来时把它挂进去，以及 K2.4 的 `PluginRef` 给记录补上 id |
+| **`LoadedFrontend` → `PluginRecord.frontend` 的落点** | 命名已在 2026-10-08 改清（见上文"对已有代码的影响"）；形状已在"后端层"给出（`loadPlugin` 返回 `PluginRecord{ frontend?, backend? }`）。剩下的是 K2.6 实现时把它挂进去，以及 K2.4 的 `PluginRef` 给记录补上 id |
 | 命令集合（`install` / `uninstall` / `list` / `enable`）与 `INSTALL_*` 一类错误码 | 都不在本批：命令集合归适配层（K2.5），码表的安装语义随之补——**命令要报的错必须先有码**（[../plan.md](../plan.md) 第 1 节）。注意 `list` 命令与 `listInstalled` 端口是同一件事的两面，别做成两份 |
 | `spec/v1/manifest.schema.json` 的 `$id` 归属（域名 / registry 未定） | 生成物现在只带 `$schema`，不带 `$id`；等"公开发布还是私有 registry"定案（[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）再补 |
 | 平台键要不要覆盖 `android` / `ios` | 现在只认 `win` / `mac` / `linux` + `*`（适配层把移动端标为不支持）；要支持移动端时再扩词汇，属 spec 变更 |

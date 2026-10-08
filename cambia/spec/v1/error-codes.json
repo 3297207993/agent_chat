@@ -56,6 +56,66 @@
     "LOAD_NO_APPLY": {
       "stage": "load",
       "summary": "The module evaluates but exports no apply (not a plugin entry)"
+    },
+    "PROTOCOL_PARSE_ERROR": {
+      "stage": "protocol",
+      "summary": "A line arrived that is not valid JSON (JSON-RPC -32700); the channel is no longer trustworthy"
+    },
+    "PROTOCOL_INVALID_MESSAGE": {
+      "stage": "protocol",
+      "summary": "Valid JSON, but not a message of this protocol: missing jsonrpc, or neither method nor result/error (JSON-RPC -32600)"
+    },
+    "PROTOCOL_METHOD_NOT_FOUND": {
+      "stage": "protocol",
+      "summary": "The method name is unknown to the receiving side (JSON-RPC -32601)"
+    },
+    "PROTOCOL_INVALID_PARAMS": {
+      "stage": "protocol",
+      "summary": "The params are shaped wrong for that method (JSON-RPC -32602)"
+    },
+    "PROTOCOL_INTERNAL_ERROR": {
+      "stage": "protocol",
+      "summary": "The peer failed while handling the request (JSON-RPC -32603)"
+    },
+    "PROTOCOL_VERSION_UNSUPPORTED": {
+      "stage": "protocol",
+      "summary": "The peer does not accept protocolVersion 1; the plugin's backend is unsupported, so it is disabled rather than guessed at"
+    },
+    "PROTOCOL_CALL_TIMEOUT": {
+      "stage": "protocol",
+      "summary": "The call timed out. Synthesized by the transport, never sent across the pipe, and it never means the process died"
+    },
+    "PROTOCOL_CANCELLED": {
+      "stage": "protocol",
+      "summary": "The peer cancelled this request; a pending call fails with it"
+    },
+    "PROTOCOL_FRAME_TOO_LARGE": {
+      "stage": "protocol",
+      "summary": "A single frame exceeds MAX_FRAME_BYTES (1 MiB); large payloads stay out of the protocol (kernel.md 3.3)"
+    },
+    "PROTOCOL_TOO_MANY_IN_FLIGHT": {
+      "stage": "protocol",
+      "summary": "In-flight requests hit the host's cap; the caller fails at once instead of queueing without bound"
+    },
+    "PROCESS_SPAWN_FAILED": {
+      "stage": "process",
+      "summary": "The backend process could not be started (missing executable, permission, cwd)"
+    },
+    "PROCESS_START_TIMEOUT": {
+      "stage": "process",
+      "summary": "Started, but the $/initialize handshake did not complete in time; the process is reclaimed"
+    },
+    "PROCESS_EXITED": {
+      "stage": "process",
+      "summary": "The backend process is gone; in-flight calls fail with it and it never implies the frontend is affected"
+    },
+    "PROCESS_RESTART_EXHAUSTED": {
+      "stage": "process",
+      "summary": "The restart budget the host handed over is used up; whether the backend is disabled stays the host's decision"
+    },
+    "PROCESS_PLATFORM_UNSUPPORTED": {
+      "stage": "process",
+      "summary": "No backend.bin key matches this platform (`<os>-<arch>` → `<os>` → `*`): disable this plugin's backend only, never fall back to another form"
     }
   }
 }

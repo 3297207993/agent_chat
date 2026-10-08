@@ -7,8 +7,9 @@
  * string may not (docs/design/spec.md).
  *
  * `stage` in the table says which batch implements a code: `manifest` / `engines` are live since
- * K2.1, `LOAD_NO_APPLY` is wired by the load layer (K2.2), and the four classifying `load` codes
- * arrive with the import-failure classification (K2.4).
+ * K2.1, `LOAD_NO_APPLY` is wired by the load layer (K2.2), the four classifying `load` codes arrive
+ * with the import-failure classification (K2.4), and the `protocol` / `process` codes arrive with the
+ * backend supervisor and the control plane (K2.6, spec/v1/protocol.md).
  */
 
 /** Every code the spec knows, as runtime values (the drift check compares these keys with the table). */
@@ -41,6 +42,36 @@ export const ERROR_CODES = {
   LOAD_EVALUATION: 'LOAD_EVALUATION',
   /** The module evaluates but exports no `apply` (not a plugin entry) */
   LOAD_NO_APPLY: 'LOAD_NO_APPLY',
+  /** A line arrived that is not valid JSON (JSON-RPC -32700); the channel is no longer trustworthy */
+  PROTOCOL_PARSE_ERROR: 'PROTOCOL_PARSE_ERROR',
+  /** Valid JSON, but not a message of this protocol: missing `jsonrpc`, or neither `method` nor `result`/`error` (JSON-RPC -32600) */
+  PROTOCOL_INVALID_MESSAGE: 'PROTOCOL_INVALID_MESSAGE',
+  /** The method name is unknown to the receiving side (JSON-RPC -32601) */
+  PROTOCOL_METHOD_NOT_FOUND: 'PROTOCOL_METHOD_NOT_FOUND',
+  /** The params are shaped wrong for that method (JSON-RPC -32602) */
+  PROTOCOL_INVALID_PARAMS: 'PROTOCOL_INVALID_PARAMS',
+  /** The peer failed while handling the request (JSON-RPC -32603) */
+  PROTOCOL_INTERNAL_ERROR: 'PROTOCOL_INTERNAL_ERROR',
+  /** The peer does not accept `protocolVersion` 1; the plugin's backend is disabled rather than guessed at */
+  PROTOCOL_VERSION_UNSUPPORTED: 'PROTOCOL_VERSION_UNSUPPORTED',
+  /** The call timed out — synthesized by the transport, never sent across the pipe, and never a sign of process death */
+  PROTOCOL_CALL_TIMEOUT: 'PROTOCOL_CALL_TIMEOUT',
+  /** The peer cancelled this request; a pending call fails with it */
+  PROTOCOL_CANCELLED: 'PROTOCOL_CANCELLED',
+  /** A single frame exceeds `MAX_FRAME_BYTES`; large payloads stay out of the protocol (kernel.md 3.3) */
+  PROTOCOL_FRAME_TOO_LARGE: 'PROTOCOL_FRAME_TOO_LARGE',
+  /** In-flight requests hit the host's cap; the caller fails at once instead of queueing without bound */
+  PROTOCOL_TOO_MANY_IN_FLIGHT: 'PROTOCOL_TOO_MANY_IN_FLIGHT',
+  /** The backend process could not be started (missing executable, permission, cwd) */
+  PROCESS_SPAWN_FAILED: 'PROCESS_SPAWN_FAILED',
+  /** Started, but the `$/initialize` handshake did not complete in time; the process is reclaimed */
+  PROCESS_START_TIMEOUT: 'PROCESS_START_TIMEOUT',
+  /** The backend process is gone; in-flight calls fail with it, and it never implies the frontend is affected */
+  PROCESS_EXITED: 'PROCESS_EXITED',
+  /** The restart budget the host handed over is used up; disabling the backend stays the host's decision */
+  PROCESS_RESTART_EXHAUSTED: 'PROCESS_RESTART_EXHAUSTED',
+  /** No `backend.bin` key matches this platform: disable this plugin's backend only, never fall back to another form */
+  PROCESS_PLATFORM_UNSUPPORTED: 'PROCESS_PLATFORM_UNSUPPORTED',
 } as const
 
 export type PluginErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]

@@ -28,12 +28,13 @@
 | 文件 | 谁产出 | 谁消费 | 一致性怎么守 |
 |---|---|---|---|
 | `v1/manifest.schema.json` | **生成物**：`pnpm --filter @cambia/host spec:generate`（zod → `z.toJSONSchema()`） | Rust 侧安装期校验（`jsonschema@0.58`）、插件作者与编辑器 | `packages/host/test/spec.test.ts` **逐字节**比对代码生成结果与磁盘文件——手改生成物必然红灯 |
-| `v1/error-codes.json` | **手写**（内容不是从代码推出来的，是两侧共同的词汇表） | JS：`@cambia/host` 的 `ERROR_CODES`；Rust：随 K2.5 建的常量映射 | 两侧各自的测试断言"键集合双向一致"（JS 侧现在就有；Rust 侧随 `crates/plugin-host` 补） |
+| `v1/error-codes.json` | **手写**（内容不是从代码推出来的，是两侧共同的词汇表） | JS：`@cambia/host` 的 `ERROR_CODES`；Rust：随 `crates/plugin-host` 的常量映射 | 两侧各自的测试断言"键集合双向一致"（JS 侧现在就有；Rust 侧随 `crates/plugin-host` 补） |
+| `v1/protocol.md` | **手写**（[protocol.md](protocol.md)，控制面协议 v1） | `crates/plugin-host` 的传输层、K2.6 的代理 Service、`examples/` 下的 Node / Python SDK | 两侧行为一致由 K2.6 的双向协议用例守（两个 SDK 跑同一组用例、结论一致） |
 | `README.md` | 手写 | 读 `spec/` 的人：产物从哪来、怎么改、怎么重新生成 | — |
 
-K2.1 只落上表三件。**不在本批**：**命令集合**（K2.5 随适配层定稿；本批的码表只给"命令能报什么错"打底，且**不含安装语义**——`INSTALL_*` 一类随 K2.5 的命令集合补）、控制面协议（K2.6 才写）、版本与废弃窗口规则（K3.1 定稿）。
+K2.1 落上表前两件，K2.6 落 `protocol.md` 与 `protocol` / `process` 两组码值。**不在本批**：**命令集合**（K2.5 随适配层定稿；码表只给"命令能报什么错"打底，且**不含安装语义**——`INSTALL_*` 一类随 K2.5 的命令集合补）、版本与废弃窗口规则（K3.1 定稿）。
 
-错误码表的形态：`{ "version": 1, "codes": { "<CODE>": { "stage": "...", "summary": "..." } } }`。`stage` 取值 `manifest` / `engines` / `load`，用来表明这条码归哪一批实现（装载类码值在本批随表定稿，**实现**归 K2.4）。表里的文案是英文（代码侧文本一律英文，[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）。
+错误码表的形态：`{ "version": 1, "codes": { "<CODE>": { "stage": "...", "summary": "..." } } }`。`stage` 取 `manifest` / `engines` / `load` / `protocol` / `process`，用来表明这条码归哪一批实现（`load` 五个随表定稿、**实现**归 K2.4；`protocol` / `process` 随 K2.6）。表里的文案是英文（代码侧文本一律英文，[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）。
 
 ## 数据流与状态
 
@@ -74,6 +75,6 @@ K2.1 只落上表三件。**不在本批**：**命令集合**（K2.5 随适配�
 | 路径字符集是否只允许 ASCII（现为 `[A-Za-z0-9._-]`） | 现在收得很紧（名字出自 ZIP、要跨平台比对）；确有需要时再放宽，属 spec 变更 |
 | `manifest.schema.json` 的 `$id`（域名 / registry 未定） | 生成物现在只带 `$schema`（draft 2020-12），不带 `$id`；等发布形态定案再补 |
 | 错误码表要不要对外开放（插件作者可见的稳定契约） | 现在只承诺"码值是稳定标识"，措辞与废弃窗口归 K3.1 |
-| 控制面协议（方法集、帧格式） | K2.6 写；本批不在表里预置协议码 |
-| 命令集合与 `INSTALL_*` 一类错误码 | 归 K2.6（适配层命令集合 + 码表的安装语义）；本批的码表只管校验与装载 |
+| 控制面协议（方法集、帧格式） | **已写（2026-10-08）**：[v1/protocol.md](protocol.md) + 码表的 `protocol` / `process` 两组码值；协议自身的冻结条件归 K3.1 |
+| 命令集合与 `INSTALL_*` 一类错误码 | 归 **K2.5**（适配层命令集合 + 码表的安装语义）——本行此前误写为 K2.6，与 [../plan.md](../plan.md) 的 K2.5 交付物矛盾；按 plan 的"批次即执行顺序"以 **K2.5** 为准，冲突已在此结清 |
 | Rust 侧的键集合检查 | 随 `crates/plugin-host`（K2.5）一起补，检查方式与 JS 侧对称 |

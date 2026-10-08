@@ -29,7 +29,13 @@ interface ErrorCodeTable {
   codes: Record<string, { stage: string; summary: string }>
 }
 
-const STAGES = new Set(['manifest', 'engines', 'load'])
+/**
+ * The batches a code can belong to. A new stage is a deliberate act: it means a new layer of the
+ * system starts reporting spec codes, so it is added here rather than accepted silently
+ * (`manifest` / `engines` / `load` since K2.1–K2.4, `protocol` / `process` for the control plane
+ * and the backend supervisor, K2.6).
+ */
+const STAGES = new Set(['manifest', 'engines', 'load', 'protocol', 'process'])
 
 describe('spec/v1/manifest.schema.json', () => {
   const text = readFileSync(specFile('manifest.schema.json'), 'utf8')

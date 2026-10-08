@@ -12,7 +12,7 @@
 1. **协议与 CSP 接线**：把插件目录交进 Tauri 的 `asset:` 协议（运行期 `allow_directory`，**递归**）；若 K2.4 实测判定 `asset:` 不成立，改为注册自定义 scheme——**换 scheme 只动本模块的一个函数**
 2. **把宿主的 I/O 接进内核实现层**：插件目录路径、（K2.5 的）KV 存储、（K2.6 的）宿主事件泵
 3. **命令集合 + ACL**：命令及其 `permissions/` 文件（供宿主 UI 与 `@cambia/host` 调用）
-4. **生命周期回收**：`RunEvent::ExitRequested` / `Exit` 时回收后端进程（K2.6；与 job object / 进程组双保险）
+4. **生命周期回收**：`RunEvent::ExitRequested` / `Exit` 时回收后端进程（K2.6；与 job object / 进程组双保险）。落点见下文"退出回收钩子（K2.6）"
 
 **不负责**：
 
@@ -39,7 +39,27 @@
 | `read_text` | `{ path }` | `string` | K2.5 | 未落地 |
 | `list_installed` | — | `[{ id, version, hash, dir, enabled }]` | K2.5 | 未落地 |
 | `install` / `uninstall` / `enable` | — | — | K2.5 | 未落地 |
-| `spawn` / `kill` / `call` | — | — | K2.6 | 未落地 |
+| `spawn` | `{ pluginId, bin, root, protocol, startTimeoutMs, restart }` | `{ pluginId, generation, protocolVersion }` | K2.6 | 未落地 |
+| `kill` | `{ pluginId, generation }` | `void` | K2.6 | 未落地 |
+| `call` | `{ pluginId, generation, method, params, timeoutMs }` | `{ result }` 或错误 | K2.6 | 未落地 |
+| `respond` | `{ callId, result }` 或 `{ callId, error }` | `void` | K2.6 | 未落地 |
+
+**`spawn` 等到真结论才返回**：crate 内部在 `Ready`（`$/initialize` 完成）或失败之后才让命令返回，所以 TS 侧不需要轮询 `status`（[plugin-host.md](./plugin-host.md)"进程与控制面"）。`generation` 随每次 spawn 递增；`kill` 与 `call` 都带它，**迟到的操作因此打不到新世代**。
+
+**后端反向调用怎么过 IPC**：Rust 收到后端的 request 后**不能**在命令的返回值里给 TS——那是另一条请求。做法是**事件 + 应答命令**：
+
+```
+后端 --request--> crate --Tauri event (cambia://backend-call, { callId, pluginId, generation, method, params })--> TS 路由
+TS --command `respond`({ callId, result | error })--> crate --response--> 后端
+```
+
+`callId` 由 **crate** 分配、只在这次转交里有效；**超时与取消由 crate 计**（不因为 TS 卡住而失效），到点回 `PROTOCOL_CALL_TIMEOUT` 给后端（[../spec/v1/protocol.md](../spec/v1/protocol.md) §7）。
+
+### 退出回收钩子（K2.6）
+
+`Builder::setup` 里注册 `RunEvent::ExitRequested` / `Exit` → 调 `cambia_plugin_host` 的 `reclaim_all()`（先停收新 spawn → 优雅关闭（短预算）→ 收拾整棵进程树 → 清表）。
+
+**这个钩子现在故意不存在**：进程表在 K2.6 才建，现在没有可回收的东西——按"没有调用方就不加端口"的纪律不建空壳（[plugin-host.md](./plugin-host.md) 未决项）。它是本模块唯一为 K2.6 预留的落点。**钩子不是唯一保障**：`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`（Windows）/ 进程组（Unix）是另一半——钩子本身可能跑不到（WebView 崩了、应用被强杀）。
 
 **端口 ↔ 命令的对应关系以 [host.md](./host.md) 的端口清单为准**（那边是声明方，本模块只是实现方）。命令要报的错必须先出现在码表里（[../plan.md](../plan.md) 第 1 节），所以上表凡是"未落地"的行都不算承诺。
 
@@ -135,7 +155,7 @@ JS: moduleURL(rel) → invoke('plugin:cambia|module_url', { path: rel })
 | 未决项 | 现在怎么办 |
 |---|---|
 | `asset:` 能否装 ESM | K2.4 的实测项，也是全项目唯一查不到权威依据的一条。若不成立：本模块换 scheme，TS 侧重写**URL 形态与失败分类**（[../plan.md](../plan.md) 第 1 节已写明代价），判定逻辑不受影响 |
-| **退出回收尚未接线** | 进程表在 `cambia-plugin-host`（K2.6 才建），现在**没有可回收的东西**——按"没有调用方就不加端口"的纪律故意不建空壳。K2.6 落地时在这一个钩子里接上 |
+| **退出回收尚未接线** | 进程表在 `cambia-plugin-host`（K2.6 才建），现在**没有可回收的东西**——按"没有调用方就不加端口"的纪律故意不建空壳。K2.6 落地时接在本文"退出回收钩子"那一节写的位置 |
 | 事件泵的形状（宿主事件 → 激活匹配器） | 属 K2.6 的编排；本模块只提供"宿主事件从哪来" |
 | KV 存储端口 | K2.5 定（[host.md](./host.md) 未决项同款） |
 | 移动端 | 本 crate 能编到移动端，但内核能力（装包、起进程）在沙箱内不成立；K3.4 在 `[package.metadata.platforms.support]` 里标 `none` |
