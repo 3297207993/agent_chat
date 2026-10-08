@@ -5,6 +5,9 @@
   "type": "module",
   "packageManager": "pnpm@12.5.1",
   "scripts": {
+    "cambia:core": "pnpm --dir cambia --filter @cambia/core build",
+    "predev": "pnpm run cambia:core",
+    "prebuild": "pnpm run cambia:core",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
