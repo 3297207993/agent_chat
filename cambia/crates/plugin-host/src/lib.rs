@@ -18,11 +18,20 @@
 //!   policy. The one piece inherited from the TS side is the error-code table, whose values stay in
 //!   `spec/v1/error-codes.json` (spec.md).
 //!
-//! Nothing is implemented yet: the crate exists so that the Rust workspace, `cargo test` and the two
-//! CI tracks have something to point at (plan.md section 2, the D0 debt). The batches that fill it in
-//! are K2.5 (packing, hashing, download, atomic install, journal) and K2.6 (process supervision,
-//! stdio control plane); the one pure prerequisite both of them need already lives in [`platform`].
+//! What is live today: [`error_codes`] (the Rust mirror of the shared table, with the two-sided drift
+//! check in `tests/spec.rs`), [`platform`] (the spec's `<os>-<arch>` vocabulary) and [`protocol`] (the
+//! control plane's frames and messages, spec/v1/protocol.md). Still to come: K2.5 (packing, hashing,
+//! download, atomic install, journal) and the rest of K2.6 (the process supervisor and its transport).
+//!
+//! ```text
+//! src/error_codes.rs  the code table          (spec/v1/error-codes.json)
+//! src/platform.rs     <os>-<arch> -> OS/ARCH
+//! src/protocol.rs     frames, messages, id rules (spec/v1/protocol.md)
+//! ```
 
 #![warn(missing_docs)]
 
+pub mod error_codes;
 pub mod platform;
+pub mod protocol;
+pub mod transport;

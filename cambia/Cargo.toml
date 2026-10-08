@@ -13,8 +13,11 @@ exclude = ["crates/tauri-plugin-cambia"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-# One MSRV for the whole Rust side, matching the adapter layer's.
-rust-version = "1.77.2"
+# 1.87, not the adapter layer's 1.77.2: implementation.md 3.3(e) picked `process-wrap@10` for the
+# backend supervisor (it is the only crate that has Job Object / process group support), and every
+# `process-wrap` release requires a 1.87 toolchain. The adapter keeps its own value because it comes
+# from the Tauri template; the two merge when the adapter starts depending on this crate (K3.4).
+rust-version = "1.87"
 license = "GPL-3.0-only"
 
 # The dependencies implementation.md 3.3 already decided on, declared once so every member agrees on

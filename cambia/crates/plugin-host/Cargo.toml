@@ -10,7 +10,15 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-# Empty on purpose. This crate is the D0 skeleton: it exists so that `cargo test`, the CI core track
-# and the adapter layer (which depends on it later) have something to point at. The dependencies
-# implementation.md 3.3 decided on are declared in the root [workspace.dependencies] and are added
-# by the batch that actually calls them — an unused dependency is a claim nobody verifies.
+# Versions come from the root [workspace.dependencies] (the decisions implementation.md 3.3 already
+# made); features are declared here, where they are used.
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# io-util: reading stdout line by line. process: the child. time: call timeouts and restart backoff.
+# sync: the event sink. rt + macros: the runtime and the tests that drive it.
+tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"] }
+# The only crate with Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) and process group support,
+# which is what makes "the whole tree is reclaimed" OS-level instead of a promise (implementation.md
+# 3.3(e), fact 9). `tokio1` is the only feature not in its defaults.
+process-wrap = { workspace = true, features = ["tokio1"] }
