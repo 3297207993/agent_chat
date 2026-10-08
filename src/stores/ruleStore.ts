@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Rule, RuleScope } from "@/types/rule";
-import type { Conversation, Category } from "@/types/chat";
+import type { Conversation, Category } from "@/plugin/builtin/message/types";
 import {
   getAllRules,
   createRule as dbCreate,

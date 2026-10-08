@@ -10,6 +10,19 @@ import type { ComponentType } from "react";
 // 相对路径而不是 `@/`：本模块是插件可见的宿主模块，用别名会让插件侧的边界检查
 // （tsconfig.plugins.json 里 `paths` 为空）解析不到它，见 §1.2 的通道边界
 import type { AgentChatDB } from "../lib/db/database";
+// 领域类型跟着它们的插件走（§2.2）：`Conversation` / `Category` 归 message 插件，
+// 词汇表只把它们的形状写进 `ctx.sessions` 的签名
+import type {
+  Category,
+  CategoryDraft,
+  CategoryPatch,
+  Conversation,
+  ConversationDraft,
+  ConversationPatch,
+  MessageDraft,
+  MessagePatch,
+  StoredMessage,
+} from "./builtin/message/types";
 
 declare module "@cambia/core" {
   interface Services {
@@ -19,6 +32,8 @@ declare module "@cambia/core" {
     views: ViewsService;
     /** prompt section 的装配与全局系统提示词（pluginization.md §2 的 prompt 组）。 */
     prompt: PromptService;
+    /** 对话 / 消息 / 分类的存取（pluginization.md §2 的 message 插件）。 */
+    sessions: SessionsService;
   }
 
   interface Events {
@@ -80,6 +95,39 @@ export interface TopbarAction extends ViewItemBase {
   /** 点击后跳转的路由。 */
   readonly path: string;
   readonly icon?: ComponentType<{ size?: number }>;
+}
+
+/**
+ * `ctx.sessions`。
+ *
+ * 对话 / 消息 / 分类三张表的**唯一**入口：行编码（`ruleIds` 存 JSON 字符串、`pinned` 存 0/1）、
+ * 排序与 id 分配都归实现方，调用方只看领域对象。消息内容按**不透明字符串**存取（§2）。
+ *
+ * 现在没有领域事件（§2.1 的 `user/message` 等），也没有投影读取（P1b）——这两个接缝等 P1b/P3。
+ */
+export interface SessionsService {
+  /** 按最近更新倒序。 */
+  listConversations(): Promise<Conversation[]>;
+  createConversation(draft: ConversationDraft): Promise<Conversation>;
+  /** 会顺带把 `updatedAt` 更新为当前时间。 */
+  updateConversation(id: string, updates: ConversationPatch): Promise<void>;
+  deleteConversation(id: string): Promise<void>;
+
+  listMessages(conversationId: string): Promise<StoredMessage[]>;
+  /** 返回存储分配的消息 id。 */
+  appendMessage(draft: MessageDraft): Promise<number>;
+  updateMessage(id: number, updates: MessagePatch): Promise<void>;
+  deleteMessage(id: number): Promise<void>;
+  /** 删掉某个对话的全部消息。 */
+  deleteMessages(conversationId: string): Promise<void>;
+  /** 该对话最后写入的一条；流式期的临时负 id 回填靠它兜底。 */
+  latestMessage(conversationId: string): Promise<StoredMessage | undefined>;
+
+  /** 按 `sortOrder` 升序。 */
+  listCategories(): Promise<Category[]>;
+  createCategory(draft: CategoryDraft): Promise<Category>;
+  updateCategory(id: string, updates: CategoryPatch): Promise<void>;
+  deleteCategory(id: string): Promise<void>;
 }
 
 /**

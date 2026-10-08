@@ -1,13 +1,10 @@
 import { create } from "zustand";
-import type { Category } from "@/types/chat";
-import {
-  getAllCategories,
-  createCategory as dbCreate,
-  updateCategory as dbUpdate,
-  deleteCategory as dbDelete,
-  toCategory,
-} from "@/lib/db/categoryDB";
+import { hostContext } from "@/plugin";
+import type { Category } from "@/plugin/builtin/message/types";
 import { useUIStore } from "@/stores/uiStore";
+
+/** 数据层的唯一通道：message 插件通过 `ctx.sessions` 提供（pluginization.md §2）。 */
+const sessions = () => hostContext().sessions;
 
 const DEFAULT_COLORS = ["#58a6ff", "#3fb950", "#d2991d", "#a371f7", "#f85149", "#db6d28", "#1f6feb", "#6e7681"];
 
@@ -28,36 +25,33 @@ export const useCategoryStore = create<CategoryState>((set, get) => ({
 
   loadFromDB: async () => {
     try {
-      const rows = await getAllCategories();
-      set({ categories: rows.map(toCategory), initialized: true });
+      set({ categories: await sessions().listCategories(), initialized: true });
     } catch {
       set({ categories: [], initialized: true });
     }
   },
 
   addCategory: async (name: string) => {
-    const id = crypto.randomUUID();
     const { categories } = get();
-    const color = DEFAULT_COLORS[categories.length % DEFAULT_COLORS.length];
     const category: Category = {
-      id,
+      id: crypto.randomUUID(),
       name,
-      color,
+      color: DEFAULT_COLORS[categories.length % DEFAULT_COLORS.length],
       icon: "folder",
       sortOrder: categories.length,
       ruleIds: [],
       createdAt: Date.now(),
     };
     set((s) => ({ categories: [...s.categories, category] }));
-    await dbCreate({ ...category, icon: "folder", ruleIds: "[]" });
-    return id;
+    await sessions().createCategory(category);
+    return category.id;
   },
 
   renameCategory: async (id: string, name: string) => {
     set((s) => ({
       categories: s.categories.map((c) => (c.id === id ? { ...c, name } : c)),
     }));
-    await dbUpdate(id, { name });
+    await sessions().updateCategory(id, { name });
   },
 
   deleteCategory: async (id: string) => {
@@ -68,18 +62,15 @@ export const useCategoryStore = create<CategoryState>((set, get) => ({
     if (useUIStore.getState().activeCategory === id) {
       useUIStore.getState().setActiveCategory("all");
     }
-    await dbDelete(id);
+    await sessions().deleteCategory(id);
   },
 
   updateCategory: async (id: string, updates: Partial<Category>) => {
     set((s) => ({
       categories: s.categories.map((c) => (c.id === id ? { ...c, ...updates } : c)),
     }));
-    const dbUpdates: Record<string, unknown> = { ...updates };
-    if ("ruleIds" in dbUpdates) {
-      dbUpdates.ruleIds = JSON.stringify(dbUpdates.ruleIds);
-    }
-    await dbUpdate(id, dbUpdates);
+    // 行编码（ruleIds 存 JSON 字符串）归 `ctx.sessions`，这里只管领域对象
+    await sessions().updateCategory(id, updates);
   },
 
   setCategoryRules: async (id, ruleIds) => {
@@ -88,6 +79,6 @@ export const useCategoryStore = create<CategoryState>((set, get) => ({
         c.id === id ? { ...c, ruleIds } : c
       ),
     }));
-    await dbUpdate(id, { ruleIds: JSON.stringify(ruleIds) });
+    await sessions().updateCategory(id, { ruleIds });
   },
 }));

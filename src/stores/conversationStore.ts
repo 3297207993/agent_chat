@@ -1,23 +1,40 @@
 import { create } from "zustand";
-import type { Conversation, Message, MessageContent } from "@/types/chat";
-import {
-  getAllConversations,
-  createConversation as dbCreate,
-  updateConversation as dbUpdate,
-  deleteConversation as dbDelete,
-} from "@/lib/db/conversationDB";
-import {
-  getMessagesByConversation as dbGetMessages,
-  createMessage as dbCreateMessage,
-  deleteMessagesByConversation as dbDeleteMessages,
-  deleteMessageById as dbDeleteMessageById,
-  getLatestMessage as dbGetLatestMessage,
-  updateMessageTokenCount as dbUpdateMessageTokenCount,
-  toMessage,
-} from "@/lib/db/messageDB";
+import { hostContext } from "@/plugin";
+import type { Message, MessageContent } from "@/types/chat";
+import type { Conversation, StoredMessage } from "@/plugin/builtin/message/types";
 import { resetDatabase } from "@/lib/db/database";
 import { estimateMessageTokens } from "@/lib/ai/tokenizer";
 import { useUIStore } from "@/stores/uiStore";
+
+/** 数据层的唯一通道：message 插件通过 `ctx.sessions` 提供（pluginization.md §2）。 */
+const sessions = () => hostContext().sessions;
+
+/** 持久化消息 → 内存消息：内容是不透明字符串，解回结构是 llm 侧的事（§2.2）。 */
+function toMessage(row: StoredMessage): Message {
+  return {
+    id: row.id,
+    conversationId: row.conversationId,
+    role: row.role,
+    content: JSON.parse(row.content) as MessageContent[],
+    parentId: row.parentId,
+    tokenCount: row.tokenCount,
+    createdAt: row.createdAt,
+    status: row.status,
+  };
+}
+
+/** 内存消息 → 持久化消息。 */
+function toStored(message: Message): Omit<StoredMessage, "id"> {
+  return {
+    conversationId: message.conversationId,
+    role: message.role,
+    content: JSON.stringify(message.content),
+    parentId: message.parentId,
+    tokenCount: message.tokenCount,
+    createdAt: message.createdAt,
+    status: message.status,
+  };
+}
 
 // 自减计数器，生成运行时临时负 id，避免与 DB 自增 id 冲突
 let _msgIdCounter = 0;
@@ -79,20 +96,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   loadFromDB: async () => {
     try {
-      const rows = await getAllConversations();
-      const conversations: Conversation[] = rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        categoryId: r.categoryId,
-        modelId: r.modelId,
-        providerId: r.providerId,
-        systemPrompt: r.systemPrompt,
-        ruleIds: r.ruleIds ? JSON.parse(r.ruleIds) : [],
-        pinned: r.pinned === 1,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-        messageCount: r.messageCount,
-      }));
+      const conversations = await sessions().listConversations();
       set({ conversations, initialized: true });
     } catch {
       // 数据库升级失败时重置
@@ -109,7 +113,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       // 按需加载当前对话的消息
       const { messages } = get();
       if (!messages[id]) {
-        const msgRows = await dbGetMessages(id);
+        const msgRows = await sessions().listMessages(id);
         const loaded = msgRows.map(toMessage);
         // 迁移：旧数据的 tokenCount 为 0 或旧算法（length/4，对中文严重低估）粗略值，
         // 用 tokenizer 校正为真实估算值，并异步回写 DB（幂等，校正后相等不再写）
@@ -117,7 +121,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           const real = estimateMessageTokens(m);
           if (real !== m.tokenCount) {
             m.tokenCount = real;
-            void dbUpdateMessageTokenCount(m.id, real);
+            void sessions().updateMessage(m.id, { tokenCount: real });
           }
         }
         set((state) => ({
@@ -158,18 +162,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       messages: { ...state.messages, [id]: [] },
     }));
 
-    dbCreate({
-      id,
-      title: conversation.title,
-      categoryId: conversation.categoryId,
-      modelId: conversation.modelId,
-      providerId: conversation.providerId,
-      ruleIds: "[]",
-      pinned: conversation.pinned ? 1 : 0,
-      createdAt: conversation.createdAt,
-      updatedAt: conversation.updatedAt,
-      messageCount: 0,
-    });
+    void sessions().createConversation(conversation);
 
     return id;
   },
@@ -180,7 +173,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         c.id === id ? { ...c, title, updatedAt: Date.now() } : c
       ),
     }));
-    await dbUpdate(id, { title });
+    await sessions().updateConversation(id, { title });
   },
 
   togglePin: async (id) => {
@@ -195,7 +188,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         ),
       };
     });
-    await dbUpdate(id, { pinned: newPinned ? 1 : 0 });
+    await sessions().updateConversation(id, { pinned: newPinned });
   },
 
   setCategory: async (id, categoryId) => {
@@ -204,7 +197,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         c.id === id ? { ...c, categoryId, updatedAt: Date.now() } : c
       ),
     }));
-    await dbUpdate(id, { categoryId });
+    await sessions().updateConversation(id, { categoryId });
   },
 
   setConversationRules: async (id, ruleIds) => {
@@ -213,7 +206,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         c.id === id ? { ...c, ruleIds, updatedAt: Date.now() } : c
       ),
     }));
-    await dbUpdate(id, { ruleIds: JSON.stringify(ruleIds) });
+    await sessions().updateConversation(id, { ruleIds });
   },
 
   deleteConversation: async (id) => {
@@ -226,7 +219,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
           state.currentConversationId === id ? null : state.currentConversationId,
       };
     });
-    await Promise.all([dbDelete(id), dbDeleteMessages(id)]);
+    await Promise.all([sessions().deleteConversation(id), sessions().deleteMessages(id)]);
   },
 
   removeMessage: async (conversationId, messageId) => {
@@ -245,12 +238,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     // 从 DB 移除（尽力而为）
     try {
       if (messageId > 0) {
-        await dbDeleteMessageById(messageId);
+        await sessions().deleteMessage(messageId);
       } else {
         // 临时负 id（流式结束后持久化回填尚未完成的极端时序）：
         // 此时该消息正是 DB 中最新插入的一条
-        const latest = await dbGetLatestMessage(conversationId);
-        if (latest?.id != null) await dbDeleteMessageById(latest.id);
+        const latest = await sessions().latestMessage(conversationId);
+        if (latest) await sessions().deleteMessage(latest.id);
       }
     } catch {
       // DB 删除失败不阻塞重新生成
@@ -273,17 +266,19 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     if (msg.status !== "pending" && msg.status !== "streaming") {
       // 持久化后把临时负 id 回填为 DB 自增 id，保证内存 id 与 DB 一致
       //（removeMessage / 重新生成等操作需要按 id 精确删除）
-      void dbCreateMessage(conversationId, msg).then((dbId) => {
-        set((state) => ({
-          messages: {
-            ...state.messages,
-            [conversationId]:
-              state.messages[conversationId]?.map((m) =>
-                m.id === id ? { ...m, id: dbId } : m
-              ) || [],
-          },
-        }));
-      });
+      void sessions()
+        .appendMessage(toStored(msg))
+        .then((dbId) => {
+          set((state) => ({
+            messages: {
+              ...state.messages,
+              [conversationId]:
+                state.messages[conversationId]?.map((m) =>
+                  m.id === id ? { ...m, id: dbId } : m
+                ) || [],
+            },
+          }));
+        });
     }
   },
 
@@ -410,17 +405,19 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
     // 当消息变为 done/error 时持久化（带真实 tokenCount），并把临时负 id 回填为 DB id
     if (status === "done" || status === "error") {
-      void dbCreateMessage(conversationId, updatedMsg).then((dbId) => {
-        set((state) => ({
-          messages: {
-            ...state.messages,
-            [conversationId]:
-              state.messages[conversationId]?.map((m) =>
-                m.id === updatedMsg.id ? { ...m, id: dbId } : m
-              ) || [],
-          },
-        }));
-      });
+      void sessions()
+        .appendMessage(toStored(updatedMsg))
+        .then((dbId) => {
+          set((state) => ({
+            messages: {
+              ...state.messages,
+              [conversationId]:
+                state.messages[conversationId]?.map((m) =>
+                  m.id === updatedMsg.id ? { ...m, id: dbId } : m
+                ) || [],
+            },
+          }));
+        });
     }
   },
 
@@ -434,10 +431,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c
       ),
     }));
-    const dbUpdates: Record<string, unknown> = { ...updates };
-    if ("pinned" in dbUpdates) {
-      dbUpdates.pinned = (dbUpdates.pinned as boolean) ? 1 : 0;
-    }
-    dbUpdate(id, dbUpdates);
+    // 行编码（pinned 存 0/1）归 `ctx.sessions`，这里只管领域对象
+    void sessions().updateConversation(id, updates);
   },
 }));
