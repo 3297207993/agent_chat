@@ -45,12 +45,12 @@
 | tools | **tools** | `ctx.tools` | 工具注册表、schema 汇集、受守卫的执行管线（`lib/ai/tools.ts`、`stores/toolStore.ts` 的注册/禁用部分、`components/layout/rightPanel/ToolsTab.tsx`） |
 | tools | **approval** | `ctx.approvals` | 监听 `tools/pre-execute` 的策略插件（`lib/ai/tools.ts` 的 `requirePermission`、`stores/toolStore.ts` 的审批部分、`components/settings/ToolPermissionSettings.tsx`）。与 tools **平级**，可单独启停 |
 | platform | **platform** | `ctx.fs`、`ctx.shell`、`ctx.app` | Tauri 命令桥：文件系统（`commands/file.rs`、`search.rs`、`security.rs`）、命令执行（`commands/shell.rs`）、应用目录（`commands/system.rs`）；前端调用点在 `lib/ai/tools.ts` 与 `services/skillService.ts`。tools 与 skills 共用 |
-| prompt | **prompt** | `ctx.prompt` | prompt section 装配（`lib/ai/runAgent.ts` 的 `buildSystemPrompt`）；各插件贡献 section |
-| prompt | **prompt-setting** | 无 | 注册 settings section（`components/settings/SystemPromptSettings.tsx`；`globalSystemPrompt` 现在寄生在 `stores/uiStore.ts`）。**不认领键位** |
+| prompt | **prompt** | `ctx.prompt` | prompt section 装配（`lib/ai/runAgent.ts` 的 `buildSystemPrompt`）；各插件贡献 section。**已落地**：键位持有全局系统提示词（原寄生在 `stores/uiStore.ts`）与变更通知；装配本身仍在宿主 |
+| prompt | **prompt-setting** | 无 | 注册 settings section（**已落地**在 `src/plugin/builtin/prompt-setting/`，编辑组件随插件搬入）。**不认领键位** |
 | prompt | **rule-setting** | `ctx.rules` | 规则数据与**绑定解析**（`stores/ruleStore.ts`、`lib/db/ruleDB.ts`、`pages/RulesPage.tsx`、`components/layout/rightPanel/RulesTab.tsx`；解析 `conversations.ruleIds` / `categories.ruleIds`） |
 | extension | **mcp** | `ctx.mcp` | MCP Server 连接管理、工具发现（`lib/mcp/`、`stores/mcpStore.ts`、`lib/db/mcpDB.ts`、`pages/McpPage.tsx`、`components/layout/rightPanel/McpTab.tsx`、`src-tauri/src/commands/mcp.rs` 与 `src-tauri/src/mcp/`，含 `mcp_*` 命令族），向 `ctx.tools` 贡献工具 |
 | extension | **skills** | `ctx.skills` | 技能扫描、解析与执行（`lib/skills/parser.ts`、`services/skillService.ts`、`stores/skillStore.ts`、`pages/SkillPage.tsx`、`components/layout/rightPanel/SkillsTab.tsx`），向 `ctx.tools` 贡献工具 |
-| 宿主 | **app-shell** | `ctx.views`、`ctx.renderers` | 外壳与注册点：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位（**已落地** `src/plugin/`；外壳代码 `App.tsx`、`components/layout/` 的 `AppLayout` / `TopBar` / `RightPanel`、`pages/` 的路由、`components/settings/ThemeSettings.tsx`、`stores/uiStore.ts` 的主题 / 布局 / 面板开关）。由宿主作为**不可卸载的内置插件**提供 |
+| 宿主 | **app-shell** | `ctx.views`、`ctx.renderers` | 外壳与注册点：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位（**已落地** `src/plugin/` 与 `topbar.action` / `settings.section` 两个槽位；外壳代码 `App.tsx`、`components/layout/` 的 `AppLayout` / `TopBar` / `RightPanel`、`pages/` 的路由、`components/settings/ThemeSettings.tsx`、`stores/uiStore.ts` 的主题 / 布局 / 面板开关）。由宿主作为**不可卸载的内置插件**提供 |
 
 `types/*.ts` 按同样的域跟随各自插件（`types/chat.ts` 按 §2.2 拆给 llm 与 message）。
 
@@ -71,8 +71,9 @@
 - **词汇表归属**：`Message` / `MessageContent` / `role` 取值 / tool-call 结构归 **llm**；`Conversation` / `Category` 归 **message**（`src/types/chat.ts` 按此拆分）。message 侧不 import llm 的类型
 - **`tokenCount` 挪位**：算它必须懂内容格式，所以不再由 message 侧计算——改为写入前由 llm 侧算好传入，或去掉该字段
 - **依赖方向**（无环）：`chat-view → agentLoop + sessions + llm + views`；`agent-loop → llm + tools + prompt`；`prompt → rules`；`rule-setting → sessions`；`tools → platform`；`skills → platform`；`mcp → tools`
+- **prompt 与 prompt-setting 的接口已定（2026-10-08 落地）**：键位归 **prompt**——`ctx.prompt` 目前只做两件事：持有全局系统提示词、广播变更，section 的装配仍留在 `lib/ai/runAgent.ts`；**prompt-setting** 不认领键位，只往 `ctx.views` 的 `settings.section` 槽位注册编辑界面。两者靠 `inject` 表达依赖，且**必须把用到的服务全列上**：cordis 的 `inject` 是可访问服务的白名单，漏列就报 `cannot get property "views" without inject`（漏 `views` 是首次实跑踩到的）
 - **内置插件的形态**：`src/plugin/builtin/<name>/` 一个目录 = 一个插件包（`cambia.json` + 入口 `index.ts`）。启动时它们走**与第三方同一套关**：读 manifest 文本 → 校验 → `engines` 判定 → 解析入口 → 等 `ACTIVE` / `FAILED`，任何一步不过都带 spec 错误码报错并阻止启动（不是悄悄跳过）。入口按内核约定写成模块本体导出 `apply`（可选 `name` / `inject`），`parts.frontend.main` 固定为 `index.ts`。宿主身份（`engines.host` 要比对的 `agent-chat@0.1.0`）写在 [src/plugin/host.ts](../src/plugin/host.ts)
-- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地；**内置装载与第三方装载的汇合点**——内置入口是编译期解析（Vite glob），第三方走 `asset:` 通道（`bridge.moduleURL`），两条路要到 P5 才合成一条；`memory` 何时切；`prompt` / `prompt-setting` / `rule-setting` 三者的接口细节
+- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地；**内置装载与第三方装载的汇合点**——内置入口是编译期解析（Vite glob），第三方走 `asset:` 通道（`bridge.moduleURL`），两条路要到 P5 才合成一条；`memory` 何时切；`rule-setting` 的接口细节；**token 估算何时对插件可见**——它现在是宿主共享工具（`lib/ai/tokenizer.ts`），插件按 §1.2 的边界够不着，所以 prompt-setting 的分组暂时不显示"约 N tokens"（右侧「上下文」面板仍在算，因为那是宿主代码）
 
 ---
 
@@ -108,6 +109,8 @@
 | **P6 生态验证** | 以本项目为参考宿主，验证 spec v1 与 `@cambia/kit` CLI、参考插件 | 第二个宿主应用可用 Cambia 起步 |
 
 依赖：P1–P4 需要内核核心就绪，P5–P6 需要内核的装载运行时与生态件就绪。
+
+**P1 进度（2026-10-08）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、`topbar.action` 槽位、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`（`settings.section` 槽位）已落地。**还差**：`message` 的边界（`ctx.sessions`）、事件域（§2.1，目前一条业务事件都没发）、`ctx.renderers`、`rule-setting`，以及外壳的 sidebar 页 / panel tab 两个槽位。
 
 ---
 

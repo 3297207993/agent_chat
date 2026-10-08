@@ -4,8 +4,8 @@ import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
 import { useRuleStore } from "@/stores/ruleStore";
 import { useCategoryStore } from "@/stores/categoryStore";
-import { useUIStore } from "@/stores/uiStore";
 import { useSkillStore } from "@/stores/skillStore";
+import { hostContext } from "@/plugin";
 import type { Message } from "@/types/chat";
 
 // 当前活动的 AbortController（同一时间仅一个会话在流式输出）
@@ -39,7 +39,8 @@ export function buildSystemPrompt(conversationId: string): string | undefined {
     .getState()
     .getEffectiveRules(conversation, currentCategory);
   const rulesPrompt = effectiveRules.map((r) => r.content).join("\n\n");
-  const globalSystemPrompt = useUIStore.getState().globalSystemPrompt;
+  // 全局系统提示词归 prompt 插件持有（pluginization.md §2）；宿主非组件代码经 hostContext() 取服务
+  const globalSystemPrompt = hostContext().prompt.getGlobalPrompt();
 
   // Skill 注入：仅 Discovery 列表（name + description），放最末占 recency 优势
   // 全文由模型自主调用 read_skill 获取（渐进式披露），应用层不做全文注入

@@ -1,12 +1,12 @@
 import { useMemo } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useProviderStore } from "@/stores/providerStore";
-import { useUIStore } from "@/stores/uiStore";
+import { useGlobalSystemPrompt } from "@/plugin";
 import { getContextLength, estimateTokens } from "@/lib/ai/tokenizer";
 
 export default function ContextTab() {
   const { currentConversationId, messages, conversations } = useConversationStore();
-  const globalSystemPrompt = useUIStore((s) => s.globalSystemPrompt);
+  const globalSystemPrompt = useGlobalSystemPrompt();
   // 订阅数据而非 getActiveModel 函数（函数引用稳定，模型切换不会触发重渲染）
   const providers = useProviderStore((s) => s.providers);
   const activeProviderId = useProviderStore((s) => s.activeProviderId);

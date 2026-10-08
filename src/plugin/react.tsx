@@ -31,3 +31,13 @@ export function useViewSlot<K extends ViewSlot>(slot: K): readonly ViewItem<K>[]
 
   return useSyncExternalStore(subscribe, getSnapshot);
 }
+
+/** `ctx.prompt` 里的全局系统提示词；服务侧的变更会触发重渲染。 */
+export function useGlobalSystemPrompt(): string {
+  const { prompt } = useHost();
+
+  const subscribe = useCallback((listener: () => void) => prompt.subscribe(listener), [prompt]);
+  const getSnapshot = useCallback(() => prompt.getGlobalPrompt(), [prompt]);
+
+  return useSyncExternalStore(subscribe, getSnapshot);
+}

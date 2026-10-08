@@ -1,0 +1,8 @@
+{
+  "id": "agent-chat.prompt",
+  "name": "Prompt",
+  "version": "0.0.0",
+  "engines": { "cambia": "^0.1", "host": "agent-chat@^0.1" },
+  "activationEvents": ["always"],
+  "parts": { "frontend": { "main": "index.ts" } }
+}

@@ -51,6 +51,15 @@ const manifests = import.meta.glob("./builtin/*/cambia.json", {
 const entries = import.meta.glob("./builtin/*/index.ts") as Record<string, () => Promise<unknown>>;
 
 /**
+ * 已启动的宿主 context。
+ *
+ * 组件树走 `<PluginHostProvider>` + `useHost()`；**非组件代码**（如 `lib/ai/runAgent.ts` 的 prompt
+ * 装配）用 `hostContext()` 取服务。两者是同一个 context——`bootHost()` 记录的就是它返回的那个，
+ * 所以不存在"两套宿主"的可能。
+ */
+let bootedHost: Context | null = null;
+
+/**
  * 宿主启动：创建内核根 context，装载内置插件（pluginization.md 的 P1）。
  *
  * 每个插件都要过一遍与第三方相同的关：读 manifest 文本 → 校验 → engines 判定 → 解析入口 →
@@ -102,7 +111,16 @@ export async function bootHost(): Promise<Context> {
     throw new Error(`内置插件装载失败：\n- ${failures.join("\n- ")}`);
   }
 
+  bootedHost = ctx;
   return ctx;
+}
+
+/** 取已启动的宿主 context；给非组件代码用（组件用 `useHost()`）。 */
+export function hostContext(): Context {
+  if (!bootedHost) {
+    throw new Error("宿主尚未启动：hostContext() 只能在 bootHost() 成功之后调用");
+  }
+  return bootedHost;
 }
 
 /** 读 manifest 文本 → 解析 → 校验 → engines 判定。任何一步不过都带着 spec 错误码抛出。 */
