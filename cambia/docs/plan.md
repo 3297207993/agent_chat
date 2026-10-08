@@ -149,7 +149,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 | 项 | 内容 |
 |---|---|
 | **交付物** | 进程监督器（spawn / 启动超时 / 重启退避 / 优雅关闭 / 退出时全量回收）、`process-wrap` 的 job object 与进程组配置、JSONL 格式的 JSON-RPC 薄层（双向、id 关联、超时、取消、错误码）、代理 Service、Node 与 Python 最小 SDK（放 `examples/`）；**适配层：`RunEvent::ExitRequested` / `Exit` 的回收钩子**。**接口前置（2026-10-08 已清）**：控制面薄层放哪一侧**已定案**（帧 / id / 超时 / 取消在 crate，路由在 TS），"没有 WebView 时中枢还能不能在"**已定（v1：不能，回收不依赖 WebView）**——见 [design/plugin-host.md](design/plugin-host.md) 的专节与"进程"一节。**协议本体已写**：[spec/v1/protocol.md](../spec/v1/protocol.md)（帧、消息、id 归属、`$/` 方法、超时与取消、错误码、断开与背压），协议码值已进 `spec/v1/error-codes.json`。本条**不前置**的部分：进程句柄与退出回收的最终所有权在本 crate（TS 只能发请求），这一条已定 |
-| **依赖** | K2.5（先能装，再谈起后端） |
+| **依赖** | K2.5（先能装，再谈起后端）。**进度（2026-10-08）**：crate 半边已落地（协议层、传输层、进程监督器、两个最小 SDK 与一致性用例，见 [design/plugin-host.md](design/plugin-host.md) 的落地结论）；TS 侧与适配层命令尚未开始 |
 | **验收** | 宿主退出后**没有孤儿进程**（在 Windows 上断言，含"后端再起孙进程"的用例）；fixture 覆盖宿主调用后端服务和后端反向调用宿主暴露的方法；两种语言的 SDK 跑同一组双向协议用例，结论一致；协议与错误码写进 `spec/` |
 
 ### K2.7 K2 收尾：端到端测试与性能基线

@@ -16,8 +16,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 # io-util: reading stdout line by line. process: the child. time: call timeouts and restart backoff.
-# sync: the event sink. rt + macros: the runtime and the tests that drive it.
-tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"] }
+# sync: the event sink. fs: the stderr log files. rt + macros: the runtime and the tests that drive it.
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
 # The only crate with Job Object (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) and process group support,
 # which is what makes "the whole tree is reclaimed" OS-level instead of a promise (implementation.md
 # 3.3(e), fact 9). `tokio1` is the only feature not in its defaults.

@@ -189,10 +189,28 @@ impl Transport {
 
 验收里有一条"两种语言的 SDK 跑同一组双向协议用例，结论一致"（[../plan.md](../plan.md) K2.6）。要让它不是空话，做法必须定死：
 
-- **SDK 是"最小的后端"**，放 `examples/backend-sdk-node/`（`backend.mjs`，零依赖）与 `examples/backend-sdk-python/`（`backend.py`，只用标准库）。每个都要会五件事（[../../spec/v1/protocol.md](../../spec/v1/protocol.md) §11）：一行一帧、应答 `$/initialize` / `$/shutdown` 并回写原 id、自己分配出站 id 并维护在途表、丢弃未知 id 的应答、退出前让在途请求失败。除这些之外只加一个**测试用的回声方法**（`test/echo`）与一条**反向请求**用例，不实现任何领域方法。
+- **SDK 是"最小的后端"**，放 `examples/backend-sdk-node/`（`backend.mjs`，零依赖）与 `examples/backend-sdk-python/`（`backend.py`，只用标准库）。每个都要会五件事（[../../spec/v1/protocol.md](../../spec/v1/protocol.md) §11）：一行一帧、应答 `$/initialize` / `$/shutdown` 并回写原 id、自己分配出站 id 并维护在途表、丢弃未知 id 的应答、退出前让在途请求失败。除这些之外只有三个**服务不了领域用途的测试方法**：`test/echo`（回声）、`test/call-host`（反向调用宿主）、`test/hang`（**故意不回答**——一致性用例要证明"调用超时不等于进程死亡"，就需要一个肯保持沉默的后端）。
 - **用例只有一份**：`crates/plugin-host/tests/protocol.rs` 里**同一段断言**，参数化成"× 两个命令"跑两次（`node examples/backend-sdk-node/backend.mjs`、`python3 examples/backend-sdk-python/backend.py`）。"结论一致"因此是**机械成立**的——同一段断言跑两个进程，不是人工比对两份报告。
 - **解释器缺失时用例失败并说明要装什么**，不静默跳过：静默跳过会让这条验收变成空话（本地确实没有 python 的人用 `cargo test -- --skip protocol` 显式跳过——跳过是人的决定，不是测试的默认）。
 - 用例集至少覆盖：握手成功 / 版本不接受、宿主→后端调用、后端→宿主反向调用、通知、超时（含"超时不等于进程死亡"）、`$/cancel` 后被取消方的失败形态、未知 id 的应答被丢弃、进程退出让在途请求以 `PROCESS_EXITED` 失败、单帧超限被拒。
+
+### 落地结论（2026-10-08，K2.6 的 crate 半边）
+
+实现落在 `src/{error_codes,protocol,transport,process}.rs`，测试在 `tests/{spec,protocol,supervisor}.rs`，两个最小 SDK 在 `examples/backend-sdk-{node,python}/`。
+
+- **已落地**：码表镜像与两侧漂移检查（`tests/spec.rs`）、协议层（帧、消息、方向与 id 规则）、传输层（读循环、出站 id 表、超时 + 取消、在途上限、入站分派、EOF/对端 cancel 的行为）、进程监督器（spawn + **握手即就绪** + 世代号 + 退出码语义 + 退避 + 优雅关闭 + `reclaim_all` + stderr 分文件）、两个 SDK 与"同一段断言 × 两个语言"的一致性用例。
+- **未落地**（同批的另一半）：TS 侧 `@cambia/host` 的 `startBackend` / `loadPlugin` / 代理 Service，适配层的 `spawn` / `kill` / `call` / `respond` 命令与退出回收钩子。**"宿主退出后没有孤儿进程"这条验收里，OS 级那一半（Job Object 随宿主进程结束回收整棵树）要等真宿主退出才验得了，归 K2.7 的端到端。** 这里验到的是：失败/停止/回收路径都真的把进程收掉了（用 pid 存活性断言，不是靠回调）。
+
+实测（来自真进程、真 SDK 或上游源码，不是推测）：
+
+- **`process-wrap` 的 `ChildWrapper` 方法返回装箱 future，不能直接 `.await`**：`Box<dyn Future>` 自身没有 `Future` 实现（那个 impl 要求 `Unpin`），`kill_tree()` 里用 `Box::into_pin` 才是能 await 的形状。
+- **Job Object 的"致命性"挂在 `KillOnDrop` 上**：上游 `make_job_object(handle, kill_on_drop)` 读的是包装链里有没有 `KillOnDrop`。所以"宿主死了整棵树也被内核回收"要求链里**同时**有 `JobObject` 与 `KillOnDrop`，少一个就只剩"退出钩子"这半边。
+- **握手超时必须翻译成 `PROCESS_START_TIMEOUT`**：传输层只会说"这次调用超时"（`PROTOCOL_CALL_TIMEOUT`），而调用方问的是"它起来没有"。两个码对应两个判定，换码在 `spawn_once` 的边界上做（测试先红）。
+- **重启计数不能在成功重启后清零**：清零会让"起来就崩"的插件永远重启下去，"退避到上限"永远不可达——测试因此挂到 60 秒才被发现。计数是**每个 episode** 的，episode 从宿主显式 `start` 开始。
+- **退避抖动必须可关**：`jitter: true` 时延迟随机，时序断言就变成抛硬币；测试关掉它，生产默认开。
+- **Node SDK 的串行队列会把反向调用锁死**：应答必须**绕过**请求队列——正在等宿主答复的处理函数会排在"它等的那条应答"前面。这是"两个 SDK 同一组断言"第一次跑就抓到的真 bug。
+- **Windows 上 Python 的 `select` 不接受文件对象**（只接受 socket），所以同步 SDK 的"等待 + 超时"改用读取线程 + 队列。
+- **`python3` 在 Windows 可能是 Store 桩**：它"存在"、能启动、什么都不打印就退出——所以解释器探测必须真的跑一段代码并检查输出，而不是看 `--version` 起不起得来。
 
 ## 未决项
 

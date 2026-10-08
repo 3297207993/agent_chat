@@ -146,6 +146,16 @@ pub struct Transport {
   inner: Arc<Inner>,
 }
 
+impl std::fmt::Debug for Transport {
+  /// Prints what is worth knowing about a transport: whether it still has a peer.
+  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    formatter
+      .debug_struct("Transport")
+      .field("closed", &self.closed_code())
+      .finish_non_exhaustive()
+  }
+}
+
 impl Clone for Transport {
   fn clone(&self) -> Self {
     Self {

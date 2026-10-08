@@ -33,5 +33,6 @@
 
 pub mod error_codes;
 pub mod platform;
+pub mod process;
 pub mod protocol;
 pub mod transport;
