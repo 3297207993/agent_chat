@@ -18,7 +18,6 @@
 | `@cambia/host` | 激活事件匹配 | **自研前缀 + 复用 glob** | 自研前缀解析；glob 型用 `picomatch@4` |
 | `@cambia/host` | 未激活原因诊断（环 / 没有提供者） | **自研（只做诊断，不建图）** | 读 `Fiber.state` / `Fiber.inject` 做聚合原因诊断；**解析与就绪归 cordis `inject`，host 不排序** |
 | `@cambia/host` | 插件模块装载 | **自研** | 原生 `import()` + hash-qualified specifier + Tauri `asset:` 协议（3.2(e)） |
-| `@cambia/host` | 视图插槽运行时 | **自研** | 数据契约 + headless no-op；内核不绑 UI 框架 |
 | `@cambia/host` | 失败保护措施（激活超时） | **自研** | **等 fiber 进 `ACTIVE` 的超时** + 订阅 `internal/status` 记录失败（词表见 3.2） |
 | `plugin-host` (crate) | `.tap` 打包与解包 | **复用（唯一实现）** | `zip@8`，打包与解包同一实现 |
 | `plugin-host` (crate) | 哈希与签名 | **复用** | `sha2@0.11`；签名（`minisign-verify`）后置 |
@@ -189,16 +188,8 @@
 - **hash-qualified specifier 是本模块的关键工程点**：ES module 一旦被 import 就进入 module 图且无法卸载，因此重新装载必须换 specifier——路径里包含版本与内容哈希（`…/plugins/<id>/<version>-<hash>/frontend/main.js`），让新版本拿到新的模块实例；旧实例的注册由 effect 逆序撤销回收。代价是旧模块图不被回收，反复重装的堆增长是**已知成本**——量化它（3.7），但不承诺回收。
 - **CSP 必须写 host-source 形式**（kernel 6.1 的实现细节）：Windows 上 `asset:` 的 URL scheme 实际是 `http`，只写 scheme-source `asset:` 不会匹配。`script-src` 需同时含 `'self'` 与 `http://asset.localhost`（macOS/Linux 再加 `asset:`）；自定义 scheme 同理。Tauri 只会为自己捆绑的资源自动追加 nonce/hash，**插件来源要显式放行**。
 - **"装载成功"不能用 `await ctx.plugin()` 判定**（事实 10，实跑确认）：它只等装载动作，**0ms 就 resolve**，此时 `state=0`、插件尚未激活（依赖到位后 120ms 才真正 `0→1→2`）。判定标准只能是**显式等 `state === ACTIVE`（订阅 `internal/status`）或 `FAILED`**，并叠加 3.2(g) 的超时——否则"装载成功"报告的是"已发起"，不是"已生效"。
-- 装载错误分几类：协议层失败（403/404）、CORS 或 MIME 不满足、语法错误、缺 `apply`、`inject` 未知服务键、超时——每类对应 spec 错误码，且必须能在 UI 里定位到插件 id 与文件路径（"未激活"的原因诊断见 3.2(d)）。
-- **可行性验证的性质是"先证明再写代码"，但它的位置已挪到 K2 的末尾（K2.4 之后、G2 之前）**：从 `asset:` / 自定义 scheme 动态 `import()` 这一点，官方文档与 issue 都没有覆盖（这是核查中唯一找不到权威依据的结论），必须先在 WebView2 上证明，再验 WKWebView 与 WebKitGTK。它挡住的只是**装载通道**：manifest 校验、装载判定与卸载语义、未激活诊断、插槽运行时都不依赖通道（装载入口用假 bridge 注入模块 URL 即可测），所以主体先做、把真实 WebView 与 Tauri 试验工程推后。代价写明：通道未验期间**测试全绿不等于真机能装**——这条挂在 3.8 条目 2 上。
-
-#### (f) 视图插槽运行时
-
-结论：**自研**，且**内核不依赖 UI 框架**（kernel 5.3）。
-
-- 自研内容只有三件事：插槽位置解析（宿主定义的 key → 有序贡献列表）、渲染器服务键查找、无 UI 宿主的 no-op 实现（kernel 1.6 的"UI 必须可退化"）。
-- 贡献载荷是**数据**（schema 表单 / 渲染器服务键 / iframe 文档 URL），React 组件只存在于宿主适配层。
-- 没有可复用的等价库，而且这段代码属内核契约的一部分，必须自己管理。
+- 装载错误分几类：协议层失败（403/404）、CORS 或 MIME 不满足、语法错误、缺 `apply`、`inject` 未知服务键、超时——每类对应 spec 错误码，并能通过宿主提供的诊断接口定位到插件 id 与文件路径（"未激活"的原因诊断见 3.2(d)）。
+- **可行性验证的性质是"先证明再写代码"，排在 K2.3 之后、G2 之前**：从 `asset:` / 自定义 scheme 动态 `import()` 这一点，官方文档与 issue 都没有覆盖（这是核查中唯一找不到权威依据的结论），必须先在 WebView2 上证明，再验 WKWebView 与 WebKitGTK。它挡住的只是**装载通道**：manifest 校验、装载判定与卸载语义、未激活诊断都不依赖通道（装载入口用假 bridge 注入模块 URL 即可测），所以先做主体、把真实 WebView 与 Tauri 试验工程推后。UI 扩展与展示不属于 Cambia 运行时。代价写明：通道未验期间**测试全绿不等于真机能装**——这条挂在 3.8 条目 2 上。
 
 #### (g) 失败保护措施（激活超时）
 
@@ -263,7 +254,7 @@ crate 是 Rust 侧唯一的包管理实现，也是"插件完全能力"的来源
 | MCP 官方 Rust SDK | 语义即 MCP | 不采用：协议由 MCP 定义，而 Cambia 的协议要自己冻结 |
 | `serde_json` + `tokio::io` | — | **采用** |
 
-- 需要覆盖的能力（决定"薄"到哪）：双向调用（宿主→插件调用、插件→宿主通知）、请求 id 关联、超时、取消、错误码表（进 spec）、大块数据**不走协议**（临时文件或共享内存，kernel 3.3）、stderr 只作日志、写入背压。
+- 需要覆盖的能力（决定"薄"到哪）：双向 request/response（宿主→后端调用、后端→宿主暴露的服务/方法调用）与通知、请求 id 关联、超时、取消、错误码表（进 spec）、大块数据**不走协议**（临时文件或共享内存，kernel 3.3）、stderr 只作日志、写入背压。具体可调用的方法由宿主定义，不在通用协议里预置领域 API。
 - 多语言 SDK：协议进 spec 后，v1 只提供 Node（零依赖）与 Python 两个最小实现放 `examples/`，作为"协议可被第二种语言实现"的实证；其余语言后置。
 
 #### (g) 宿主适配层（Tauri 版）：`tauri-plugin-cambia`
@@ -308,14 +299,14 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 - 错误码表：单独成篇；JS 与 Rust 两侧各以常量映射同一份表，CI 校验两侧键集合一致。
 - 版本策略：`engines.cambia` 的语义化规则、v1 冻结条件、deprecation 窗口。
 - 契约测试：`examples/` 下所有 manifest 必须同时通过 JS（zod）与 Rust（`jsonschema`）校验，且**两侧判定结论一致**——这是 K2 的验收项（两侧判定不一致是这套架构最现实的故障模式）。
-- **已落地（K2.1）**：`spec/v1/manifest.schema.json`（生成物，`pnpm --filter @cambia/host spec:generate`）、`spec/v1/error-codes.json`（手写码表：14 个码，带 `stage` 标注，`manifest` / `engines` 已实现、`load` 五个随表定稿但实现归 K2.5）、`spec/README.md`。JS 侧一致性由 `packages/host/test/spec.test.ts` 守（生成物逐字节 + 码表键集合双向），Rust 侧随 `crates/plugin-host`（K2.6）补一份对称检查。**`examples/hello-plugin` 的 manifest 已随本批加上**，`examples/**/cambia.json` 全部通过校验。
+- **已落地（K2.1）**：`spec/v1/manifest.schema.json`（生成物，`pnpm --filter @cambia/host spec:generate`）、`spec/v1/error-codes.json`（手写码表：14 个码，带 `stage` 标注，`manifest` / `engines` 已实现、`load` 五个随表定稿但实现归 K2.4）、`spec/README.md`。JS 侧一致性由 `packages/host/test/spec.test.ts` 守（生成物逐字节 + 码表键集合双向），Rust 侧随 `crates/plugin-host`（K2.5）补一份对称检查。**`examples/hello-plugin` 的 manifest 已随本批加上**，`examples/**/cambia.json` 全部通过校验。
 
 ### 3.6 仓库与工具链
 
 - **Monorepo**：pnpm workspace（cordis 生态惯例、严格依赖提升）；Node LTS 双版本 CI；Rust workspace + MSRV 策略。
 - **CI 分两条轨道**：核心（`packages/*` + `crates/plugin-host`，**不需要安装 tauri**，保持快）与适配层（`crates/tauri-plugin-cambia`，三平台 tauri 构建，可挂在 nightly / 发布前）。根 workspace `exclude` 适配层，保证核心流水线永远碰不到 tauri——这条不是优化，是让"内核实现层零 Tauri 依赖"变成**结构上的事实**而不是纪律上的希望。
 - **构建**：`tsup@8` 打 `@cambia/*`；`publint` + `@arethetypeswrong/cli` 卡发布前检查。
-- **测试**：`vitest@5`（单元 + happy-dom 渲染插槽）；`cargo test`（crate）。
+- **测试**：`vitest@5`（manifest、装载与生命周期单元/集成测试）；`cargo test`（crate）。
 - **版本与发布**：`@changesets/cli@3` 以 fixed 模式统一 `@cambia/*` 版本，crate 版本与之保持一致；`engines.cambia` 的兼容矩阵在代码里维护成常量表，随发布更新。**已落地**（K1.3）：`.changeset/config.json`（`fixed: [["@cambia/*"]]`、`access: public`）+ 根 scripts（`changeset` / `version-packages` / `release`），首个 changeset 已跑过一次完整流程（`@cambia/core` 从 `0.0.0` 走到 `0.1.0` 并生成 CHANGELOG）。注意一处实测行为：**`private: true` 的包被 changesets 跳过**，所以 `@cambia/eslint-config` 暂时不在组内一致（等它随 kit 发布时再加入）。
 - **Lint**：`eslint` + `typescript-eslint`，规则集**单独成包**（`@cambia/eslint-config`）、同时用于本仓库与插件模板——上游隔离规则 1、2 靠 `no-restricted-imports` / `no-restricted-syntax` 强制检查。**已落地**（K1.3）：三个导出 `base` / `isolation` / `plugin`；仓库根 `eslint.config.js` 把 `base` 给 `packages/*`（内核实现层，允许直连上游）、把 `isolation` 只套在 `examples/**`（插件面向的代码）上。版本实测为 `eslint@10` + `typescript-eslint@8`（本文早先写的 9 是计划时的当前版本，以实测为准）。
 - **依赖治理**：cordis 版本显式固定且**不跟随 dist-tag**（事实 1）；升级必须跑通 3.7 的上游行为锁定测试；可选 `cargo-deny` 做许可证与重复依赖检查。
@@ -330,9 +321,9 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 公开 API 契约（K1.2） | tsc（类型断言）+ vitest | 白名单有谁 / 没有谁、`Events` 与 `Services` 的声明合并生效、五种派发的签名、`FiberState` 六个值与上游一致、示例插件装载 → 卸载后服务键与监听者一起消失、effect 逆序撤销 | K1——**已落地**：`examples/hello-plugin/`（类型断言在 `test/contract.ts`，运行期在 `test/host.test.ts`；`pnpm --filter cambia-example-hello-plugin test`） |
 | 规则集自证（K1.3） | vitest + ESLint Node API | 四种违规写法（import cordis / cordis 子路径 / `declare module 'cordis'` / `@cambia/core/*` 子路径）必须报在对应规则上且文案指回 kernel.md；合规写法与**真实的示例插件**必须零告警 | K1——**已落地**：`packages/eslint-config/test/rules.test.ts`（`pnpm --filter @cambia/eslint-config test`）；全仓门禁是 `pnpm lint` |
 | 契约与生成物（K2.1） | vitest | `spec/v1/manifest.schema.json` 与代码生成结果逐字节一致；`ERROR_CODES` 与 `spec/v1/error-codes.json` 键集合双向一致；生成物里确实带着 Rust 要用的关键字（`propertyNames` / `additionalProperties: false` / 路径 `pattern`） | K2——**已落地**：`packages/host/test/spec.test.ts`；门禁 `pnpm check`（内核 CI 轨道建起来后跑同一条命令） |
-| 集成（无 Tauri） | vitest + happy-dom + 真实 `.tap` 目录的 headless 宿主 fixture | 装载 → 注册 → 卸载 → **监听数归零、占用的服务键消失**（kernel 6.2 验收项） | K2 |
+| 集成（无 Tauri） | vitest + 真实 `.tap` 目录的 headless 宿主 fixture | 装载 → 注册 → 卸载 → **监听数归零、占用的服务键消失**（kernel 6.2 验收项） | K2 |
 | 后端进程 | cargo test | spawn / 超时 / 重启 / 优雅关闭 / 宿主退出回收（Windows 上断言无孤儿进程） | K2 |
-| E2E | WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server，覆盖 Windows/Linux/macOS；直用 `tauri-driver` 只有 Windows/Linux） | 真 WebView 下的动态模块装载、CSP 生效、iframe 视图 | K2 / K3 |
+| E2E | WebdriverIO + `@wdio/tauri-service`（内置 WebDriver server，覆盖 Windows/Linux/macOS；直用 `tauri-driver` 只有 Windows/Linux） | 真 WebView 下的动态模块装载与 CSP 生效 | K2 / K3 |
 | 性能基线 | 自建 benchmark | 装载耗时、N 次重装的堆增长 | K2 / K3 |
 
 ### 3.8 风险与待验证项
@@ -340,7 +331,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | # | 风险 | 影响 | 缓解 / 回落 | 状态 |
 |---|---|---|---|---|
 | 1 | 上游长期停在 rc（`latest` 就是 4.0.0-rc.10） | 语义范围由未稳定上游决定 | vendor 源码（从 git 取）+ 上游行为锁定测试 | 已识别，触发条件见 3.1 |
-| 2 | 从 `asset:` / 自定义 scheme 动态 `import()`，**没有任何官方文档或 issue 覆盖** | 整个 K2 的装载路径 | 设计已锁定主路径 `asset:`（CORS + JS MIME 由 Tauri 负责）；**可行性验证排在 K2.4 之后、G2 之前**（主体不依赖通道），最小版先在 WebView2 上点火，再验 WKWebView / WebKitGTK；失败才回落自定义 scheme → Blob | **待验证**（设计已定，实现待证） |
+| 2 | 从 `asset:` / 自定义 scheme 动态 `import()`，**没有任何官方文档或 issue 覆盖** | 整个 K2 的装载路径 | 设计已锁定主路径 `asset:`（CORS + JS MIME 由 Tauri 负责）；**可行性验证排在 K2.3 之后、G2 之前**（主体不依赖通道），最小版先在 WebView2 上点火，再验 WKWebView / WebKitGTK；失败才回落自定义 scheme → Blob | **待验证**（设计已定，实现待证） |
 | 3 | 宿主启用严格 CSP 后的装载 | 需要精确的 CSP 模板 | 已锁定写法：`script-src` 必须含 host-source `http://asset.localhost`（Windows 上 scheme 实为 `http`，只写 `asset:` 不匹配），macOS/Linux 再加 `asset:`；Tauri 不会为插件来源追加 nonce/hash（kernel 6.1） | **已定案** |
 | 4 | ES module 图不可卸载 | 反复重装累积内存 | hash-qualified specifier（功能正确）+ 量化基线（不承诺回收） | 已知成本 |
 | 5 | Windows 文件占用 | 更新失败 | 先停后端进程再替换 + journal 延迟替换 | 设计内 |
@@ -360,7 +351,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 阶段 | 引入的依赖与实现 | 备注 |
 |---|---|---|
 | **K1** 内核面 | cordis（显式固定版本）、`tsup`、`vitest`、eslint 规则集、`publint`/`attw` | 不引入任何 Node 侧的 cordis 生态包 |
-| **K2** 装载与宿主运行时 | 先做主体：`zod`、`semver`、`node-semver`、`picomatch`、`jsonschema`、`zip`、`sha2`、`reqwest`、`tokio`、`process-wrap`、Tauri（仅宿主适配层）、`happy-dom`（测试）；**装载路径可行性验证**（WebView2 → WKWebView / WebKitGTK 证明 `import()` 从 `asset:` 可用）排在 K2.4 之后、G2 之前 | 3.8 的条目在本阶段收尾：2 已定设计待证，3 / 8 / 11 / 12 已定案 |
+| **K2** 装载与宿主运行时 | 先做主体：`zod`、`semver`、`node-semver`、`picomatch`、`jsonschema`、`zip`、`sha2`、`reqwest`、`tokio`、`process-wrap`、Tauri（仅宿主适配层）；**装载路径可行性验证**（WebView2 → WKWebView / WebKitGTK 证明 `import()` 从 `asset:` 可用）排在 K2.3 之后、G2 之前 | 3.8 的条目在本阶段收尾：2 已定设计待证，3 / 8 / 11 / 12 已定案 |
 | **K3** 生态件 | `cac`、`@clack/prompts`、`giget`、Vite、`fflate`（回落）、`@changesets/cli` | spec v1 冻结 + 参考插件 |
 
 ---

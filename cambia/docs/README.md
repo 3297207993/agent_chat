@@ -9,7 +9,7 @@
 
 前三份是全局的；`design/` 是逐模块的，只写该模块的接口、数据流、失败路径与验收方式，不重复前三份的结论。
 
-> **内核与宿主的分工**：内核交付机制（服务注册、依赖解析、事件派发、可逆注册、装载），宿主定义领域词汇（服务键、事件名与负载、插槽位置）。内核不含任何业务依赖、不 import 本项目任何代码——它是将来独立成仓库的那部分。
+> **内核与宿主的分工**：内核交付机制（服务注册、依赖解析、事件派发、可逆注册、装载与前后端调用），宿主定义领域词汇（服务键、事件名与负载）以及任何展示或贡献协议。内核不规定 UI 呈现、不含任何业务依赖、不 import 本项目任何代码——它是将来独立成仓库的那部分。
 > **宿主侧文档不在本目录**："一切皆插件"的目标与迁移路线是本项目自己的规划，见 [../../docs/pluginization.md](../../docs/pluginization.md)。
 
 ## 几个容易看不懂的词
@@ -26,7 +26,7 @@
 | **inject** | 插件声明"我需要哪些服务键"。声明的依赖都到位了，插件才会激活 |
 | **effect** | 可逆注册：`ctx.effect(() => { ...; return dispose })`。插件卸载时，这些注册按注册的逆序自动撤销 |
 | **派发** | 把事件广播给监听者的方式，共五种（`emit` / `waterfall` / `parallel` / `serial` / `bail`），差别在于要不要等待、能不能改写结果 |
-| **`.tap`** | 插件包的扩展名，本质是一个 ZIP，里面是 manifest + 插件代码（可选的后端程序、视图页面） |
+| **`.tap`** | 插件包的扩展名，本质是一个 ZIP，里面是 manifest + 插件代码（可选的后端程序） |
 | **上游** | 我们依赖的外部项目，这里通常指 Cordis 或 Tauri |
 
 ## 当前形态（已定案）
@@ -34,6 +34,7 @@
 - **JS 侧直接用 Cordis**，内核语义不自研；`@cambia/core` 冻结插件面向的 API（见 [kernel.md](./kernel.md) 5.3.1）
 - **全信任同进程**：第三方插件与宿主同 realm、同一 `ctx`，不做 Worker 隔离（见 [kernel.md](./kernel.md) 1.7）
 - **插件不受能力限制**：没有能力管控、没有审批，manifest 里也没有能力声明字段；防线是"只装可信插件"（见 [kernel.md](./kernel.md) 4）
+- Cambia 提供插件装载、服务/事件交互、生命周期和可选的后端调用机制；**不提供 UI 插槽、渲染器、表单或 iframe 视图运行时**
 - 插件 bundle **必须** external 掉 Cordis 与 `@cambia/core`（见 [kernel.md](./kernel.md) 3.2）
 
 ## 与其他文档的关系
@@ -41,4 +42,4 @@
 - 本项目插件化规划：[../../docs/pluginization.md](../../docs/pluginization.md)
 - 需求：[../../docs/requirements.md](../../docs/requirements.md)
 - 应用设计（非插件部分）：[../../docs/design.md](../../docs/design.md)
-- UI 设计：[../../docs/ui-design.md](../../docs/ui-design.md)
+- agent_chat 宿主应用 UI 设计（非 Cambia 契约）：[../../docs/ui-design.md](../../docs/ui-design.md)

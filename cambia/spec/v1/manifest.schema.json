@@ -104,24 +104,10 @@
             "protocol",
             "bin"
           ]
-        },
-        "view": {
-          "description": "View document shown in a no-same-origin iframe",
-          "type": "object",
-          "properties": {
-            "entry": {
-              "type": "string",
-              "pattern": "^(?!\\.\\.?(?:\\/|$))(?!.*:)(?!.*\\\\)[A-Za-z0-9._-]+(?:\\/(?!\\.\\.?(?:\\/|$))[A-Za-z0-9._-]+)*$",
-              "description": "Standalone HTML document rendered in an iframe"
-            }
-          },
-          "required": [
-            "entry"
-          ]
         }
       },
       "additionalProperties": false,
-      "description": "Frontend / backend / view; anything else is a part this host cannot run"
+      "description": "Frontend / backend; anything else is a part this host cannot run"
     },
     "contributes": {
       "description": "Opaque to the kernel: vocabulary and shape belong to the host (kernel.md 1.9)",

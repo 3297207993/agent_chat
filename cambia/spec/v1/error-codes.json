@@ -15,7 +15,7 @@
     },
     "MANIFEST_UNKNOWN_PART": {
       "stage": "manifest",
-      "summary": "parts carries a key outside frontend / backend / view: the host lacks that ability"
+      "summary": "parts carries a key outside frontend / backend: the host lacks that ability"
     },
     "MANIFEST_PATH_ESCAPE": {
       "stage": "manifest",

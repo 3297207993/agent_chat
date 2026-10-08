@@ -7,7 +7,7 @@
  * string may not (docs/design/spec.md).
  *
  * `stage` in the table says which batch implements a code: `manifest` / `engines` are live now
- * (K2.1), the `load` codes are ratified here but wired up by the load layer (K2.5).
+ * (K2.1), the `load` codes are ratified here but wired up by the load layer (K2.4).
  */
 
 /** Every code the spec knows, as runtime values (the drift check compares these keys with the table). */
@@ -18,7 +18,7 @@ export const ERROR_CODES = {
   MANIFEST_FIELD_INVALID: 'MANIFEST_FIELD_INVALID',
   /** `engines` is absent, or lacks `cambia` / `host` (kernel.md 3 requires the double constraint) */
   MANIFEST_MISSING_ENGINES: 'MANIFEST_MISSING_ENGINES',
-  /** `parts` carries a key outside frontend / backend / view: the host lacks that ability */
+  /** `parts` carries a key not defined by this spec: the host lacks that ability */
   MANIFEST_UNKNOWN_PART: 'MANIFEST_UNKNOWN_PART',
   /** A declared path can leave the package root (absolute, `..`, backslash, empty segment) */
   MANIFEST_PATH_ESCAPE: 'MANIFEST_PATH_ESCAPE',

@@ -119,6 +119,12 @@ describe('validateManifest: MANIFEST_UNKNOWN_PART', () => {
     ])
     expect(pathsOf(result)).toEqual(['parts.wat', 'parts.backend2'])
   })
+
+  it('does not define presentation-specific runtime parts such as view', () => {
+    const result = validateManifest({ ...validManifest(), parts: { view: { entry: 'view.html' } } })
+    expect(codesOf(result)).toEqual([ERROR_CODES.MANIFEST_UNKNOWN_PART])
+    expect(pathsOf(result)).toEqual(['parts.view'])
+  })
 })
 
 describe('validateManifest: MANIFEST_PATH_ESCAPE', () => {
@@ -135,12 +141,6 @@ describe('validateManifest: MANIFEST_PATH_ESCAPE', () => {
     const result = validateManifest({ ...validManifest(), parts: { frontend: { main } } })
     expect(codesOf(result)).toEqual([ERROR_CODES.MANIFEST_PATH_ESCAPE])
     expect(pathsOf(result)).toEqual(['parts.frontend.main'])
-  })
-
-  it('applies the same rule to the view document', () => {
-    const result = validateManifest({ ...validManifest(), parts: { view: { entry: '../x.html' } } })
-    expect(codesOf(result)).toEqual([ERROR_CODES.MANIFEST_PATH_ESCAPE])
-    expect(pathsOf(result)).toEqual(['parts.view.entry'])
   })
 
   it('applies the same rule to a backend executable path', () => {
@@ -250,14 +250,14 @@ describe('validateManifest: the verdict collects everything', () => {
     const known = new Set<string>(Object.values(ERROR_CODES))
     const manifest = validManifest()
     delete (manifest as Record<string, unknown>).engines
-    const result = validateManifest({ ...manifest, parts: { view: { entry: '../x' } } })
+    const result = validateManifest({ ...manifest, parts: { view: { entry: 'view.html' } } })
     for (const issue of issuesOf(result)) expect(known.has(issue.code)).toBe(true)
   })
 
   it('carries a short message plus the raw upstream detail', () => {
-    const result = validateManifest({ ...validManifest(), parts: { view: { entry: '../x' } } })
+    const result = validateManifest({ ...validManifest(), parts: { view: { entry: 'view.html' } } })
     const [issue] = issuesOf(result)
-    expect(issue.message).toContain('package root')
+    expect(issue.message).toContain('unknown part')
     expect(issue.detail).toBeTruthy()
   })
 })

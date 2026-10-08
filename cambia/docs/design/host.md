@@ -1,7 +1,7 @@
 # `@cambia/host` 设计
 
 > 状态：**草稿**（K2.1 已实现、自测通过；文档本身未评审）
-> 对应批次：K2.1–K2.5（[../plan.md](../plan.md) 4 节）。开工顺序即编号顺序 **K2.1 → K2.2 → K2.3 → K2.4 → K2.5**：主体四批先做，装载路径可行性验证（K2.5）排在最后、G2 之前。本文把 K2.1（契约层）与 K2.5（装载层）两批写全，其余批次只写已定案的边界与约束，接口在各自批次的实现之前补写。
+> 对应批次：K2.1–K2.4（[../plan.md](../plan.md) 4 节）。开工顺序即编号顺序 **K2.1 → K2.2 → K2.3 → K2.4**；装载路径可行性验证（K2.4）排在装载逻辑与诊断之后、G2 之前。本文把 K2.1（契约层）与 K2.4（装载路径验证）两批写全，其余批次只写已定案的边界与约束，接口在各自批次的实现之前补写。
 > 只写这一个模块。语义以 [../kernel.md](../kernel.md) 1.6 / 1.9 / 3 章 / 6 章为准，选型以 [../implementation.md](../implementation.md) 3.2 为准，本文不重新定义它们。
 
 ## 本模块在 K2 里分几批
@@ -11,19 +11,17 @@
 | **K2.1** manifest 与校验 | zod schema、`engines` 判定、激活事件匹配、错误码表初稿 | **写全**（接口 / 数据流 / 失败路径 / 验收）；码值落在 `spec/`（[spec.md](./spec.md)） |
 | K2.2 装载最小闭环 | 装载判定（显式等 `ACTIVE` / `FAILED`）、卸载路径、不依赖 Tauri 的宿主 fixture | 只写边界 |
 | K2.3 原因诊断与失败保护 | 未激活原因的聚合诊断、激活超时 | 只写边界 |
-| K2.4 视图插槽运行时 | 插槽位置解析、渲染器服务键查找、无 UI 宿主的 no-op、iframe 容器 | 只写边界 |
-| **K2.5** 可行性验证 | 装载入口：specifier、与宿主运行时的接缝、`import()`、失败分类 | **写全**（接口 / 数据流 / 失败路径 / 验收）；最小版只点火，双版本对照 / CSP 三变体 / 平台差异属补全版 |
+| **K2.4** 可行性验证 | 装载入口：specifier、与宿主运行时的接缝、`import()`、失败分类 | **写全**（接口 / 数据流 / 失败路径 / 验收）；最小版只点火，双版本对照 / CSP 三变体 / 平台差异属补全版 |
 
-开工顺序即编号顺序（[../plan.md](../plan.md) 4 节）：**K2.1 → K2.2 → K2.3 → K2.4 → K2.5**。K2.2（装载最小闭环）依赖 K2.1 的 manifest 与**装载入口**——装载入口的最终形状由 K2.5 定，但 K2.2 不必等它：把模块 URL 用假 bridge 注入，就能测出装载判定与卸载语义，真实通道由 K2.5 在 K2.4 之后验。K2.5 仍是"先证明再写代码"的那一批（`asset:` 与动态 `import()` 的组合没有任何权威依据，只有实测），它的最小版只回答一个问题：放行插件目录后 `import()` 能不能装载 ESM（[../implementation.md](../implementation.md) 3.2(e)；实测结论由它回写成该文档事实表的条目 13–15，现在还没有）。
+开工顺序即编号顺序（[../plan.md](../plan.md) 4 节）：**K2.1 → K2.2 → K2.3 → K2.4**。K2.2（装载最小闭环）依赖 K2.1 的 manifest 与**装载入口**——装载入口的最终形状由 K2.4 定，但 K2.2 不必等它：把模块 URL 用假 bridge 注入，就能测出装载判定与卸载语义，真实通道由 K2.4 在 K2.3 之后验。K2.4 仍是"先证明再写代码"的那一批（`asset:` 与动态 `import()` 的组合没有任何权威依据，只有实测），它的最小版只回答一个问题：放行插件目录后 `import()` 能不能装载 ESM（[../implementation.md](../implementation.md) 3.2(e)；实测结论由它回写成该文档事实表的条目 13–15，现在还没有）。
 
 ## 边界
 
 **负责**（本模块是自研最集中、复用最少的一块，每一部分都与 spec 耦合）：
 
 - **契约层**（K2.1）：manifest 的类型与校验、`engines` 判定、激活事件匹配——`zod@4` 是唯一来源，`spec/*/manifest.schema.json` 由它生成
-- **装载层**（K2.2 / K2.5）：插件模块的 specifier、动态 `import()`、装载失败的分类与定位、装载判定（显式等 fiber 到 `ACTIVE` 或 `FAILED`）、卸载路径
+- **装载层**（K2.2 / K2.4）：插件模块的 specifier、动态 `import()`、装载失败的分类与定位、装载判定（显式等 fiber 到 `ACTIVE` 或 `FAILED`）、卸载路径
 - **诊断与失败保护**（K2.3）：未激活原因的聚合诊断、等待激活的超时
-- **视图插槽运行时**（K2.4）：把宿主定义的插槽位置、渲染器、无 UI 宿主的降级接上
 
 **不负责**：
 
@@ -31,9 +29,9 @@
 |---|---|
 | 内核语义（服务仓库、inject 解析与就绪、effect 逆序撤销、五种派发、fiber 状态机） | `cordis@4.0.0-rc.10` + `@cambia/core`（[../kernel.md](../kernel.md) 2 章 / 5.3）。本模块只**观测** `Fiber.state` / `Fiber.inject`，不重写语义、不排序、不占位 |
 | 一切 Tauri 符号：协议注册、路径、命令集合、权限文件、退出回收 | 适配层 `crates/tauri-plugin-cambia`（[../kernel.md](../kernel.md) 1.9、[../implementation.md](../implementation.md) 3.3(g)）。检验标准是**删掉适配层，本模块测试仍然全绿** |
-| `.tap` 的打包、解包、哈希、下载、事务安装 | `crates/plugin-host`（K2.6，[../implementation.md](../implementation.md) 3.3(a)(d)），本模块只消费它的产物 |
-| 后端进程的监督器与控制面 | `crates/plugin-host` + K2.7 才加进来的编排与代理 Service——本文不写 |
-| 宿主领域词汇：服务键清单、事件名与负载、插槽位置与渲染器 | 宿主应用（[../kernel.md](../kernel.md) 1.9）。本模块只提供匹配器接口与注册载荷类型，里面不出现领域概念 |
+| `.tap` 的打包、解包、哈希、下载、事务安装 | `crates/plugin-host`（K2.5，[../implementation.md](../implementation.md) 3.3(a)(d)），本模块只消费它的产物 |
+| 后端进程的监督器与控制面 | `crates/plugin-host` + K2.6 才加进来的编排与代理 Service——本文不写 |
+| 宿主领域词汇：服务键清单、事件名与负载、展示/贡献协议 | 宿主应用（[../kernel.md](../kernel.md) 1.9）。本模块不解释宿主的领域数据或展示方式 |
 | 构建期断言（产物含 cordis 副本、含相对说明符即失败） | `@cambia/kit`（K3.2）。本模块只负责把这类违规**归到正确的失败形态**上 |
 | spec 的定稿（manifest schema、控制面协议、错误码表） | `spec/`：K2.1 出初稿、K3.1 定稿。本模块是消费方 |
 
@@ -46,22 +44,22 @@ manifest 的类型与校验在本模块，**唯一来源是 zod**（[../implemen
 | 导出 | 形状 | 说明 |
 |---|---|---|
 | `MANIFEST_FILENAME` | `'cambia.json'` | [../kernel.md](../kernel.md) 7 章的 manifest 文件名 |
-| `DEFAULT_ENTRY` | `'frontend/main.js'` | `parts.frontend.main` 的默认值（[../kernel.md](../kernel.md) 3 章）；装载层（K2.5）从这里再导出 |
+| `DEFAULT_ENTRY` | `'frontend/main.js'` | `parts.frontend.main` 的默认值（[../kernel.md](../kernel.md) 3 章）；装载层（K2.4）从这里再导出 |
 | `manifestSchema` | zod schema | 结构契约 = kernel 3 的字段全集。**所有约束都必须是 JSON Schema 可表达的**（正则 / `propertyNames` / `additionalProperties`），否则 Rust 侧看不见它 |
 | `validateManifest(input)` | `ManifestValidation` | 结构 + 语义两段判定，**一次收齐全部问题**（不是抛第一个）。结构没过时**不跑语义段**：字段值本身不可信 |
 | `parseManifest(input)` | `Manifest` | 同一套判定，失败时抛 `PluginError`（`issues` 挂在错误上）——给"装不上就报错"的调用方 |
 | `manifestJsonSchema()` | `object` | `z.toJSONSchema(manifestSchema, { io: 'input' })` 的结果 |
 | `serializeManifestJsonSchema()` | `string` | **产物的确切字节**：生成脚本与漂移检查共用这一份定义，否则"重新生成"修不好文件 |
-| `PluginError` / `PluginErrorCode` / `ERROR_CODES` | 见"失败路径" | 码值的唯一来源是 `spec/v1/error-codes.json`（[spec.md](./spec.md)），本模块只是一张常量映射；码表当前覆盖校验与装载，**不含安装语义**（`INSTALL_*` 一类随 K2.6 的命令集合补） |
+| `PluginError` / `PluginErrorCode` / `ERROR_CODES` | 见"失败路径" | 码值的唯一来源是 `spec/v1/error-codes.json`（[spec.md](./spec.md)），本模块只是一张常量映射；码表当前覆盖校验与装载，**不含安装语义**（`INSTALL_*` 一类随 K2.5 的命令集合补） |
 | `checkEngines(manifest, runtime)` | `EnginesVerdict` | `engines` 相交判定（`semver@7`） |
 | `createActivationMatcher(events)` | `(event: string) => boolean` | 激活事件匹配器；一次编译，纯函数 |
 | `parseActivationEvent(entry)` | `'always' \| { prefix, pattern } \| null` | 单条目形态解析，供诊断与测试复用 |
 
 三条契约决定：
 
-1. **顶层键宽松、`parts` 严格**。顶层用 `looseObject`：多出来的键**原样保留**——这是版本化的前提，新 manifest 装进旧宿主不该因为多了一个字段就失败。`parts` 用 `strictObject`：未知部分意味着"宿主缺这个能力"，必须报 `MANIFEST_UNKNOWN_PART`（kernel 3 只定义了 frontend / backend / view 三个部分）。
+1. **顶层键宽松、`parts` 严格**。顶层用 `looseObject`：多出来的键**原样保留**——这是版本化的前提，新 manifest 装进旧宿主不该因为多了一个字段就失败。`parts` 用 `strictObject`：未知部分意味着"宿主缺这个能力"，必须报 `MANIFEST_UNKNOWN_PART`（kernel 3 只定义了 frontend / backend 两个可执行部分；宿主自定义数据放在 `contributes`）。
 2. **路径规则写进 schema 而不是"语义阶段"**：只允许相对路径、`/` 分隔、无 `.` / `..` 段、无空段，字符集限于 ASCII 的 `[A-Za-z0-9._-]`（这些名字出自 ZIP，还要跨平台比对）。理由是 `..` 越界必须在**安装期**就被拒（[../kernel.md](../kernel.md) 3.3），而 Rust 侧只做 schema 级校验（[../implementation.md](../implementation.md) 3.2(a)）——放进语义阶段就等于 Rust 侧看不到。
-3. **`contributes` 是不透明的**：内容是宿主词汇（[../kernel.md](../kernel.md) 1.9），本模块只保证它是个对象，不解释里面有什么。宿主自己的 contributes 校验归 K2.4。
+3. **`contributes` 是不透明的**：内容是宿主词汇（[../kernel.md](../kernel.md) 1.9），本模块只保证它是个对象，不解释里面有什么。字段结构、校验和展示用途均由宿主自行决定。
 
 #### `engines` 判定
 
@@ -98,9 +96,9 @@ export interface PluginHostBridge {
 ```
 
 - URL 的生成在适配层，**平台分叉收在一个 URL 助手**里：Windows/Android 是 `http://asset.localhost/<…>`，macOS/iOS/Linux 是 `asset://localhost/<…>`（[../implementation.md](../implementation.md) 事实 7）。本模块**不拼 URL、不出现 `asset` / `tauri` 字样**（CONTRIBUTING 硬规定 3）。
-- 现在只有一个方法是有意的：这个接缝存在的理由是隔离宿主，不是造通用适配框架。K2.6 的安装编排与 K2.7 的进程托管各自按需加方法，不为假想的第二宿主预留。
+- 现在只有一个方法是有意的：这个接缝存在的理由是隔离宿主，不是造通用适配框架。K2.5 的安装编排与 K2.6 的进程托管各自按需加方法，不为假想的第二宿主预留。
 
-### 装载层（K2.5 交付）
+### 装载层（K2.4 交付）
 
 | 导出 | 形状 | 说明 |
 |---|---|---|
@@ -142,7 +140,7 @@ cambia.json 文本 → JSON.parse（不是对象 = MANIFEST_PARSE_FAILED）
     → createActivationMatcher(manifest.activationEvents)——宿主在事件发生时调用
 ```
 
-**K2.5 的装载数据流**：
+**K2.4 的装载数据流**：
 
 ```
 PluginRef{id,version,hash} → pluginModulePath() → 相对路径
@@ -198,30 +196,29 @@ PluginRef{id,version,hash} → pluginModulePath() → 相对路径
 | **manifest 校验单测**（vitest） | 合法 manifest 一次通过；四类非法 manifest（路径越界 / 未知 parts / 缺 engines / 平台键不合法）各命中**对应**错误码；一次调用收齐多个问题 | K2.1 |
 | **examples 全量校验** | `examples/**/cambia.json` 全部通过 `validateManifest` | K2.1（[../plan.md](../plan.md) 4 节） |
 | **生成物漂移检查** | `spec/v1/manifest.schema.json` 与 `manifestJsonSchema()` 逐字节一致；`ERROR_CODES` 的键集合与 `spec/v1/error-codes.json` 双向一致 | K2.1（"schema 生成物与代码一致"） |
-| **真 WebView 的可行性验证脚本** | 放行插件目录后动态 `import()` 装载 ESM、同一插件的两个版本各自拿到实例、`Content-Type`、三种 CSP 变体下的行为、失败分类 | **K2.5**：Windows/WebView2 上装载成功 + 能重复装载同一插件的两个不同版本（[../plan.md](../plan.md) 4 节） |
-| 装载层单测（假 bridge + 假模块，不需要 Tauri） | specifier 形状、失败分类的判定顺序、`requireApply` 两种行为 | K2.5（本模块自身） |
-| 不依赖 Tauri 的宿主 fixture（vitest + happy-dom） | 装载 → 注册 → 卸载 → **监听器数量归零、占用的服务键消失**；装载判定不依赖 `await ctx.plugin()` 的回归用例 | K2.2（[../kernel.md](../kernel.md) 6.2） |
+| **真 WebView 的可行性验证脚本** | 放行插件目录后动态 `import()` 装载 ESM、同一插件的两个版本各自拿到实例、`Content-Type`、三种 CSP 变体下的行为、失败分类 | **K2.4**：Windows/WebView2 上装载成功 + 能重复装载同一插件的两个不同版本（[../plan.md](../plan.md) 4 节） |
+| 装载层单测（假 bridge + 假模块，不需要 Tauri） | specifier 形状、失败分类的判定顺序、`requireApply` 两种行为 | K2.4（本模块自身） |
+| 不依赖 Tauri 的宿主 fixture（vitest） | 装载 → 注册 → 卸载 → **监听器数量归零、占用的服务键消失**；装载判定不依赖 `await ctx.plugin()` 的回归用例 | K2.2（[../kernel.md](../kernel.md) 6.2） |
 | 诊断与超时用例 | 互相 `inject` 的两插件得到指名道姓的诊断（在等哪个键、谁在等谁）；`apply` 里死等的插件被超时判失败并记录 | K2.3 |
-| 无 UI 宿主的 no-op 用例 + 有 UI fixture | 三种 UI 贡献方式（声明式表单 / 渲染器 / iframe）各跑通一次 | K2.4 |
 | 仓库门禁 | `pnpm lint`（`examples/**` 只用 `@cambia/core`）；**删掉适配层后本模块测试仍全绿** | 硬规定 3 / 4 |
 
-K2.5 的完成定义不含"写多少代码"，只含"证明主路径成立并留下可重跑的最小复现"：验证设施（试验工程、fixture、脚本）与结论一起进仓库，结论按 plan.md 第 0 节回写 [../implementation.md](../implementation.md) 的事实表。
+K2.4 的完成定义不含"写多少代码"，只含"证明主路径成立并留下可重跑的最小复现"：验证设施（试验工程、fixture、脚本）与结论一起进仓库，结论按 plan.md 第 0 节回写 [../implementation.md](../implementation.md) 的事实表。
 
 ## 未决项
 
 | 未决项 | 现在怎么办 |
 |---|---|
-| 命令集合（`install` / `uninstall` / `list` / `enable`）与 `INSTALL_*` 一类错误码 | 都不在本批：命令集合归适配层（K2.6），码表的安装语义随之补——**命令要报的错必须先有码**（[../plan.md](../plan.md) 第 1 节） |
+| 命令集合（`install` / `uninstall` / `list` / `enable`）与 `INSTALL_*` 一类错误码 | 都不在本批：命令集合归适配层（K2.5），码表的安装语义随之补——**命令要报的错必须先有码**（[../plan.md](../plan.md) 第 1 节） |
 | `spec/v1/manifest.schema.json` 的 `$id` 归属（域名 / registry 未定） | 生成物现在只带 `$schema`，不带 `$id`；等"公开发布还是私有 registry"定案（[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）再补 |
 | 平台键要不要覆盖 `android` / `ios` | 现在只认 `win` / `mac` / `linux` + `*`（适配层把移动端标为不支持）；要支持移动端时再扩词汇，属 spec 变更 |
-| `contributes` 的宿主级 schema | 本模块只保证它是对象；宿主自己的校验随 K2.4 的插槽运行时定 |
+| `contributes` 的宿主级 schema | 本模块只保证它是对象；具体字段、验证及是否用于展示均由宿主定义 |
 | 内核 CI 轨道还没建（[../plan.md](../plan.md) 2 节的欠账） | K2.1 要的"生成物由 CI 验证"暂时由 vitest 用例承担——`pnpm check` 就是将来那条 CI 轨道要跑的命令 |
 | `@cambia/host` 现在是 `private: true`（模块还没做完，不进 changesets 的发布组） | 等它成为可发布包的那一批，把它加入 `.changeset/config.json` 的 fixed 组并与 `@cambia/core` 版本对齐（同 `@cambia/eslint-config` 的处理方式） |
 | macOS/WKWebView 与 Linux/WebKitGTK 上的装载未验 | 同一脚本换宿主平台再跑，结论补进事实 13–15；失败才评估回落到自定义 scheme（本批重做） |
 | 错误码表的码值与最终措辞 | K2.1 由 `spec/` 定稿，本模块只是消费方；本文的码是草案，不是承诺 |
 | `asset:` 的 scope 是**全局**的：放行插件根目录后，应用内任何 webview 都能读该目录 | 不承诺隔离（[../implementation.md](../implementation.md) 风险 10）；将来要收窄才切自定义 scheme + 请求级路径校验 |
 | 多文件插件包（bundle 无法单文件时）的装载通道 | 归适配层的选择，不属于插件作者可见的契约；本模块不动 |
-| K2.3 的宿主 KV 接口形状、K2.4 的插槽与贡献载荷 | 各自批次实现之前补写本文对应小节 |
-| K2.5 的验证设施放哪（试验工程、fixture、脚本是否长期留在仓库） | 倾向留在 `examples/` 与 `scripts/`；随本批评审定 |
-| K2.5 阶段 `PluginRef.hash` 从哪来 | 试验期由验证脚本算；正式来源是 K2.6 的 crate（sha256） |
-| 反复重装的堆增长 | 不做回收承诺（ES module 图不可卸载）；量化基线归 K2.8 |
+| K2.3 的宿主 KV 接口形状 | 各自批次实现之前补写本文对应小节 |
+| K2.4 的验证设施放哪（试验工程、fixture、脚本是否长期留在仓库） | 倾向留在 `examples/` 与 `scripts/`；随本批评审定 |
+| K2.4 阶段 `PluginRef.hash` 从哪来 | 试验期由验证脚本算；正式来源是 K2.5 的 crate（sha256） |
+| 反复重装的堆增长 | 不做回收承诺（ES module 图不可卸载）；量化基线归 K2.7 |

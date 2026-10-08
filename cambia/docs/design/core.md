@@ -20,7 +20,7 @@
 |---|---|
 | 内核语义本身 | 全部来自 `cordis@4.0.0-rc.10`，本包不重写一行（kernel.md 5.3 第一条） |
 | 上游行为的事实与回归保护 | `packages/core/test/semantics/`——仓库里唯一允许直连 cordis 的位置 |
-| manifest / 依赖图 / 装载 / 视图插槽 | `@cambia/host`（K2） |
+| manifest / 依赖诊断 / 装载 / 生命周期 | `@cambia/host`（K2） |
 | 插件脚手架、打包 `.tap` | `@cambia/kit`（K3） |
 | 规则"真的会报错"这件事 | `@cambia/eslint-config`（见 [eslint-config.md](./eslint-config.md)） |
 

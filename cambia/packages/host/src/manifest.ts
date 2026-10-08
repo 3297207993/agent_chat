@@ -73,12 +73,8 @@ const partsSchema = z
       })
       .optional()
       .describe('Out-of-process backend program'),
-    view: z
-      .object({ entry: relativePath('Standalone HTML document rendered in an iframe') })
-      .optional()
-      .describe('View document shown in a no-same-origin iframe'),
   })
-  .describe('Frontend / backend / view; anything else is a part this host cannot run')
+  .describe('Frontend / backend; anything else is a part this host cannot run')
 
 const enginesSchema = z
   .object({
@@ -213,7 +209,7 @@ function toIssues(input: unknown, issue: z.core.$ZodIssue): PluginIssue[] {
       problem(
         ERROR_CODES.MANIFEST_UNKNOWN_PART,
         `parts.${key}`,
-        `unknown part "${key}": the spec defines frontend / backend / view`,
+        `unknown part "${key}": the spec defines frontend / backend`,
         detail,
       ),
     )
@@ -274,10 +270,10 @@ function toIssues(input: unknown, issue: z.core.$ZodIssue): PluginIssue[] {
   return [problem(ERROR_CODES.MANIFEST_FIELD_INVALID, at, at === '' ? 'invalid manifest' : `invalid value for "${at}"`, detail)]
 }
 
-/** `parts.frontend.main`, `parts.view.entry`, `parts.backend.bin.<platform>` are path fields. */
+/** `parts.frontend.main` and `parts.backend.bin.<platform>` are path fields. */
 function isPathField(path: readonly string[]): boolean {
   if (path.length === 4) return path[0] === 'parts' && path[1] === 'backend' && path[2] === 'bin'
-  return path.length === 3 && path[0] === 'parts' && (path[2] === 'main' || path[2] === 'entry')
+  return path.length === 3 && path[0] === 'parts' && path[2] === 'main'
 }
 
 function isRegexIssue(issue: z.core.$ZodIssue): boolean {

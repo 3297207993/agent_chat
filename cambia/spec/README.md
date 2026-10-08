@@ -10,12 +10,12 @@
 | [v1/error-codes.json](./v1/error-codes.json) | **手写** | 两侧共同的错误码词汇表：JS 侧映射成 `ERROR_CODES`，Rust 侧随 `crates/plugin-host` 补一份对称检查。加码 / 改码先改这里，再改两侧代码 |
 | `README.md` | 手写 | 本文件 |
 
-`error-codes.json` 里的 `stage` 说明这条码归哪一批实现：`manifest` / `engines` 已在 K2.1 落地，`load` 的码值在 K2.1 定稿、**实现**归 K2.5。码值是稳定标识（措辞可变、码值不可变）。
+`error-codes.json` 里的 `stage` 说明这条码归哪一批实现：`manifest` / `engines` 已在 K2.1 落地，`load` 的码值在 K2.1 定稿、**实现**归 K2.4。码值是稳定标识（措辞可变、码值不可变）。
 
 ## 还没写的
 
-- **命令集合**（适配层的 `install` / `uninstall` / `list` / `enable`）：**K2.6 定稿**。它受这里的码表约束——命令要报的错必须先有码；K2.1 只出了码表，而且不含安装语义（`INSTALL_*` 一类随 K2.6 一起补）
-- **控制面协议**（stdio JSON-RPC 的方法集、帧格式）：K2.7
+- **命令集合**（适配层的 `install` / `uninstall` / `list` / `enable`）：**K2.5 定稿**。它受这里的码表约束——命令要报的错必须先有码；K2.1 只出了码表，而且不含安装语义（`INSTALL_*` 一类随 K2.5 一起补）
+- **控制面协议**（stdio JSON-RPC 的方法集、帧格式）：K2.6
 - **版本与废弃窗口规则**（`engines.cambia` 的语义、v1 冻结条件）：K3.1 定稿
 
 ## 门禁

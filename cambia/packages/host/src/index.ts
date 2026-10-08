@@ -2,13 +2,13 @@
  * `@cambia/host` — the host-side runtime that sits next to the kernel.
  *
  * The split is kernel.md 1.9: the kernel ships mechanisms (service registry, inject, effects,
- * dispatch, loading), the host defines domain vocabulary (service keys, event names, slot
- * positions). This package is the host side of that line, and it is **deliberately free of both
+ * dispatch, loading), the host defines domain vocabulary (service keys and event names). This
+ * package is the host side of that line, and it is **deliberately free of both
  * cordis and Tauri** — it observes the kernel through nothing but plain values, and every URL
  * crosses the `PluginHostBridge` seam that the adapter layer implements.
  *
  * What exists so far (K2.1): the manifest contract, `engines` verdicts and activation matching.
- * The load layer, the "why did it not activate" diagnostics and the slot runtime follow in K2.2–K2.5
+ * The load layer and the "why did it not activate" diagnostics follow in K2.2–K2.4
  * (docs/design/host.md).
  */
 
