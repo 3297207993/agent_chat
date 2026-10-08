@@ -42,6 +42,19 @@ declare module "@cambia/core" {
      * ——宿主靠它判定"插件到底激活了没有"（`@cambia/host` 的装载层读的是同一事件）。
      */
     "internal/status"(changed: FiberStatusChange): void;
+
+    /**
+     * 消息落库（§2.1 的会话事实）。负载就是持久化形状 `StoredMessage`：P1b 把它改成日志之后，
+     * 它就是日志条目的形状。
+     */
+    "user/message"(message: StoredMessage): void;
+    "assistant/message"(message: StoredMessage): void;
+
+    /**
+     * 会话数据的变更通知（对话 / 分类 / 消息），用于**失效重取**——不是持久事实，P1b 的日志不追加
+     * 它。观察者靠它知道"该重取了"，不靠它重建状态（重建状态是重建投影，P1b 之后走日志）。
+     */
+    "session/changed"(change: SessionChange): void;
   }
 }
 
@@ -95,6 +108,18 @@ export interface TopbarAction extends ViewItemBase {
   /** 点击后跳转的路由。 */
   readonly path: string;
   readonly icon?: ComponentType<{ size?: number }>;
+}
+
+/**
+ * `session/changed` 的负载。
+ *
+ * `id` 是**重取的键**：对话与分类是自身 id；消息是所属对话的 id（UI 的粒度是"重取这个对话的消息"，
+ * 不是按单条消息刷）。
+ */
+export interface SessionChange {
+  readonly kind: "conversation" | "category" | "message";
+  readonly action: "created" | "updated" | "deleted";
+  readonly id: string;
 }
 
 /**

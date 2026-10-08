@@ -1,16 +1,24 @@
-import type { SessionsService, StorageService } from "../../vocabulary";
+import type { Context } from "@cambia/core";
+import type { SessionChange, SessionsService, StorageService } from "../../vocabulary";
 
 /**
  * `ctx.sessions` 的实现：对话 / 消息 / 分类三张表的唯一入口（pluginization.md §2）。
  *
- * 两件事归这里，调用方看不到：
+ * 三件事归这里，调用方看不到：
  * 1. **行编码**——`ruleIds` 在表里是 JSON 字符串、`pinned` 是 0/1；领域对象里是 `string[]` 与
  *    boolean
  * 2. **排序与 id**——对话按 `updatedAt` 倒序、消息 id 由自增主键分配
+ * 3. **广播**——每次写入发 `session/changed`（失效通知），消息落库再发 §2.1 的会话事实
  *
  * 引擎来自 `ctx.storage`（表的版本声明仍在宿主，见 §2.2 待定项），所以这里不 import 宿主模块。
  */
-export function createSessionsService(db: StorageService["db"]): SessionsService {
+export function createSessionsService(ctx: Context): SessionsService {
+  const db: StorageService["db"] = ctx.storage.db;
+
+  const changed = (kind: SessionChange["kind"], action: SessionChange["action"], id: string) => {
+    ctx.emit("session/changed", { kind, action, id });
+  };
+
   return {
     async listConversations() {
       const rows = await db.conversations.orderBy("updatedAt").reverse().toArray();
@@ -52,16 +60,19 @@ export function createSessionsService(db: StorageService["db"]): SessionsService
         ruleIds: JSON.stringify(conversation.ruleIds),
         pinned: conversation.pinned ? 1 : 0,
       });
+      changed("conversation", "created", conversation.id);
 
       return conversation;
     },
 
     async updateConversation(id, updates) {
       await db.conversations.update(id, { ...encodeConversation(updates), updatedAt: Date.now() });
+      changed("conversation", "updated", id);
     },
 
     async deleteConversation(id) {
       await db.conversations.delete(id);
+      changed("conversation", "deleted", id);
     },
 
     async listMessages(conversationId) {
@@ -71,20 +82,35 @@ export function createSessionsService(db: StorageService["db"]): SessionsService
 
     async appendMessage(draft) {
       // 自增主键由 Dexie 分配，`add` 直接把它返回（原来靠"反查最新一条"拿 id，多一次查询且有竞态）
-      const id = await db.messages.add({ ...draft });
-      return Number(id);
+      const id = Number(await db.messages.add({ ...draft }));
+      changed("message", "created", draft.conversationId);
+
+      // §2.1 的会话事实：只有 user / assistant 有对应的事件名，其他 role 只发失效通知
+      if (draft.role === "user" || draft.role === "assistant") {
+        ctx.emit(draft.role === "user" ? "user/message" : "assistant/message", { ...draft, id });
+      }
+
+      return id;
     },
 
     async updateMessage(id, updates) {
+      // 为了事件里的重取键先读一次归属（Dexie 的 update 对不存在的 id 静默无操作，这里保持一致）
+      const row = await db.messages.get(id);
+      if (row === undefined) return;
+
       await db.messages.update(id, updates);
+      changed("message", "updated", row.conversationId);
     },
 
     async deleteMessage(id) {
+      const row = await db.messages.get(id);
       await db.messages.delete(id);
+      if (row !== undefined) changed("message", "deleted", row.conversationId);
     },
 
     async deleteMessages(conversationId) {
       await db.messages.where("conversationId").equals(conversationId).delete();
+      changed("message", "deleted", conversationId);
     },
 
     async latestMessage(conversationId) {
@@ -119,15 +145,19 @@ export function createSessionsService(db: StorageService["db"]): SessionsService
       };
 
       await db.categories.add({ ...category, ruleIds: JSON.stringify(category.ruleIds) });
+      changed("category", "created", category.id);
+
       return category;
     },
 
     async updateCategory(id, updates) {
       await db.categories.update(id, encodeCategory(updates));
+      changed("category", "updated", id);
     },
 
     async deleteCategory(id) {
       await db.categories.delete(id);
+      changed("category", "deleted", id);
     },
   };
 }
