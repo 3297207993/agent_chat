@@ -55,6 +55,18 @@ export type {
 export { checkEngines, isValidRange, isValidVersion, parseHostEngine } from './engines'
 export type { EngineMismatch, EnginesVerdict, HostEngine, RuntimeVersions } from './engines'
 
+export { loadPlugin } from './orchestrate'
+export type {
+  BackendDeps,
+  FrontendDeps,
+  LoadedPlugin,
+  LoadPluginDeps,
+  LoadPluginFailure,
+  LoadPluginPolicy,
+  PluginParts,
+  PluginRecord,
+} from './orchestrate'
+
 export { createActivationMatcher, matchesActivationEvent, parseActivationEvent } from './activation'
 export type { ActivationEvent, ActivationMatcher } from './activation'
 

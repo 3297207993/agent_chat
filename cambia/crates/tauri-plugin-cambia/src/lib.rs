@@ -15,24 +15,31 @@
 
 use std::path::PathBuf;
 
+use cambia_plugin_host::process::{Supervisor, SupervisorConfig};
 use tauri::{
   plugin::{Builder as PluginBuilder, TauriPlugin},
-  Manager, Runtime,
+  Manager, RunEvent, Runtime,
 };
 
 mod commands;
 mod error;
 mod models;
 mod root;
+mod runtime;
 
 pub use error::{Error, Result};
-pub use models::{ModuleUrlRequest, ModuleUrlResponse};
+pub use models::{
+  BackendCall, BinTarget, CallRequest, CallResponse, ExitReason, KillRequest, ModuleUrlRequest,
+  ModuleUrlResponse, RespondError, RespondRequest, RestartPolicy, SpawnRequest, SpawnResponse,
+};
 pub use root::PluginRoot;
+pub use runtime::{CambiaRuntime, BACKEND_CALL_EVENT};
 
 /// The plugin's configuration.
 #[derive(Debug, Default)]
 pub struct Builder {
   root: Option<PathBuf>,
+  log_dir: Option<PathBuf>,
 }
 
 impl Builder {
@@ -52,12 +59,36 @@ impl Builder {
     self
   }
 
+  /// Where the backends' `stderr` goes, as `<log_dir>/<plugin>/<generation>.log`.
+  ///
+  /// Optional, and never a substitute for draining: the stream is read either way, because a backend
+  /// that writes more than the pipe holds would otherwise block forever on a full buffer.
+  pub fn log_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+    self.log_dir = Some(dir.into());
+    self
+  }
+
   /// Build the Tauri plugin.
   pub fn build<R: Runtime>(self) -> TauriPlugin<R> {
+    let root_config = self.root;
+    let supervisor = Supervisor::new(SupervisorConfig {
+      log_dir: self.log_dir,
+      ..SupervisorConfig::default()
+    });
+    // The exit hook and the commands must share one supervisor: reclaiming can only find what the
+    // commands actually started.
+    let supervisor_for_exit = supervisor.clone();
+
     PluginBuilder::new("cambia")
-      .invoke_handler(tauri::generate_handler![commands::module_url])
+      .invoke_handler(tauri::generate_handler![
+        commands::module_url,
+        commands::spawn,
+        commands::kill,
+        commands::call,
+        commands::respond
+      ])
       .setup(move |app, _api| {
-        let root = self.root.ok_or(Error::MissingPluginRoot)?;
+        let root = root_config.ok_or(Error::MissingPluginRoot)?;
 
         // `asset:` is what lets a file on disk become something `import()` can fetch. The scope is
         // extended here, at runtime, because the root is only known once the host has started
@@ -67,7 +98,18 @@ impl Builder {
         app.asset_protocol_scope().allow_directory(&root, true)?;
 
         app.manage(PluginRoot::new(root));
+        app.manage(CambiaRuntime::new(supervisor));
         Ok(())
+      })
+      .on_event(move |_app, event| {
+        if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+          // Fire and forget on purpose: the application is leaving and must not wait for a plugin that
+          // will not cooperate. This is the *other* half of "no orphans" — the job object's
+          // kill-on-close is the half that survives this hook never running at all
+          // (implementation.md 3.3(e)).
+          let supervisor = supervisor_for_exit.clone();
+          tauri::async_runtime::spawn(async move { supervisor.reclaim_all().await });
+        }
       })
       .build()
   }

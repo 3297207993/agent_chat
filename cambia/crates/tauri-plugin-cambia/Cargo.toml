@@ -21,7 +21,14 @@ links = "tauri-plugin-cambia"
 # hold and a custom scheme takes over, this feature goes with it.
 tauri = { version = "2.11.3", features = ["protocol-asset"] }
 serde = "1.0"
+serde_json = "1.0"
 thiserror = "2"
+# sync: the answer slot for a backend's own call. time: the timeout on that answer.
+tokio = { version = "1", features = ["sync", "time"] }
+# The kernel implementation layer. The dependency is one-way on purpose: `plugin-host` must never
+# grow a Tauri dependency, which is what keeps "delete the adapter and the kernel still holds"
+# true (kernel.md 5.1, CONTRIBUTING hard rule 3).
+cambia-plugin-host = { path = "../plugin-host" }
 
 [build-dependencies]
 tauri-plugin = { version = "2.6.3", features = ["build"] }
