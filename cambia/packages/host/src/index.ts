@@ -7,13 +7,26 @@
  * cordis and Tauri** — it observes the kernel through nothing but plain values, and every URL
  * crosses the `PluginHostBridge` seam that the adapter layer implements.
  *
- * What exists so far (K2.1): the manifest contract, `engines` verdicts and activation matching.
- * The load layer and the "why did it not activate" diagnostics follow in K2.2–K2.4
- * (docs/design/host.md).
+ * What exists so far: the manifest contract, `engines` verdicts and activation matching (K2.1), plus
+ * the load layer — `import()` → activation verdict → unload (K2.2). The "why did it not activate"
+ * diagnostics and the activation timeout follow in K2.3 (docs/design/host.md).
  */
+
+export type { PluginHostBridge } from './bridge'
 
 export { ERROR_CODES, PluginError, isPluginError } from './errors'
 export type { PluginErrorCode, PluginErrorOptions, PluginIssue } from './errors'
+
+export { FIBER_STATE, createLoader, loadPluginModule, unloadPlugin } from './loader'
+export type {
+  KernelContext,
+  KernelFiber,
+  LoadOptions,
+  LoadPluginModuleOptions,
+  LoadedPlugin,
+  PluginLoader,
+  PluginModule,
+} from './loader'
 
 export { checkEngines, isValidRange, isValidVersion, parseHostEngine } from './engines'
 export type { EngineMismatch, EnginesVerdict, HostEngine, RuntimeVersions } from './engines'

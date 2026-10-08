@@ -316,7 +316,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | 层级 | 工具 | 覆盖 | 对应验收 |
 |---|---|---|---|
 | 上游行为锁定测试（最关键） | vitest | kernel 2.2 / 2.3 的五种派发、effect 逆序撤销的顺序、`inject` 就绪、**未满足的 `inject` 不发 `internal/status` 且 `await ctx.plugin()` 立即 resolve**、**`apply` 一直等待则 then 不 settle、`state=1`**（这两条锁住上游行为——3.2(d) 的原因诊断与 3.2(g) 的超时都建立在它们之上）、waterfall 终止实现、`next` 二次调用抛错、漏传终止实现的两种 TypeError 形态、重复 `dispose()` 的返回值、`internal/dispatch` 对 `parallel` 的上报怪癖 | cordis 升级的唯一安全网；K1——**已落地**：`packages/core/test/semantics/`（44 条用例，`pnpm --filter @cambia/core test`） |
-| 单元 | vitest / cargo test | manifest 校验、激活匹配、**未激活原因诊断的输出（环 / 没有提供者 / 待定）**、journal 恢复、平台键映射 | K2——**部分已落地（K2.1）**：manifest 校验、`engines` 判定、激活匹配在 `packages/host/test/`（5 个文件、107 条；`pnpm --filter @cambia/host test`），四类非法 manifest 各命中对应错误码 |
+| 单元 | vitest / cargo test | manifest 校验、激活匹配、**装载判定与卸载（事实 10 的回归）**、**未激活原因诊断的输出（环 / 没有提供者 / 待定）**、journal 恢复、平台键映射 | K2——**部分已落地（K2.1 / K2.2）**：manifest 校验、`engines` 判定、激活匹配、装载判定与卸载在 `packages/host/test/`（6 个文件、117 条；`pnpm --filter @cambia/host test`），四类非法 manifest 各命中对应错误码；装载那部分用真内核 + 假 bridge + 真磁盘模块（`test/fixtures/*.js`），不需要 Tauri |
 | 契约一致性 | 同一批 fixtures 跑两侧 | JS 与 Rust 对同一 manifest 判定一致 | K2 |
 | 公开 API 契约（K1.2） | tsc（类型断言）+ vitest | 白名单有谁 / 没有谁、`Events` 与 `Services` 的声明合并生效、五种派发的签名、`FiberState` 六个值与上游一致、示例插件装载 → 卸载后服务键与监听者一起消失、effect 逆序撤销 | K1——**已落地**：`examples/hello-plugin/`（类型断言在 `test/contract.ts`，运行期在 `test/host.test.ts`；`pnpm --filter cambia-example-hello-plugin test`） |
 | 规则集自证（K1.3） | vitest + ESLint Node API | 四种违规写法（import cordis / cordis 子路径 / `declare module 'cordis'` / `@cambia/core/*` 子路径）必须报在对应规则上且文案指回 kernel.md；合规写法与**真实的示例插件**必须零告警 | K1——**已落地**：`packages/eslint-config/test/rules.test.ts`（`pnpm --filter @cambia/eslint-config test`）；全仓门禁是 `pnpm lint` |

@@ -110,9 +110,9 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 
 | 项 | 内容 |
 |---|---|
-| **交付物** | loader（读 manifest → 未激活原因诊断 → `import()` → `ctx.plugin()`）、**装载判定要显式等 `ACTIVE` 或 `FAILED`**、卸载路径（`fiber.dispose()`）、不依赖 Tauri 的宿主 fixture（vitest） |
+| **交付物** | loader（读 manifest → 未激活原因诊断 → `import()` → `ctx.plugin()`）、**装载判定要显式等 `ACTIVE` 或 `FAILED`**、卸载路径（`fiber.dispose()`）、不依赖 Tauri 的宿主 fixture（vitest）。**落地（2026-10-08）**：`packages/host/src/bridge.ts`（`PluginHostBridge` 接缝）与 `src/loader.ts`（`loadPluginModule`、`createLoader(bridge).load(ctx, path, { config })`、`unloadPlugin`、`FIBER_STATE`）。判定按"`ctx.plugin()` 同步拿 fiber → 订阅 `internal/status` → 重读一次 `state`"实现，只在 `ACTIVE` / `FAILED` 上返回；`apply` 抛错走 thenable 的 rejection，记成 `LoadedPlugin.error`；卸载只发起 `dispose()`、不 await、不碰返回值。未激活原因诊断仍归 K2.3（本批的判定在未激活时**永不返回**，不会误报成功）；路径形状与失败分类仍归 K2.4（本批只接线 `LOAD_NO_APPLY`）。另：`examples/hello-plugin` 的 `test` 会重建 core，故本包的测试与类型检查解析到 `packages/core` 的**源码**而不是 `dist`（`vitest.config.ts` + `tsconfig.json`），不读兄弟包的构建产物 |
 | **依赖** | K1.2、K2.1（**不再依赖 K2.4**：装载入口把模块 URL 用假 bridge 注入即可测出判定与卸载语义；真实通道由 K2.4 在 K2.3 之后验） |
-| **验收** | 装载 → 注册 → 卸载 → **监听器数量归零、占用的服务键消失**（kernel.md 6.2 的验收项）；针对 implementation.md 事实 10 写一条回归测试，保证装载判定不依赖 `await ctx.plugin()` |
+| **验收** | 装载 → 注册 → 卸载 → **监听器数量归零、占用的服务键消失**（kernel.md 6.2 的验收项）；针对 implementation.md 事实 10 写一条回归测试，保证装载判定不依赖 `await ctx.plugin()`。**已覆盖（2026-10-08）**：真内核（`@cambia/core` 的 `Context`）+ 假 bridge + 真磁盘模块，10 条用例；事实 10 的回归用例同时覆盖事实 11 的迟到激活（服务到位后判定才落地） |
 
 ### K2.3 查清插件没激活的原因 + 失败保护
 

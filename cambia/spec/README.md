@@ -10,7 +10,7 @@
 | [v1/error-codes.json](./v1/error-codes.json) | **手写** | 两侧共同的错误码词汇表：JS 侧映射成 `ERROR_CODES`，Rust 侧随 `crates/plugin-host` 补一份对称检查。加码 / 改码先改这里，再改两侧代码 |
 | `README.md` | 手写 | 本文件 |
 
-`error-codes.json` 里的 `stage` 说明这条码归哪一批实现：`manifest` / `engines` 已在 K2.1 落地，`load` 的码值在 K2.1 定稿、**实现**归 K2.4。码值是稳定标识（措辞可变、码值不可变）。
+`error-codes.json` 里的 `stage` 说明这条码归哪一批实现：`manifest` / `engines` 已在 K2.1 落地，`LOAD_NO_APPLY` 随 K2.2 的装载层接线，其余四个 `load` 码（取不到 / MIME / 语法 / 求值期）随 K2.4 的失败分类接线。码值是稳定标识（措辞可变、码值不可变）。
 
 ## 还没写的
 

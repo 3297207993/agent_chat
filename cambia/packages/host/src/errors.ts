@@ -6,8 +6,9 @@
  * the two in sync in both directions). Codes are stable identifiers: wording may change, the code
  * string may not (docs/design/spec.md).
  *
- * `stage` in the table says which batch implements a code: `manifest` / `engines` are live now
- * (K2.1), the `load` codes are ratified here but wired up by the load layer (K2.4).
+ * `stage` in the table says which batch implements a code: `manifest` / `engines` are live since
+ * K2.1, `LOAD_NO_APPLY` is wired by the load layer (K2.2), and the four classifying `load` codes
+ * arrive with the import-failure classification (K2.4).
  */
 
 /** Every code the spec knows, as runtime values (the drift check compares these keys with the table). */

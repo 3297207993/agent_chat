@@ -29,6 +29,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@cambia/core": "workspace:*",
     "@types/picomatch": "^4.0.2",
     "@types/semver": "^7.7.1",
     "tsup": "^8.5.1",
