@@ -134,7 +134,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 |---|---|
 | **交付物** | **最小版（先做，只回答一个问题）**：一个最小的 Tauri 试验工程 + `@cambia/host` 的装载入口——**试验工程直接建在适配层的最小版本上**（注册 scheme / 配 asset scope + 取路径 + 退出回收，见 implementation.md 3.3(g)），接线不重复写两遍；要证明的只有一条：`asset:` 放行插件目录后 `import()` 能装载 ESM。**补全版（同属本批，不阻塞主体）**：同一插件的两个版本同时装载的对照实验、三种 CSP 变体（不启用 / 只放行 `script-src` / 再放行 `connect-src`）、平台差异记录（Windows 是 `http://asset.localhost/…`，macOS/Linux 是 `asset://localhost/…`）与所需 CSP 的 host-source 写法 |
 | **依赖** | K2.3（装载逻辑与诊断批次完成后再做）；自身还依赖 D0 的 Rust 侧欠账——根 workspace、`crates/plugin-host`、适配层最小接线、两条 CI 轨道（**2026-10-08 已补齐，见第 2 节**） |
-| **验收** | **最小版**：Windows/WebView2 上一次点火成功——放行插件目录后 `import()` 装载 ESM 并拿到 fixture 的 marker，结论与最小复现写回 implementation.md 3.8 条目 2；**失败就回落到自定义 scheme 并重做本批**。**补全版**：两个版本各自拿到独立模块实例、三种 CSP 变体下的行为都记录在案；这部分与 G2 一起核对 |
+| **验收** | **最小版**：Windows/WebView2 上一次点火成功——放行插件目录后 `import()` 装载 ESM 并拿到 fixture 的 marker，结论与最小复现写回 implementation.md 3.8 条目 2；**失败就回落到自定义 scheme 并重做本批**。**补全版**：两个版本各自拿到独立模块实例、三种 CSP 变体下的行为都记录在案；这部分与 G2 一起核对。**进度（2026-10-08）**：**最小版已点火成功**——真 Tauri 应用（`examples/tauri-app`，插件根 `app_data_dir/plugins`）+ 真 fixture，`moduleURL` → `import()` → 真内核 `state=2 (ACTIVE)` → `apply` 生效 → 卸载后服务键消失；**"两个版本各自拿到独立模块实例"也一并测到了**（同 specifier 命中同一实例、换路径得到新实例）。结论写回 implementation.md 的事实 13–15 与 3.8 条目 2（那条风险已关闭，**主路径成立、不需要回落自定义 scheme**）。载体留仓库可重跑：fixture 在 `examples/tauri-app/fixtures/`，结果落 `<app_data_dir>/ignition.log`。**仍欠**：三种 CSP 变体、macOS/Linux 两个引擎的矩阵（本地只有 Windows） |
 
 ### K2.5 安装流程（JS ↔ Rust 联动）
 
@@ -213,7 +213,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 
 | 待定项 | 依赖哪批 | 说明 |
 |---|---|---|
-| 用动态 `import()` 从 `asset:` 装载插件（条目 2） | **K2.4**（排在 K2.3 之后、G2 之前） | 唯一"查不到权威依据、只能实测"的一环，也是全项目最大的单点风险；最小版先点火，补全版的矩阵与 G2 一起核对 |
+| 从 `asset:` 动态 `import()` 装载插件（条目 2） | **K2.4**（排在 K2.3 之后、G2 之前） | 唯一"查不到权威依据、只能实测"的一环，也是全项目最大的单点风险。**最小版已点火成功（2026-10-08，Windows/WebView2）**：主路径成立、不需要回落自定义 scheme（见 implementation.md 事实 13）。补全版（三种 CSP 变体、macOS/Linux 矩阵）仍待做，与 G2 一起核对 |
 | `tsdown` 是否替换 `tsup`、zod schema 的转换边界（条目 9） | K1.2 / K2.1 | 不阻塞路径，批内验证即可 |
 | vendor 触发（条目 1） | K1.4 | 时间触发，不阻塞任何批次 |
 | 后端崩溃后重启策略的具体参数（退避、次数上限） | K2.6 | **已定（2026-10-08）**：值是宿主策略（TS 给 `RestartPolicy`），执行时机在 crate（它看得到 exec 失败与退出码，重试不必回 JS）；曲线形状用测试固定 |

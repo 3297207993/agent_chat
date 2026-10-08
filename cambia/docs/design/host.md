@@ -402,7 +402,7 @@ PluginRecord = {
 
 **两条环境前提**（本批实测后回写为事实 13–15，写进实现而非假设）：
 
-- **CSP 要同时放行插件来源的 `script-src` 与 `connect-src`**，且写 host-source 形式（Windows 上 `asset:` 的实际 scheme 是 `http`）：只放行 `script-src` 时装载照旧成功，但本模块的 fetch 型探测被 `connect-src` 挡掉、诊断静默降级。生效 CSP 由响应头下发，JS 侧读不到，要报告"这一轮跑的是哪份 CSP"只能读宿主配置。
+- **CSP 要同时放行插件来源的 `script-src` 与 `connect-src`**，且写 host-source 形式（Windows 上 `asset:` 的实际 scheme 是 `http`）：只放行 `script-src` 时装载照旧成功，但本模块的 fetch 型探测被 `connect-src` 挡掉、诊断静默降级。生效 CSP 由响应头下发，JS 侧读不到，要报告"这一轮跑的是哪份 CSP"只能读宿主配置。**实测（K2.4 最小版，2026-10-08）**：按这条写的那份 CSP（`script-src` 与 `connect-src` 都含 `http://asset.localhost` 与 `asset:`）下装载与激活都成功；"只放行 `script-src`"那两种变体仍未测。
 - **`asset:` 把整条绝对路径编码成一个路径段**，所以插件 bundle 必须是单文件（[../kernel.md](../kernel.md) 3.2）：包内相对说明符只会替换最后一段，解析到站点根，整张模块图取不到。本模块把这种失败归为"取不到"，构建期拦截归 `@cambia/kit`。
 
 ## 失败路径
@@ -447,7 +447,7 @@ PluginRecord = {
 | **manifest 校验单测**（vitest） | 合法 manifest 一次通过；四类非法 manifest（路径越界 / 未知 parts / 缺 engines / 平台键不合法）各命中**对应**错误码；一次调用收齐多个问题 | K2.1 |
 | **examples 全量校验** | `examples/**/cambia.json` 全部通过 `validateManifest` | K2.1（[../plan.md](../plan.md) 4 节） |
 | **生成物漂移检查** | `spec/v1/manifest.schema.json` 与 `manifestJsonSchema()` 逐字节一致；`ERROR_CODES` 的键集合与 `spec/v1/error-codes.json` 双向一致 | K2.1（"schema 生成物与代码一致"） |
-| **真 WebView 的可行性验证脚本** | 放行插件目录后动态 `import()` 装载 ESM、同一插件的两个版本各自拿到实例、`Content-Type`、三种 CSP 变体下的行为、失败分类 | **K2.4**：Windows/WebView2 上装载成功 + 能重复装载同一插件的两个不同版本（[../plan.md](../plan.md) 4 节） |
+| **真 WebView 的可行性验证脚本** | 放行插件目录后动态 `import()` 装载 ESM、同一插件的两个版本各自拿到实例、`Content-Type`、三种 CSP 变体下的行为、失败分类 | **K2.4**：Windows/WebView2 上装载成功 + 能重复装载同一插件的两个不同版本（[../plan.md](../plan.md) 4 节）。**已点火成功（2026-10-08）**：最小版全通过（`moduleURL` → `import()` → 真内核 `ACTIVE` → `apply` 生效 → 卸载后服务键消失），"两个版本各自拿到实例"也测到了（换 specifier = 新实例、同 specifier = 同实例）。载体：`crates/tauri-plugin-cambia/examples/tauri-app`（fixture 在 `fixtures/`，结果落 `<app_data_dir>/ignition.log`）。**剩下**：三种 CSP 变体与 macOS/Linux 矩阵（本机只有 Windows）。结论见 [../implementation.md](../implementation.md) 事实 13–15 |
 | 装载层单测（假 bridge + 真内核，不需要 Tauri） | `import()` + `apply` 校验（`LOAD_NO_APPLY`、`requireApply: false`）；判定只认状态；`FAILED` 带原错误且 `uid` 仍在；卸载不 await `dispose()`、二次卸载无害；同一 specifier 命中同一实例 | **K2.2 / K2.4**（分类与路径形状归 K2.4） |
 | 不依赖 Tauri 的宿主 fixture（vitest） | 装载 → 注册 → 卸载 → **监听器数量归零、占用的服务键消失**；装载判定不依赖 `await ctx.plugin()` 的回归用例（事实 10 + 事实 11 的迟到激活） | **K2.2**（[../kernel.md](../kernel.md) 6.2） |
 | 状态字面量的漂移检查 | `FIBER_STATE` 与 `@cambia/core` 的 `FiberState` 逐值一致（上游重编号时先红） | K2.2 的实现前提 |

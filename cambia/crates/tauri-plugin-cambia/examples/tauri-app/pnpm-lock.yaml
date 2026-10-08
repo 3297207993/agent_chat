@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@cambia/core':
+        specifier: link:../../../../packages/core
+        version: link:../../../../packages/core
+      '@cambia/host':
+        specifier: link:../../../../packages/host
+        version: link:../../../../packages/host
       '@cambia/plugin-cambia':
         specifier: link:../../
         version: link:../..

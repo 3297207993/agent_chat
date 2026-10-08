@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
+    "@cambia/core": "link:../../../../packages/core",
+    "@cambia/host": "link:../../../../packages/host",
     "@cambia/plugin-cambia": "link:../../"
   },
   "devDependencies": {
@@ -20,3 +22,4 @@
     "@tauri-apps/cli": "^2.0.0"
   }
 }
+

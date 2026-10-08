@@ -1,4 +1,5 @@
-// A real Tauri application with Cambia wired in, used as the reference for what a host has to do.
+// A real Tauri application with Cambia wired in, used as the reference for what a host must do **and**
+// as K2.4's ignition experiment.
 //
 // Three things a host must get right, and this file is where two of them live (the third is the CSP in
 // `tauri.conf.json`):
@@ -10,18 +11,45 @@
 //    is why the plugin is registered from `setup` through `AppHandle::plugin` instead of
 //    `Builder::plugin` — the same reason a real host cannot hard-code the path.
 //
-// What this does **not** do yet: load a plugin. Enumerating what is installed (K2.5) and turning a
-// plugin into the path `moduleURL` expects (K2.4) are still missing, so a plugin would have to be placed
-// by hand under `<app_data_dir>/plugins/<id>/<version>-<hash>/`. Running this app and watching
-// `import()` succeed is K2.4's ignition test.
+// `ignition_log` is the experiment's recorder, not a feature: the webview runs the load sequence on
+// startup, and every step is appended to `<app_data_dir>/ignition.log` so the result can be read after
+// the window closes (a `console.log` would only be visible in a devtools window).
 
-use tauri::Manager;
+use std::io::Write;
+
+use tauri::{command, AppHandle, Manager, Runtime};
+
+/// Append one line to the ignition log, next to the plugin root.
+#[command]
+fn ignition_log<R: Runtime>(app: AppHandle<R>, line: String) -> Result<(), String> {
+  let path = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| error.to_string())?
+    .join("ignition.log");
+
+  if let Some(dir) = path.parent() {
+    std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+  }
+
+  let mut file = std::fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(&path)
+    .map_err(|error| error.to_string())?;
+
+  writeln!(file, "{line}").map_err(|error| error.to_string())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .invoke_handler(tauri::generate_handler![ignition_log])
     .setup(|app| {
       let root = app.path().app_data_dir()?.join("plugins");
+
+      // The experiment needs to know where to put the fixture; a real host would not log this.
+      println!("cambia: plugin root = {}", root.display());
 
       // `log_dir` is where the backends' stderr goes, one file per instance
       // (`<plugin>/<generation>.log`).

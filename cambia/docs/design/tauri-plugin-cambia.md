@@ -83,6 +83,32 @@ TS --command `respond`({ callId, result | error })--> crate --response--> 后端
 4. 前端包名要跟 kernel.md 5.3.2 对齐（`@cambia/plugin-cambia`）；本地未发布时用 `link:../../` 而不是 `file:../../`——pnpm 对指向带 `node_modules` 的目录的 `file:` 依赖会创建失败（`ERR_PNPM_PACKAGE_MANAGER_CREATE_NODE_MODULES_DIR`）。
 5. CSP 与 scope：`app.security.assetProtocol.enable = true`，CSP 里 `script-src` 与 `connect-src` **都要**放行 `http://asset.localhost`（Windows 上 `asset:` 的实际 scheme 是 http）**与** `asset:`（macOS / Linux）。
 
+#### K2.4 的最小版就建在这个示例工程上（2026-10-08 点火成功）
+
+示例 app 同时是 K2.4 的试验载体——按 plan 的要求"接线只写一次"，没有另起一个工程：
+
+- **fixture** 在 `examples/tauri-app/fixtures/ignition/<版本>-fixture/frontend/main.js`：手写的单文件 ESM、**零运行时导入**（真插件对内核只有类型级导入，见 [../implementation.md](../implementation.md) 事实 16），导出 marker 与自己的 `transcript`。
+- **前端**在 `onMount` 里跑完整链条：`moduleURL` → `createFrontendLoader({ moduleURL })`（**这个 seam 就是"适配层可整体删除"的检验点**：装载层不知道 Tauri 存在）→ 真 `Context` → 判定 → 卸载。
+- **结果落 `<app_data_dir>/ignition.log`**（`ignition_log` 命令），因为窗口里的 `console.log` 拿不到；这样"点火结论"是文件证据而不是印象。
+
+实测结果（Windows/WebView2 全通过）：
+
+```
+moduleURL ok: http://asset.localhost/C%3A%5C…%5Cplugins%5Cignition%2F1.0.0-fixture%2Ffrontend%2Fmain.js
+load verdict: state=2 (ACTIVE)
+loaded module marker: cambia-ignition-fixture
+fixture transcript: ["apply","effect-open"]
+service key while active: present
+fixture transcript after unload: [...,"effect-close"]
+service key after unload: gone
+same path again: SAME module instance
+new path (2.0.0-fixture): NEW module instance
+```
+
+也就是说：**`asset:` 通道成立、主路径不需要回落自定义 scheme**；且"换 specifier 才能拿到新模块实例"这条被实测坐实（同 specifier 命中同一实例、换路径得到新实例）。结论写回 [../implementation.md](../implementation.md) 事实 13–15 与风险条目 2（已关闭）。
+
+**仍未做**：三种 CSP 变体（不启用 / 只放行 `script-src` / 再放行 `connect-src`）与 macOS/Linux 两个引擎的矩阵——本机只有 Windows，这两件事说不了。
+
 **端口 ↔ 命令的对应关系以 [host.md](./host.md) 的端口清单为准**（那边是声明方，本模块只是实现方）。命令要报的错必须先出现在码表里（[../plan.md](../plan.md) 第 1 节），所以上表凡是"未落地"的行都不算承诺。
 
 `module_url` 的入参**不是任意绝对路径**：本模块把它拼到插件根上，并**拒绝越出根**的路径（`.` / `..` / 绝对路径 / 反斜杠）。理由不是"Tauri scope 会兜住"——把不合法输入挡在拼 URL 之前，才不用赌 scope 的默认行为。

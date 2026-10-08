@@ -56,6 +56,10 @@
 | 10 | cordis 对"依赖等不到"**没有任何信号**（Node 实跑确认）：互相 `inject` 的两个 fiber 都停在 `state=0`，**不发 `internal/status`**、不报错，且 `await ctx.plugin()` **立即 resolve**（`Fiber.await()` 只等 `inertia`，不等激活——实跑中 0ms 就 resolve，而插件 120ms 后才真正激活）；只有 `apply` 一直等待时 `state=1 (LOADING)` 且 then 永不 settle | Node 实跑 + `fiber.d.ts` / 运行时代码 | ① 装载成功**不能**用 `await ctx.plugin()` 判定（3.2(e)）；② 环与拼错服务键**不被超时失败保护措施覆盖**，必须明确诊断（3.2(d)）——这是它不能删的原因 |
 | 11 | 依赖到位的那一刻，等待中的 fiber 会**自己发 `internal/status`**（`0→1→2`），无需轮询；另：cordis 里 `provide(name, value)` 与 `ctx.set` 是两件事，未 `provide` 就 `set` 会得到 `cannot set property ... without provide` | Node 实跑 | 原因诊断与"迟到激活"都靠 `internal/status` 就够；插件模板必须用对 `provide` / `set` 的分工（3.4） |
 | 12 | Tauri 官方插件形态恰好装得下适配层所需的全部接线：`tauri::plugin::Builder` 与 `Builder` 一样提供 `register_uri_scheme_protocol`；plugin 挂 `on_event` 能收 `RunEvent::Exit`（官方 `tauri-plugin-shell` 即以此回收子进程）；plugin 有独立配置段（`tauri.conf.json > plugins.<name>`）、`permissions/` 目录与 `[package.metadata.platforms.support]` 元数据；标识符限小写加连字符（`cambia` 合法），npm 惯例 `@scope/plugin-<name>` | Tauri 官方插件文档 + `tauri` 2.11.5 源码 | 适配层按官方插件形态做（可发现、可分发、接线只写一次）；但它**不改变内核语义**，也不构成安全边界（kernel 1.7 / 4） |
+| 13 | **`asset:` + 动态 `import()` 成立**（K2.4 最小版，2026-10-08，Windows/WebView2 实跑）：`moduleURL` 给出 `http://asset.localhost/<百分号编码的绝对路径>`，`import()` 装载 ESM 成功；真内核下 fiber 落到 `state=2 (ACTIVE)`，`apply` 执行、服务键与 effect 注册生效；卸载后 effect 逆序撤销、服务键消失。**这是本设计里唯一"查不到权威依据、只能实测"的一环，现在已证** | 真 Tauri 应用（`examples/tauri-app`）+ 真 fixture 点火，结果落 `<app_data_dir>/ignition.log` | 装载主路径维持 `asset:`，**不需要回落自定义 scheme**；3.8 条目 2 关闭（补全版的 CSP 变体与 macOS/Linux 矩阵仍待做） |
+| 14 | **宿主自己必须开 `tauri` 的 `protocol-asset` feature**，只靠适配层开不够：`tauri-build` 拿 `tauri.conf.json` 的 `assetProtocol.enable` 比对**宿主 app 自己的依赖 feature**，不一致则拒绝构建（报 `The tauri dependency features … does not match the allowlist defined under tauri.conf.json`）。另：适配层自带 `[workspace]`，示例 app 在其目录内会被 cargo 判为"以为自己在 workspace 里"而拒绝编译，需要 `exclude` | 示例 app 编译过程实跑 | 接入文档（K3.4）必须写明这两条宿主前置；"feature 是加性的"只对**编译 API** 成立，构建期校验不是 |
+| 15 | **ES module 图确实不可卸载，且换 specifier 是功能正确性要求**（K2.4 实跑）：同一 specifier 再 `import()` **命中同一实例**（模块级状态沿用，fixture 的 `transcript` 在两次装载间累积）；换一个路径（`2.0.0-fixture` 目录，内容相同）即得到**新实例**（`transcript` 从 `["apply"]` 重新开始） | 同上，两个目录各一份相同内容的 fixture | 3.2(e) 的 hash-qualified specifier（`<id>/<version>-<hash>`）不是缓存策略而是正确性要求；同时确认"反复重装的堆增长"是真实成本（3.8 条目 4） |
+| 16 | 插件 bundle **不需要**任何运行时裸导入：`examples/hello-plugin` 对 `@cambia/core` 只有 `import type` 与 `declare module`（类型级，构建后消失） | 读示例源码 + K1.2 的契约测试 | WebView 内无需 import map 或裸说明符解析；"external 掉 cordis / `@cambia/core`"的真实含义是**不打包第二份运行时副本**，而非"运行时要去解析它们" |
 
 ---
 
@@ -190,6 +194,7 @@
 - **"装载成功"不能用 `await ctx.plugin()` 判定**（事实 10，实跑确认）：它只等装载动作，**0ms 就 resolve**，此时 `state=0`、插件尚未激活（依赖到位后 120ms 才真正 `0→1→2`）。判定标准只能是**显式等 `state === ACTIVE`（订阅 `internal/status`）或 `FAILED`**，并叠加 3.2(g) 的超时——否则"装载成功"报告的是"已发起"，不是"已生效"。
 - 装载错误分几类：协议层失败（403/404）、CORS 或 MIME 不满足、语法错误、缺 `apply`、`inject` 未知服务键、超时——每类对应 spec 错误码，并能通过宿主提供的诊断接口定位到插件 id 与文件路径（"未激活"的原因诊断见 3.2(d)）。
 - **可行性验证的性质是"先证明再写代码"，排在 K2.3 之后、G2 之前**：从 `asset:` / 自定义 scheme 动态 `import()` 这一点，官方文档与 issue 都没有覆盖（这是核查中唯一找不到权威依据的结论），必须先在 WebView2 上证明，再验 WKWebView 与 WebKitGTK。它挡住的只是**装载通道**：manifest 校验、装载判定与卸载语义、未激活诊断都不依赖通道（装载入口用假 bridge 注入模块 URL 即可测），所以先做主体、把真实 WebView 与 Tauri 试验工程推后。UI 扩展与展示不属于 Cambia 运行时。代价写明：通道未验期间**测试全绿不等于真机能装**——这条挂在 3.8 条目 2 上。
+- **最小版已验证（2026-10-08，Windows/WebView2）**：真 Tauri 应用（`examples/tauri-app`）+ 真 fixture 点火成功——`moduleURL` → `import()` → 真内核 `ACTIVE` → `apply` 生效 → 卸载后服务键消失。结论与 URL 形态见事实 13，载体进仓库、可重跑（`fixture` 在 `examples/tauri-app/fixtures/`，结果落 `<app_data_dir>/ignition.log`）。**未做**：三种 CSP 变体（不启用 / 只放行 `script-src` / 再放行 `connect-src`）与 macOS/Linux 矩阵——这两种引擎上"装载失败"的形态仍未知。
 
 #### (g) 失败保护措施（激活超时）
 
@@ -333,7 +338,7 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 | # | 风险 | 影响 | 缓解 / 回落 | 状态 |
 |---|---|---|---|---|
 | 1 | 上游长期停在 rc（`latest` 就是 4.0.0-rc.10） | 语义范围由未稳定上游决定 | vendor 源码（从 git 取）+ 上游行为锁定测试 | 已识别，触发条件见 3.1 |
-| 2 | 从 `asset:` / 自定义 scheme 动态 `import()`，**没有任何官方文档或 issue 覆盖** | 整个 K2 的装载路径 | 设计已锁定主路径 `asset:`（CORS + JS MIME 由 Tauri 负责）；**可行性验证排在 K2.3 之后、G2 之前**（主体不依赖通道），最小版先在 WebView2 上点火，再验 WKWebView / WebKitGTK；失败才回落自定义 scheme → Blob | **待验证**（设计已定，实现待证） |
+| 2 | 从 `asset:` / 自定义 scheme 动态 `import()`，**没有任何官方文档或 issue 覆盖** | 整个 K2 的装载路径 | 设计已锁定主路径 `asset:`（CORS + JS MIME 由 Tauri 负责）；**可行性验证排在 K2.3 之后、G2 之前**（主体不依赖通道），最小版先在 WebView2 上点火，再验 WKWebView / WebKitGTK；失败才回落自定义 scheme → Blob | **已验证（K2.4 最小版，2026-10-08，Windows/WebView2）**：`asset:` + `import()` 成功装载 ESM 并激活（事实 13）；**主路径成立，不需要回落**。补全版仍待做：三种 CSP 变体、macOS/Linux 两个 WebView 引擎 |
 | 3 | 宿主启用严格 CSP 后的装载 | 需要精确的 CSP 模板 | 已锁定写法：`script-src` 必须含 host-source `http://asset.localhost`（Windows 上 scheme 实为 `http`，只写 `asset:` 不匹配），macOS/Linux 再加 `asset:`；Tauri 不会为插件来源追加 nonce/hash（kernel 6.1） | **已定案** |
 | 4 | ES module 图不可卸载 | 反复重装累积内存 | hash-qualified specifier（功能正确）+ 量化基线（不承诺回收） | 已知成本 |
 | 5 | Windows 文件占用 | 更新失败 | 先停后端进程再替换 + journal 延迟替换 | 设计内 |
