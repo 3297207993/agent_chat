@@ -1,0 +1,16 @@
+[package]
+name = "cambia-plugin-host"
+description = "The Rust side of Cambia: .tap handling, installation, backend process supervision and the control-plane transport (zero Tauri symbols)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Empty on purpose. This crate is the D0 skeleton: it exists so that `cargo test`, the CI core track
+# and the adapter layer (which depends on it later) have something to point at. The dependencies
+# implementation.md 3.3 decided on are declared in the root [workspace.dependencies] and are added
+# by the batch that actually calls them — an unused dependency is a claim nobody verifies.

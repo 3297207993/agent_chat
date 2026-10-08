@@ -1,0 +1,3 @@
+# Rust build artifacts of the workspace (crates/plugin-host). Without this, `target/` would be
+# untracked-but-visible noise in every `git status`.
+/target

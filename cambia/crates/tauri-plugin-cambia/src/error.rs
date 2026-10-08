@@ -1,14 +1,17 @@
 use serde::{ser::Serializer, Serialize};
 
+/// The adapter's error type: the failures a command can report, plus the one setup failure a
+/// misconfigured host hits at startup.
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
   #[error(transparent)]
-  Io(#[from] std::io::Error),
-  #[cfg(mobile)]
-  #[error(transparent)]
-  PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),
+  Tauri(#[from] tauri::Error),
+  #[error("the path \"{0}\" is not a plugin-root-relative path")]
+  InvalidPluginPath(String),
+  #[error("the plugin root is not configured: call Builder::plugin_root()")]
+  MissingPluginRoot,
 }
 
 impl Serialize for Error {

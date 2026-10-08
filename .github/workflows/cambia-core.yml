@@ -1,0 +1,65 @@
+# The kernel track: packages/* and crates/plugin-host. It deliberately never installs Tauri, which is
+# what keeps it fast (implementation.md 3.6, CONTRIBUTING hard rule 3).
+#
+# It lives at the repository root because that is the only place GitHub reads. Cambia is still a
+# directory inside agent_chat, so a workflow under cambia/.github/workflows would never run; when
+# cambia becomes its own repository this file moves there unchanged, apart from dropping the `cambia/`
+# prefix from the paths and the working directory.
+name: cambia / core
+
+on:
+  push:
+    paths:
+      - 'cambia/**'
+      - '.github/workflows/cambia-core.yml'
+  pull_request:
+    paths:
+      - 'cambia/**'
+      - '.github/workflows/cambia-core.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: cambia
+
+jobs:
+  js:
+    name: js (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Both Node LTS lines the packages support (implementation.md 3.6).
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: cambia/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      # build → typecheck → test → lint; the same command CONTRIBUTING tells people to run.
+      - run: pnpm check
+
+  rust:
+    name: rust workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: cambia -> target
+
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace

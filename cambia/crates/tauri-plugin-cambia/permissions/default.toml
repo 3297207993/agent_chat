@@ -1,3 +1,3 @@
 [default]
-description = "Default permissions for the plugin"
-permissions = ["allow-ping"]
+description = "The read-only minimum: resolve a plugin path into a URL the webview can import. The commands that change the installation (install / uninstall / enable) and the ones that manage processes (spawn / kill) each get their own permission and stay out of this set."
+permissions = ["allow-module-url"]

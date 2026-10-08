@@ -35,7 +35,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 |---|---|---|---|
 | **A** JS 内核与宿主 | K1.* → K2.1–K2.3、K2.7 | D0 之后 | 与 B 共用错误码表与命令集合 |
 | **B** Rust crate | K2.5 的 crate 部分、K2.6 的进程与协议 | D0 之后（不依赖 core，可完全并行） | 同上 |
-| **C** 可行性验证 + 端到端测试基建 | K2.4、K2.7 的 E2E 设施 | **K2.3 之后**；前置是 D0 的 Rust 侧欠账（根 workspace、`crates/plugin-host`、适配层最小接线、两条 CI 轨道），这些随本轨道一起补 | 只依赖适配层最小接线与 implementation.md 3.2(e) |
+| **C** 可行性验证 + 端到端测试基建 | K2.4、K2.7 的 E2E 设施 | **K2.3 之后**；前置是 D0 的 Rust 侧欠账（根 workspace、`crates/plugin-host`、适配层最小接线、两条 CI 轨道），这些随本轨道一起补——**2026-10-08 已补齐**（见第 2 节的欠账更新），本轨道的前置因此只剩"K2.3 做完" | 只依赖适配层最小接线与 implementation.md 3.2(e) |
 | **D** spec / 发布 / 文档 | K2.1 的 schema、K3.1 | K1.2 之后 | 与 A/B 共用错误码表 |
 | **E** 宿主适配层（Tauri） | `tauri-plugin-cambia`：K2.4 的接线外壳 → K2.5 的命令集合与权限 → K2.6 的退出回收 → K3.4 分发 | K2.3 之后（随 K2.4 一起；**独立 workspace / CI 轨道**） | 只依赖 `plugin-host` 与 Tauri，**不碰内核语义**（implementation.md 3.3(g)） |
 
@@ -54,6 +54,10 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 | **验收** | 在还没有任何实现的情况下，`pnpm -r build` / `pnpm -r test` / `cargo test` 全部通过；CI 三平台跑通；npm `@cambia` scope 已注册占位（kernel.md 第 7 节的建议）；插件模板与仓库内部共用同一份 eslint 配置，并且故意写违规代码时真的会被拦下 |
 
 > **欠账（2026-10-07 复核，K2.1 之后）**：JS 侧已落地（pnpm workspace、`packages/core`、`packages/eslint-config`、`packages/host`、changesets、`examples/hello-plugin`），`spec/` 随 K2.1 补齐。**还缺**：根 `Cargo.toml`、`crates/plugin-host`、`packages/kit`、`tsconfig.base.json`、cambia 的两条 CI 轨道——这些随 K2.5 与 K2.6 补。**这笔欠账不阻塞 K2.1–K2.4**，但 `cargo test` 与 CI 三平台这两条 D0 验收在补完之前不算通过。
+>
+> **欠账更新（2026-10-08，为 K2.6 铺路时补齐四项）**：根 `Cargo.toml`（workspace 里 `exclude` 适配层）、`crates/plugin-host` 骨架、cambia 的两条 CI 轨道、以及**适配层最小接线**（`asset:` scope 放行 + `module_url` 命令 + 权限文件）都已落地。顺带定案两件不属于某一批的前置：`crates/plugin-host` 的**包名**（`cambia-plugin-host`）与**控制面薄层的位置**（见 [design/plugin-host.md](design/plugin-host.md) 的专节）。骨架里唯一的实现是**平台键映射表**（`spec` 的 `win|mac|linux`+`x64|arm64` → Rust 的 `OS`/`ARCH`）——implementation.md 3.3(e) 要求它必须单测，而 K2.5（挑哪个 `bin`）与 K2.6（spawn）都要用它。
+>
+> **仍未补**：`packages/kit`、`tsconfig.base.json`。**D0 验收**里 `cargo test` 已通过（本地）、两条 CI 轨道已建但**尚未实际跑过一次**（要等推送），"CI 三平台跑通"这条在第一次 CI 绿之前不算通过。
 
 ---
 
@@ -129,7 +133,7 @@ D0 建仓库 → K1.1 上游行为锁定测试 → K1.2 core 公开 API 契约 �
 | 项 | 内容 |
 |---|---|
 | **交付物** | **最小版（先做，只回答一个问题）**：一个最小的 Tauri 试验工程 + `@cambia/host` 的装载入口——**试验工程直接建在适配层的最小版本上**（注册 scheme / 配 asset scope + 取路径 + 退出回收，见 implementation.md 3.3(g)），接线不重复写两遍；要证明的只有一条：`asset:` 放行插件目录后 `import()` 能装载 ESM。**补全版（同属本批，不阻塞主体）**：同一插件的两个版本同时装载的对照实验、三种 CSP 变体（不启用 / 只放行 `script-src` / 再放行 `connect-src`）、平台差异记录（Windows 是 `http://asset.localhost/…`，macOS/Linux 是 `asset://localhost/…`）与所需 CSP 的 host-source 写法 |
-| **依赖** | K2.3（装载逻辑与诊断批次完成后再做）；自身还依赖 D0 的 Rust 侧欠账——根 workspace、`crates/plugin-host`、适配层最小接线、两条 CI 轨道 |
+| **依赖** | K2.3（装载逻辑与诊断批次完成后再做）；自身还依赖 D0 的 Rust 侧欠账——根 workspace、`crates/plugin-host`、适配层最小接线、两条 CI 轨道（**2026-10-08 已补齐，见第 2 节**） |
 | **验收** | **最小版**：Windows/WebView2 上一次点火成功——放行插件目录后 `import()` 装载 ESM 并拿到 fixture 的 marker，结论与最小复现写回 implementation.md 3.8 条目 2；**失败就回落到自定义 scheme 并重做本批**。**补全版**：两个版本各自拿到独立模块实例、三种 CSP 变体下的行为都记录在案；这部分与 G2 一起核对 |
 
 ### K2.5 安装流程（JS ↔ Rust 联动）

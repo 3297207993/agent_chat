@@ -1,0 +1,3 @@
+# Same style as the kernel side, carried along so this crate stays `cargo fmt --check` clean after it
+# becomes its own repository (see the root Cargo.toml and implementation.md 3.6).
+tab_spaces = 2

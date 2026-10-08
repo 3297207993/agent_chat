@@ -1,8 +1,8 @@
 {
-  "name": "tauri-plugin-cambia-api",
+  "name": "@cambia/plugin-cambia",
   "version": "0.1.0",
-  "author": "You",
-  "description": "",
+  "description": "Tauri adapter for Cambia: turns Tauri's protocols and paths into the ports the Cambia host declares",
+  "license": "GPL-3.0-only",
   "type": "module",
   "types": "./dist-js/index.d.ts",
   "main": "./dist-js/index.cjs",

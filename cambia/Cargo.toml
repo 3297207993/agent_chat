@@ -1,0 +1,34 @@
+# The Rust workspace of Cambia.
+#
+# The adapter layer (crates/tauri-plugin-cambia) is deliberately NOT a member: it carries its own
+# [workspace] table, its own lockfile and its own CI track. Tauri's three-platform build is slow, and
+# keeping it out of this workspace is what turns "the kernel implementation layer has zero Tauri
+# dependencies" into a structural fact instead of a promise (implementation.md 3.6, CONTRIBUTING hard
+# rule 3).
+[workspace]
+resolver = "2"
+members = ["crates/plugin-host"]
+exclude = ["crates/tauri-plugin-cambia"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# One MSRV for the whole Rust side, matching the adapter layer's.
+rust-version = "1.77.2"
+license = "GPL-3.0-only"
+
+# The dependencies implementation.md 3.3 already decided on, declared once so every member agrees on
+# one version. Declaring one here pulls nothing: a crate is downloaded only when a member depends on
+# it, and today no member does (see crates/plugin-host/Cargo.toml).
+[workspace.dependencies]
+serde = "1"
+serde_json = "1"
+sha2 = "0.11"
+zip = "8"
+reqwest = "0.13"
+tokio = "1"
+process-wrap = "10"
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

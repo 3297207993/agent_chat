@@ -404,7 +404,7 @@ K2.4 的完成定义不含"写多少代码"，只含"证明主路径成立并留
 | `spec/v1/manifest.schema.json` 的 `$id` 归属（域名 / registry 未定） | 生成物现在只带 `$schema`，不带 `$id`；等"公开发布还是私有 registry"定案（[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）再补 |
 | 平台键要不要覆盖 `android` / `ios` | 现在只认 `win` / `mac` / `linux` + `*`（适配层把移动端标为不支持）；要支持移动端时再扩词汇，属 spec 变更 |
 | `contributes` 的宿主级 schema | 本模块只保证它是对象；具体字段、验证及是否用于展示均由宿主定义 |
-| 内核 CI 轨道还没建（[../plan.md](../plan.md) 2 节的欠账） | K2.1 要的"生成物由 CI 验证"暂时由 vitest 用例承担——`pnpm check` 就是将来那条 CI 轨道要跑的命令 |
+| 内核 CI 轨道还没建（[../plan.md](../plan.md) 2 节的欠账） | **已建（2026-10-08）**：`.github/workflows/cambia-core.yml`（`packages/*` + `crates/plugin-host`，不装 tauri）与 `cambia-adapter.yml`（适配层，三平台），按 `cambia/**` 路径过滤。K2.1 要的"生成物由 CI 验证"由其中的 `pnpm check` 承担——它跑的就是 CONTRIBUTING 记的那条命令。注意两条工作流暂时放在**仓库根**（GitHub 只读那里），拆成独立仓库时原样搬到 `cambia/.github/workflows/` |
 | `@cambia/host` 现在是 `private: true`（模块还没做完，不进 changesets 的发布组） | 等它成为可发布包的那一批，把它加入 `.changeset/config.json` 的 fixed 组并与 `@cambia/core` 版本对齐（同 `@cambia/eslint-config` 的处理方式） |
 | macOS/WKWebView 与 Linux/WebKitGTK 上的装载未验 | 同一脚本换宿主平台再跑，结论补进事实 13–15；失败才评估回落到自定义 scheme（本批重做） |
 | 错误码表的码值与最终措辞 | K2.1 由 `spec/` 定稿，本模块只是消费方；本文的码是草案，不是承诺 |

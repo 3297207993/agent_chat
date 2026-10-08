@@ -1,0 +1,3 @@
+# The Rust side follows the two-space indentation the adapter layer already uses (the Tauri plugin
+# template's style), so `cargo fmt --check` is a real gate instead of a large unrelated diff.
+tab_spaces = 2

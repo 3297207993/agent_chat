@@ -271,6 +271,7 @@ crate 是 Rust 侧唯一的包管理实现，也是"插件完全能力"的来源
 - **JS 侧**：`@cambia/host` 保持宿主无关，只依赖一个**薄接口**（读 bundle / 列已装 / 安装 / KV / 起后端，十来个方法），Tauri 实现放在 `@cambia/plugin-cambia`。**警告**：这个接口一旦开始为"假想的第二宿主"演化，就把它退回成 Tauri 直连——它存在的理由是隔离 Tauri，不是构建通用适配框架。
 - **分发**：crate 发 crates.io、guest-js 发 npm（`@cambia/plugin-cambia`）；`[package.metadata.platforms.support]` 标桌面三平台、移动端 `none`；Tauri 插件目录的提交是可选的分发动作（K3）。
 - **不承诺**：ACL 权限范围**不是**插件能力的限制——它约束的是 WebView 内的调用，而插件与宿主同 realm（kernel 1.7 / 4）。
+- **最小接线已落地（2026-10-08）**：`crates/tauri-plugin-cambia` 从 `create-tauri-plugin` 脚手架改成真接线——`Builder::plugin_root()`（**必填、没有默认值**：位置是宿主的决定，根里的布局归 `plugin-host`）、`asset_protocol_scope().allow_directory(root, true)`、`module_url` 命令（URL 由 `Webview::convert_file_src` 组装，**本模块不手拼、无平台分叉**）、`permissions/default.toml` 只放只读的 `allow-module-url`、guest-js 导出 `moduleURL`、npm 包名对齐 kernel.md 5.3.2。脚手架里的 `ping` / `desktop.rs` / `mobile.rs` 已删（移动端本来标"不支持"）。**命令集合、`read_text` / `list_installed` 与退出回收仍未接线**——按"没有调用方就不加端口"的纪律故意不建空壳。实测结论（`asset_protocol_scope` 是 feature-gated、`allow_directory` 不要求目录存在、`Webview` 可作命令参数、`build.rs` 的 `COMMANDS` 决定 `allow-<命令>` 权限名）见 [design/tauri-plugin-cambia.md](design/tauri-plugin-cambia.md)。
 
 ### 3.4 `@cambia/kit` —— 插件作者 CLI
 
@@ -303,8 +304,8 @@ CLI 是复用密度最高的一块，自研的只有"构建预设 + 编排 + 模
 
 ### 3.6 仓库与工具链
 
-- **Monorepo**：pnpm workspace（cordis 生态惯例、严格依赖提升）；Node LTS 双版本 CI；Rust workspace + MSRV 策略。
-- **CI 分两条轨道**：核心（`packages/*` + `crates/plugin-host`，**不需要安装 tauri**，保持快）与适配层（`crates/tauri-plugin-cambia`，三平台 tauri 构建，可挂在 nightly / 发布前）。根 workspace `exclude` 适配层，保证核心流水线永远碰不到 tauri——这条不是优化，是让"内核实现层零 Tauri 依赖"变成**结构上的事实**而不是纪律上的希望。
+- **Monorepo**：pnpm workspace（cordis 生态惯例、严格依赖提升）；Node LTS 双版本 CI；Rust workspace + MSRV 策略。**已落地（2026-10-08）**：根 `Cargo.toml`（`members = ["crates/plugin-host"]`、`exclude = ["crates/tauri-plugin-cambia"]`、`[workspace.dependencies]` 声明 3.3 已定的版本但**不预装**、`unsafe_code = "forbid"`）、`crates/plugin-host` 骨架（包名 `cambia-plugin-host`），MSRV 与适配层一致（`1.77.2`），两份 `rustfmt.toml` 统一 2 空格缩进（适配层脚手架原本 2/4 空格混用，`cargo fmt --check` 才能当门禁用）。
+- **CI 分两条轨道**：核心（`packages/*` + `crates/plugin-host`，**不需要安装 tauri**，保持快）与适配层（`crates/tauri-plugin-cambia`，三平台 tauri 构建，可挂在 nightly / 发布前）。根 workspace `exclude` 适配层，保证核心流水线永远碰不到 tauri——这条不是优化，是让"内核实现层零 Tauri 依赖"变成**结构上的事实**而不是纪律上的希望。**已落地（2026-10-08）**：`.github/workflows/cambia-core.yml`（js 双 Node 版本跑 `pnpm check`；rust 跑 fmt / clippy `-D warnings` / `cargo test`）与 `cambia-adapter.yml`（Windows / macOS / Linux 三平台跑 fmt / clippy / `cargo test` + guest-js `pnpm build`），按 `cambia/**` 路径过滤。**它们暂时放在仓库根**——GitHub 只读根目录的 `.github/workflows`，而 cambia 目前仍是 agent_chat 里的一个目录；拆成独立仓库时原样搬到 `cambia/.github/workflows/`。
 - **构建**：`tsup@8` 打 `@cambia/*`；`publint` + `@arethetypeswrong/cli` 卡发布前检查。
 - **测试**：`vitest@5`（manifest、装载与生命周期单元/集成测试）；`cargo test`（crate）。
 - **版本与发布**：`@changesets/cli@3` 以 fixed 模式统一 `@cambia/*` 版本，crate 版本与之保持一致；`engines.cambia` 的兼容矩阵在代码里维护成常量表，随发布更新。**已落地**（K1.3）：`.changeset/config.json`（`fixed: [["@cambia/*"]]`、`access: public`）+ 根 scripts（`changeset` / `version-packages` / `release`），首个 changeset 已跑过一次完整流程（`@cambia/core` 从 `0.0.0` 走到 `0.1.0` 并生成 CHANGELOG）。注意一处实测行为：**`private: true` 的包被 changesets 跳过**，所以 `@cambia/eslint-config` 暂时不在组内一致（等它随 kit 发布时再加入）。

@@ -1,15 +1,25 @@
 [package]
 name = "tauri-plugin-cambia"
 version = "0.1.0"
-authors = [ "You" ]
-description = ""
+description = "Tauri adapter for Cambia: turns Tauri's protocols and paths into the ports the Cambia host declares"
 edition = "2021"
 rust-version = "1.77.2"
+license = "GPL-3.0-only"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-cambia"
 
+# Its own workspace on purpose. The Cambia workspace excludes this crate, so Tauri's three-platform
+# build can never leak into the kernel's fast track — that exclusion is what makes "the kernel
+# implementation layer has zero Tauri dependencies" structural rather than aspirational
+# (implementation.md 3.6, CONTRIBUTING hard rule 3).
+[workspace]
+
 [dependencies]
-tauri = { version = "2.11.3" }
+# `protocol-asset` is required by the one piece of wiring this crate owns: extending the `asset:`
+# scope so the webview can fetch plugin files (implementation.md 3.2(e)). Cargo features are
+# additive, so the host does not have to enable it itself. If K2.4 concludes that `asset:` does not
+# hold and a custom scheme takes over, this feature goes with it.
+tauri = { version = "2.11.3", features = ["protocol-asset"] }
 serde = "1.0"
 thiserror = "2"
 
