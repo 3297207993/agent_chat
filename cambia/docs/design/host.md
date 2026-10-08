@@ -179,18 +179,20 @@ export interface KernelContext {
 | `PluginModule` | `{ apply?: unknown; [k: string]: unknown }` | 模块形状由 cordis 的插件签名决定，装载层不解释它 |
 | `FIBER_STATE` | `{ PENDING: 0, LOADING: 1, ACTIVE: 2, FAILED: 3, DISPOSED: 4, UNLOADING: 5 }` | **观测到的内核协议**，不是本模块发明的语义。它是 `@cambia/core` 的 `FiberState` 的副本（为了不依赖内核），两者的一致性由漂移检查守着——上游重编号时先红 |
 | `loadPluginModule(url, { requireApply })` | `Promise<PluginModule>` | `import()` + 导出校验（`requireApply` 缺省 `true`）。**这不是"装载成功"**；`import()` 自己的抛错**原样上抛**（分类归 K2.4） |
-| `createLoader(bridge)` | `PluginLoader` = `{ load(ctx, path, options?) }` | 把"路径 → URL → 模块 → 判定"串起来。`path` 是插件根目录下的相对路径；**它怎么拼由 K2.4 定**，本批由调用方给（假 bridge 即可测） |
-| `PluginLoader.load(ctx, path, options?)` | `Promise<LoadedPlugin>` | 一次完整的装载尝试：**只在 `ACTIVE` 或 `FAILED` 上返回**，不早也不晚 |
-| `unloadPlugin(loaded)` | `void` | 卸载：发起 `dispose()`，**不 await、不看返回值、更不在它上面调 `.then()`** |
-| `LoadedPlugin` | `{ path, url, module, fiber, state, error }` | 判定结果记录。`state` 是判定落点（`ACTIVE` / `FAILED`），`error` 只在 `FAILED` 时非 `null`；`fiber` 是给诊断与卸载用的句柄 |
+| `createFrontendLoader(bridge)` | `FrontendLoader` = `{ load(ctx, path, options?) }` | 把"路径 → URL → 模块 → 判定"串起来。`path` 是插件根目录下的相对路径；**它怎么拼由 K2.4 定**，本批由调用方给（假 bridge 即可测） |
+| `FrontendLoader.load(ctx, path, options?)` | `Promise<LoadedFrontend>` | 一次完整的装载尝试：**只在 `ACTIVE` 或 `FAILED` 上返回**，不早也不晚 |
+| `unloadFrontend(loaded)` | `void` | 卸载：发起 `dispose()`，**不 await、不看返回值、更不在它上面调 `.then()`** |
+| `LoadedFrontend` | `{ path, url, module, fiber, state, error }` | 判定结果记录。`state` 是判定落点（`ACTIVE` / `FAILED`），`error` 只在 `FAILED` 时非 `null`；`fiber` 是给诊断与卸载用的句柄 |
+
+**命名约定：名字里带 `frontend` 的，都只覆盖 `parts.frontend` 那一半。** 这条是纪律不是风格——2026-10-08 复查时发现，`LoadedPlugin` / `PluginLoader` / `unloadPlugin` 读起来都像"整个插件"，实际只有一半，而"插件有前后端两部分"正是本模块最容易读错的地方。凡是会被误读成"整个插件"的名字，一律显式写出它只管哪一部分（`PluginModule` / `loadPluginModule` 保持原名：它们描述的就是"模块"，没有越界）。
 
 五条硬约束：
 
 1. **判定只认 `fiber.state`，不认 `await ctx.plugin()`**（事实 10）：`ctx.plugin()` 同步返回 fiber 本身，但它的 then 只等 `inertia`——**0ms 就 resolve**，此时插件可能还在 `PENDING`（依赖未就绪）或 `LOADING`。所以 `load` 拿 fiber、读 `state`、订阅 `internal/status`，**收到的状态落在 `ACTIVE` / `FAILED` 才返回**。
-2. **`apply` 抛错走 rejection**：`await ctx.plugin()` 会以原始错误 reject（实测），所以 `load` 给那个 thenable 挂一个 rejection 捕获（`Promise.resolve(fiber).then(undefined, …)`），把错误记进 `LoadedPlugin.error`，判定为 `FAILED`。**不 await 它**：`apply` 里一直等待的插件 `state=1` 且 then 永不 settle（实测），await 它等于把 `load` 挂死。
+2. **`apply` 抛错走 rejection**：`await ctx.plugin()` 会以原始错误 reject（实测），所以 `load` 给那个 thenable 挂一个 rejection 捕获（`Promise.resolve(fiber).then(undefined, …)`），把错误记进 `LoadedFrontend.error`，判定为 `FAILED`。**不 await 它**：`apply` 里一直等待的插件 `state=1` 且 then 永不 settle（实测），await 它等于把 `load` 挂死。
 3. **先订阅、后重读一次 `fiber.state`**：订阅与"第一次读状态"之间存在窗口，错过了就再也不会被通知（状态不变不发事件）。顺序固定为"拿 fiber → 挂 rejection 捕获 → 订阅 → 重读状态"，`load` 的判定因此没有可丢的转换。
 4. **`FAILED` 的 fiber 仍持有 `uid`**（实测）：失败**不会**被自动回收，"这个插件还在不在"一律看 `uid`（`null` = 已回收），**不能看 state**——从未激活的插件卸载后停在 `PENDING`（K1.1 锁定）。要真正清掉失败现场，得显式卸载。
-5. **卸载不 await `dispose()`**：卡在 `LOADING` 的插件 `dispose()` 永不 settle 且不发事件（实测），await 它就是把宿主拖死。`unloadPlugin` 只发起、不等待。完成信号有**两级、含义不同**（实测）：`uid` 变 `null` = "它已经不在了"，对从未激活与卡住的插件同样成立；`state` 落到 `DISPOSED` = "退场确实做完了"，只有激活过的插件会走到这里，而且**晚于** `uid` 被清空——要断言"注册都没了"，等的是后者。
+5. **卸载不 await `dispose()`**：卡在 `LOADING` 的插件 `dispose()` 永不 settle 且不发事件（实测），await 它就是把宿主拖死。`unloadFrontend` 只发起、不等待。完成信号有**两级、含义不同**（实测）：`uid` 变 `null` = "它已经不在了"，对从未激活与卡住的插件同样成立；`state` 落到 `DISPOSED` = "退场确实做完了"，只有激活过的插件会走到这里，而且**晚于** `uid` 被清空——要断言"注册都没了"，等的是后者。
 
 **本批不做、留给 K2.3**：等待激活的**超时**。`state=1`（`apply` 里一直等）会让 `load` 永远等下去，`state=0`（依赖等不到）连事件都不发——这两个洞都由 K2.3 补（`timeoutMs` 是**新增的可选参数**，不改已有签名），聚合诊断也归它。
 
@@ -218,7 +220,7 @@ export interface KernelContext {
 | `diagnoseModuleURL(url)` | `Promise<ModuleDiagnosis>` | 一次显式探测（`fetch`，只记录状态码与 `Content-Type`），供失败分类使用 |
 | `PluginLoadError` / `classifyImportFailure(url, error, diagnosis?)` | 见"失败路径" | 把 `import()` 的抛错翻译成可定位的分类结果 |
 
-`PluginModule` / `loadPluginModule` / `createLoader` 已在 K2.2 落地（见上），本批只把 `createLoader` 的入参从"调用方给的 `path`"换成"`PluginRef`"，并给 `load` 加分类。
+`PluginModule` / `loadPluginModule` / `createFrontendLoader` 已在 K2.2 落地（见上），本批只把 `createFrontendLoader` 的入参从"调用方给的 `path`"换成"`PluginRef`"，并给 `load` 加分类。（K2.4 只处理**前端**部分的路径形状与分类；后端的可执行文件不走 `import()`，不存在 specifier 一说。）
 
 三条硬约束：
 
@@ -252,7 +254,7 @@ cambia.json 文本 → JSON.parse（不是对象 = MANIFEST_PARSE_FAILED）
 **K2.2 的装载判定与卸载数据流**：
 
 ```
-loader.load(ctx, path, { config? })
+createFrontendLoader(bridge).load(ctx, path, { config? })
     → bridge.moduleURL(path)                    # 适配层：asset: + 平台分叉
     → import(url)                               # 抛错原样上抛（分类归 K2.4）
     → 校验 apply（缺 = PluginError LOAD_NO_APPLY）
@@ -260,9 +262,9 @@ loader.load(ctx, path, { config? })
         ├─ Promise.resolve(fiber).then(undefined, catch)   # apply 抛错的唯一来源
         ├─ ctx.on('internal/status', 按 uid 过滤)
         └─ 重读 fiber.state：落在 ACTIVE / FAILED 就定案，否则等事件
-    → LoadedPlugin{ path, url, module, fiber, state, error }
+    → LoadedFrontend{ path, url, module, fiber, state, error }
 
-unloadPlugin(loaded)
+unloadFrontend(loaded)
     → fiber.dispose()                           # 只发起：不 await、不看返回值、不调 .then
     → 完成信号有两级，含义不同（实测）：
         · uid → null       = "它已经不在了"（不再注册）——对从未激活与卡在 LOADING 的插件同样成立
@@ -298,7 +300,7 @@ PluginRef{id,version,hash} → pluginModulePath() → 相对路径
 ```
 PluginRecord = {
   id, ref, manifest,                          // 契约层（K2.1）
-  frontend?: { url, module, fiber, state },   // K2.2 已落地（就是现在的 LoadedPlugin）
+  frontend?: { url, module, fiber, state },   // K2.2 已落地（就是现在的 LoadedFrontend）
   backend?:  { handle, status, proxyKeys },   // K2.6
 }
 ```
@@ -311,7 +313,34 @@ PluginRecord = {
 
 **顺序是现成的，不需要编排字段**：如果后端起好之后宿主才 `provide` 那个代理 Service，那么 `inject` 该键的前端插件会自然停在 `PENDING`，等它就位再激活（事实 11 的迟到激活）。manifest 里本来也没有 `dependsOn`——依赖只用服务键表达（[../kernel.md](../kernel.md) 1.4）。
 
-**对已有代码的影响**：现状 `LoadedPlugin` 是**前端那一半**的记录，形状不冲突——K2.6 落地时它是 `PluginRecord.frontend`。名字在那一刻改（`LoadedPlugin` 听起来像"整个插件"，实际只是前端部分），**现在不改**：后端记录还不存在，提前改名只是空转。
+**对已有代码的影响（2026-10-08 修正）**：`LoadedPlugin` / `PluginLoader` / `createLoader` / `unloadPlugin` 已改名为 `LoadedFrontend` / `FrontendLoader` / `createFrontendLoader` / `unloadFrontend`。原先的判断是"等 K2.6 做后端记录时再改，提前改名是空转"——**这个判断是错的**：名字不是"以后会不准"，而是"现在就不准"，它让读代码的人（包括写它的人）以为拿到的是整个插件。改名不需要后端记录存在，成本只有四个文件，而且与将来的形状不冲突（K2.6 落地时 `LoadedFrontend` 就是 `PluginRecord.frontend`）。**仍未做**：`PluginRecord` 本身（带 `backend` 字段的聚合记录）与插件的 id —— 那要等 K2.6 的后端记录与 K2.4 的 `PluginRef` 真存在，否则就是造一个没人填的字段。
+
+#### 组合发生在哪一层：原语 + 编排，而不是把两半塞进一个 `load`
+
+一个诱人的形状是让 `load` 把两件事都做了：依赖里带上"能起进程"的能力，`load` 里 spawn 后端、`import()` 前端（**并发起、一起进行**），返回 `{ frontend, backend }`。**结果形状是对的**——那就是上面的 `PluginRecord`，而且并发起、分别定案这件事本身也确实是编排层该干的。**但组合不该发生在 `load` 里**，四个机制层面的理由：
+
+1. **两种判定的形状不同，合不进一个 promise**。前端判定是 fiber 落到 `ACTIVE` / `FAILED`（订阅 `internal/status` + 重读一次 `state`，见上文硬约束 3）；后端判定是"进程起来了 **且** 握手在超时内完成"。合并之后要回答一串新问题：谁的超时说了算？后端慢会不会推迟前端成功结论的上报？K2.3 给前端加 `timeoutMs` 之后，这个函数会有两个含义不同的超时参数。
+2. **原子性是幻觉**。前端 `import()` 失败要不要回滚已经 spawn 的进程？后端启动超时要不要卸载前端？文档对这两类情况的答案都是"不"（后端失败只禁它自己、不降级），而一个叫 `load` 的合并调用会天然暗示事务性——名字和语义打架。
+3. **两半都必须能被单独驱动**，所以原语无论如何都要存在且公开：manifest 里两部分各自可选；平台不支持时只禁后端；后端崩溃不许连带前端；前端随 `activationEvents` 懒激活。"只装前端"与"只起后端"是常态，不是异常路径。
+4. **端口不能是一坨**。"依赖里带上后端功能"这句要精确成**按能力切分**：`moduleURL` / `readText` / `listInstalled` / `spawn` 各自是独立的小接口，组合类型是它们的交集，谁用哪个就声明哪个。若把 `spawn` 塞进同一个 interface，`createFrontendLoader(bridge)` 的类型就等于声称"它可能启动进程"——它不会，也不该（[../kernel.md](../kernel.md) 3.2 的单文件前端与 3.3 的进程后端是两件事）。代价是可验证的：每个前端装载测试都得伪造一个进程管理器（测试里出现一个什么都不做的假 `spawn`，那就是一个谎言），"删掉适配层、内核仍成立"的检验也随之变含糊。
+
+所以目标形状是**两层**：
+
+```
+原语（各自公开，各自只吃自己需要的端口）
+  loadFrontend(ctx, source, path)       -> LoadedFrontend          K2.2 已落地（入参今天叫 PluginHostBridge）
+  startBackend(target, supervisor, …)   -> BackendHandle           K2.6
+  stopBackend(handle)                   -> void                    K2.6
+
+编排（宿主按策略调用；并发起、分别定案）
+  loadPlugin(target, host, policy)      -> PluginRecord{ id, ref, manifest, frontend?, backend? }
+```
+
+`loadPlugin` 才是"加载一个插件"，它返回的正是那条聚合记录：入参 `host` 是能力端口的**交集**（够它调两个原语），`policy` 决定这一轮起哪一半（`frontend-only` / `backend-only` / `both`）；两半并发起、各自按自己的判据定案，任何一半失败都不回滚另一半。
+
+**现在还写不出来**，前置是：读 manifest 的端口（`readText` + `listInstalled`，归位未定）、安装目录与 `.tap` 解包（K2.5）、`spawn` 端口与监督器（K2.6）、控制面协议（K2.6）。所以这一节是**目标形状**：先定下来，实现随后（硬规定 4 正是"先出设计文档再写代码"）。
+
+**待确认**：宿主策略是不是"两个永远一起起"？如果是严格的 both，`loadPlugin` 的默认 `policy` 就是 `both`，两个原语退成它的实现细节——但**仍要公开**，因为上面第 3 条的失败语义要求单独控制。
 
 **两条环境前提**（本批实测后回写为事实 13–15，写进实现而非假设）：
 
@@ -336,11 +365,11 @@ PluginRecord = {
 | 语法错误 / 模块顶层抛错 | `import()` 抛错 | 分类为语法 / 求值期，保留原始 message 与 `cause` | 同上 |
 | 模块没导出 `apply` | 装载后校验失败 | 抛 `LOAD_NO_APPLY`；`requireApply: false` 给"非插件入口的模块"留口 | **K2.2 已落地**（装载层单测） |
 | 包内相对说明符（多文件 bundle） | 说明符被解析到站点根，整张模块图取不到 | 归"取不到"；这是 kernel 3.2 的单文件硬约束被违反后的形态，拦截在构建期 | 真 WebView 脚本的对照用例 |
-| 插件 `apply` 抛错 | `await ctx.plugin()` 以原错误 reject，fiber 落到 `FAILED`（`0→1→5→3`） | `load` 把错误记进 `LoadedPlugin.error` 并按 `FAILED` 返回（**不抛**——"装不上"与"装上了但没激活"是两种形态）；**失败不会被自动回收，`uid` 还在，要显式卸载** | **K2.2 装载层单测** |
+| 插件 `apply` 抛错 | `await ctx.plugin()` 以原错误 reject，fiber 落到 `FAILED`（`0→1→5→3`） | `load` 把错误记进 `LoadedFrontend.error` 并按 `FAILED` 返回（**不抛**——"装不上"与"装上了但没激活"是两种形态）；**失败不会被自动回收，`uid` 还在，要显式卸载** | **K2.2 装载层单测** |
 | 依赖等不到（环 / 拼错服务键） | `state=0`、无事件、无报错、`await ctx.plugin()` 立即 resolve | **本模块不处理**：K2.3 做聚合诊断（这是 kernel 1.4 承诺的落实点）。代价是这期间 `load` **永不返回**——它不会误报成功，但也没有结论 | K2.3 |
 | 插件在 `apply` 里一直等 | `state=1`、then 永不 settle | **本模块不处理**：K2.3 的激活超时。同上：`load` 永远等下去，等的是超时来给它一个结论 | K2.3 |
 | 卸载一个卡在 `LOADING` 的插件 | `dispose()` 永不 settle，且不发事件 | 卸载路径**不 await `dispose()`**（否则会被死等的插件拖死） | **K2.2 已落地**（装载层单测） |
-| 卸载两次 | 第二次 `dispose()` 返回 `undefined` 而不是 promise（K1.1 锁定） | `unloadPlugin` **不在返回值上调用 `.then()`**，所以二次卸载无害 | **K2.2 已落地**（装载层单测） |
+| 卸载两次 | 第二次 `dispose()` 返回 `undefined` 而不是 promise（K1.1 锁定） | `unloadFrontend` **不在返回值上调用 `.then()`**，所以二次卸载无害 | **K2.2 已落地**（装载层单测） |
 | 重复 `import()` 同一个 specifier | 命中模块图里的同一实例 | 不是失败，但它定死了"换路径才能换实例"这条设计 | 装载层单测 |
 | 从 CJS `require('@cambia/host')` | 有意不满足：插件 bundle 在 WebView 里按 ES module 装载 | 同 `@cambia/core`：ESM-only，用 attw 的 `esm-only` profile 显式忽略，而不是压掉警告 | `check:publish` |
 
@@ -367,8 +396,10 @@ K2.4 的完成定义不含"写多少代码"，只含"证明主路径成立并留
 | **RPC 薄层放哪一侧**（Rust 传输层 vs TS）：帧与请求关联、超时/取消、双向分派 | **未决，且会决定 K2.6 的接口形状**——对比与推荐见 [plugin-host.md](./plugin-host.md) 的未决项。开工前必须先定，否则会在"谁维护 id 表"上返工 |
 | **无窗口时中枢还能不能在**：若编排中枢是 WebView 里的 TS，"应用启动即起后端""托盘常驻、没有窗口也跑插件"这类形态就不成立 | 需要先定，它会反过来影响上一条（K3.3 的"第二宿主"验证会撞上它）。要么接受"没有 WebView 就没有插件"，要么在 Rust 侧留一个最小触发点（只负责拉起，不接管语义） |
 | **状态权威在哪**：若中枢在 TS，"装了哪些 / 哪些被禁用 / 失败名单"的**权威副本**是谁 | 建议写死为：磁盘上 crate 管的那份（安装目录 + journal）是权威，TS 侧只是视图 + 编排。这是本文"三处状态各有唯一来源"那条纪律的延伸——同一件事只能有一个权威副本，否则就会出现两份状态各说一套（[../plan.md](../plan.md) 第 0 节"不允许代码和文档各说一套"是同一条纪律的另一面） |
+| **`loadPlugin` 的默认 `policy`（组合层）** | 见上文"组合发生在哪一层"。目标形状已定（原语 + 编排两层）；**待确认**：宿主是否"两个永远一起起"。若不然，默认策略需要写成显式参数而不是默认值 |
+| **端口的切分粒度** | 已定原则：**按能力切分**（`moduleURL` / `readText` / `listInstalled` / `spawn` 各是独立小接口，组合类型是交集）。第二个端口落地时就要按这个切，不要再往 `PluginHostBridge` 里加方法——否则前端装载的入参类型会声称它能起进程 |
 | **新增端口（`readText` / `listInstalled`）与装载编排归哪批** | 见上文"未分配的一项"：建议归 K2.5（它拥有安装目录与 journal）。**需要确认**，它改变 K2.5 的交付物清单 |
-| **`LoadedPlugin` → `PluginRecord.frontend` 的改名时机** | 等 K2.6 把后端记录做出来再改；现在前端记录是唯一一半，提前改名是空转 |
+| **`LoadedFrontend` → `PluginRecord.frontend` 的落点** | 命名已在 2026-10-08 改清（见上文"对已有代码的影响"）；剩下的是 K2.6 把 `PluginRecord`（带 `backend`）做出来时把它挂进去，以及 K2.4 的 `PluginRef` 给记录补上 id |
 | 命令集合（`install` / `uninstall` / `list` / `enable`）与 `INSTALL_*` 一类错误码 | 都不在本批：命令集合归适配层（K2.5），码表的安装语义随之补——**命令要报的错必须先有码**（[../plan.md](../plan.md) 第 1 节）。注意 `list` 命令与 `listInstalled` 端口是同一件事的两面，别做成两份 |
 | `spec/v1/manifest.schema.json` 的 `$id` 归属（域名 / registry 未定） | 生成物现在只带 `$schema`，不带 `$id`；等"公开发布还是私有 registry"定案（[../../CONTRIBUTING.md](../../CONTRIBUTING.md)）再补 |
 | 平台键要不要覆盖 `android` / `ios` | 现在只认 `win` / `mac` / `linux` + `*`（适配层把移动端标为不支持）；要支持移动端时再扩词汇，属 spec 变更 |

@@ -6,6 +6,10 @@
  * touches Tauri, and nothing fakes the kernel — the two measured facts this batch rests on
  * (implementation.md 10 / 11) are exactly what gets asserted.
  *
+ * Scope: the load layer covers a plugin's **in-process part** (`parts.frontend`) — which is why
+ * "frontend" appears in the names it exports. The `backend` part is a child process and belongs to
+ * K2.6; nothing here loads, starts or stops it (docs/design/host.md).
+ *
  * The fixture's event name and service key are declared by the *host* side, which is the point of
  * kernel.md 1.9: the kernel ships mechanisms, the host names things.
  */
@@ -15,11 +19,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ERROR_CODES,
   FIBER_STATE,
-  createLoader,
+  createFrontendLoader,
   isPluginError,
   loadPluginModule,
-  unloadPlugin,
-  type LoadedPlugin,
+  unloadFrontend,
+  type LoadedFrontend,
   type PluginHostBridge,
 } from '../src/index'
 
@@ -44,7 +48,7 @@ const fixtureURL = (name: string) => new URL(`./fixtures/${name}`, import.meta.u
  */
 const fakeBridge: PluginHostBridge = { moduleURL: async (path) => fixtureURL(path) }
 
-const loader = createLoader(fakeBridge)
+const loader = createFrontendLoader(fakeBridge)
 
 const tick = (ms = 10) => new Promise<void>((resolve) => {
   setTimeout(resolve, ms)
@@ -127,9 +131,9 @@ describe('load: the verdict is the fiber state, not the plugin call', () => {
     ctx.emit('fixture/ping')
     expect(fixture.seen.pings).toBe(1)
 
-    unloadPlugin(loaded)
+    unloadFrontend(loaded)
 
-    // unloadPlugin deliberately does not hand back the dispose promise, so completion is observed
+    // unloadFrontend deliberately does not hand back the dispose promise, so completion is observed
     // the way a host observes it. Two signals, two meanings (measured):
     //   uid → null        "it is gone" — also true for never-activated and stuck plugins
     //   state → DISPOSED  "teardown really finished" — only a plugin that was ACTIVE gets here,
@@ -152,7 +156,7 @@ describe('load: the verdict is the fiber state, not the plugin call', () => {
     // registrations gone has to unload it explicitly
     expect(loaded.fiber.uid).not.toBeNull()
 
-    unloadPlugin(loaded)
+    unloadFrontend(loaded)
     expect(await waitUntil(() => loaded.fiber.uid === null)).toBe(true)
   })
 })
@@ -210,7 +214,7 @@ describe('unload', () => {
     await tick(20)
     expect(fiber.state).toBe(FIBER_STATE.LOADING)
 
-    const loaded: LoadedPlugin = {
+    const loaded: LoadedFrontend = {
       path: 'stuck',
       url: 'stuck',
       module: {},
@@ -219,11 +223,11 @@ describe('unload', () => {
       error: null,
     }
 
-    expect(unloadPlugin(loaded)).toBeUndefined()
+    expect(unloadFrontend(loaded)).toBeUndefined()
     expect(await waitUntil(() => fiber.uid === null)).toBe(true)
     // ...and the stuck state is not magically resolved: nothing was awaited
     expect(fiber.state).toBe(FIBER_STATE.LOADING)
 
-    expect(() => unloadPlugin(loaded)).not.toThrow()
+    expect(() => unloadFrontend(loaded)).not.toThrow()
   })
 })

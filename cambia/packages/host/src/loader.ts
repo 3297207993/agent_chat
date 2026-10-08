@@ -1,5 +1,12 @@
 /**
- * The load layer (K2.2): `import()` a plugin module, decide activation, and take it back down.
+ * The load layer (K2.2): `import()` a plugin's **in-process part**, decide activation, and take it
+ * back down.
+ *
+ * Scope, spelled out because the package name alone is not specific enough: a plugin has up to two
+ * parts (kernel.md 3), and this layer owns the `frontend` one — the single-file ESM bundle that
+ * becomes a cordis plugin in the same realm. The `backend` part is a separate process started by the
+ * host's supervisor (K2.6); nothing here starts, stops or even knows about it. So the names in this
+ * file say "frontend" wherever they would otherwise read as "the plugin".
  *
  * Two measured facts shape every line here (implementation.md 10 / 11, pinned as regressions by
  * `packages/core/test/semantics/`):
@@ -96,15 +103,21 @@ export async function loadPluginModule(url: string, options: LoadPluginModuleOpt
   return module
 }
 
-export interface LoadOptions {
+export interface FrontendLoadOptions {
   /** Passed to `ctx.plugin` as the plugin config. The manifest has no such field: it is the host's own data. */
   config?: unknown
   /** See `loadPluginModule`. */
   requireApply?: boolean
 }
 
-/** The record of one load attempt, landed. */
-export interface LoadedPlugin {
+/**
+ * The record of one load attempt of a plugin's **in-process part**, landed.
+ *
+ * When the backend half arrives (K2.6) this becomes the `frontend` field of a `PluginRecord` keyed by
+ * plugin id (docs/design/host.md); until then it is the only half there is, which is exactly why its
+ * name says so.
+ */
+export interface LoadedFrontend {
   /** Plugin-root-relative path this was loaded from (K2.4 defines how it is built). */
   path: string
   url: string
@@ -117,9 +130,9 @@ export interface LoadedPlugin {
   error: unknown
 }
 
-export interface PluginLoader {
+export interface FrontendLoader {
   /**
-   * One complete load attempt: path → URL → module → verdict.
+   * One complete load attempt of the in-process part: path → URL → module → verdict.
    *
    * Resolves **only** on `ACTIVE` or `FAILED` — never on `PENDING` / `LOADING`, because those are
    * not conclusions (a plugin whose dependencies never arrive would otherwise be reported as
@@ -127,10 +140,10 @@ export interface PluginLoader {
    * keeps the `internal/status` subscription alive: that is a refusal to lie, not a hang waiting to
    * be discovered, and the timeout is what ends the wait.
    */
-  load(ctx: KernelContext, path: string, options?: LoadOptions): Promise<LoadedPlugin>
+  load(ctx: KernelContext, path: string, options?: FrontendLoadOptions): Promise<LoadedFrontend>
 }
 
-export function createLoader(bridge: PluginHostBridge): PluginLoader {
+export function createFrontendLoader(bridge: PluginHostBridge): FrontendLoader {
   return {
     async load(ctx, path, options = {}) {
       const url = await bridge.moduleURL(path)
@@ -176,8 +189,8 @@ export function createLoader(bridge: PluginHostBridge): PluginLoader {
 }
 
 /**
- * Take a plugin back down: every registration in effect is undone, the service keys it held
- * disappear, and the fiber is recycled (kernel.md 6.2 — this is what "disabled" means).
+ * Take a plugin's **in-process part** back down: every registration in effect is undone, the service
+ * keys it held disappear, and the fiber is recycled (kernel.md 6.2 — this is what "disabled" means).
  *
  * `dispose()` is deliberately neither awaited nor inspected:
  *
@@ -188,8 +201,8 @@ export function createLoader(bridge: PluginHostBridge): PluginLoader {
  *   for either shape.
  *
  * Completion is observed from the outside as `fiber.uid === null` or the `2→5→4` status events.
- * Unload failures are absorbed here; recording them is K2.3's job (docs/design/host.md).
+ * Unload rejections are absorbed here; recording them is K2.3's job (docs/design/host.md).
  */
-export function unloadPlugin(plugin: LoadedPlugin): void {
+export function unloadFrontend(plugin: LoadedFrontend): void {
   Promise.resolve(plugin.fiber.dispose()).catch(() => {})
 }
