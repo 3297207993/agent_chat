@@ -6,7 +6,9 @@
  */
 
 import type { ComponentType } from "react";
-import type { AgentChatDB } from "@/lib/db/database";
+// 相对路径而不是 `@/`：本模块是插件可见的宿主模块，用别名会让插件侧的边界检查
+// （tsconfig.plugins.json 里 `paths` 为空）解析不到它，见 §1.2 的通道边界
+import type { AgentChatDB } from "../lib/db/database";
 
 declare module "@cambia/core" {
   interface Services {
