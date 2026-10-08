@@ -1,6 +1,6 @@
 import type { Context } from "@cambia/core";
 import { navigate } from "../../navigation";
-import type { ViewItemBase, ViewsService } from "../../vocabulary";
+import type { ViewItemBase, ViewsService } from "@agent-chat/plugin-api";
 
 export const name = "views";
 

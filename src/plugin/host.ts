@@ -8,8 +8,8 @@ import {
   parseManifest,
   type Manifest,
 } from "@cambia/host";
-import storageManifest from "./builtin/storage/cambia.json";
-import viewsManifest from "./builtin/views/cambia.json";
+import storageManifest from "./host-pieces/storage/cambia.json";
+import viewsManifest from "./host-pieces/views/cambia.json";
 import "./vocabulary";
 
 /**
@@ -32,8 +32,8 @@ const CATALOG_PATH = "plugins/index.json";
  * 唯一的区别。功能插件一律从插件目录装载：读 manifest 文本 → 校验 → 解析入口 URL → import。
  */
 const HOST_MODULES: Record<string, () => Promise<unknown>> = {
-  storage: () => import("./builtin/storage"),
-  views: () => import("./builtin/views"),
+  storage: () => import("./host-pieces/storage"),
+  views: () => import("./host-pieces/views"),
 };
 
 /** 宿主件自己的 manifest。宿主件没有磁盘包，所以走编译期导入（`resolveJsonModule` 已开）。 */

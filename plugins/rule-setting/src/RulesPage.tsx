@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { ContributionProps, Rule, RuleScope, RuleType, RuleFormat } from "../../vocabulary";
+import type { ContributionProps, Rule, RuleScope, RuleType, RuleFormat } from "@agent-chat/plugin-api";
 import { useCategories, useConversations, useRules } from "./useSessions";
 import {
   BookOpen,

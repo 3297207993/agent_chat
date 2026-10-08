@@ -166,6 +166,9 @@ importers:
 
   .:
     dependencies:
+      '@agent-chat/plugin-api':
+        specifier: link:./packages/plugin-api
+        version: link:packages/plugin-api
       '@ai-sdk/anthropic':
         specifier: ^4.0.23
         version: 4.0.23(zod@4.4.3)

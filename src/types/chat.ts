@@ -1,9 +1,8 @@
 /**
  * 宿主还在用的对话域类型。
  *
- * `Conversation` / `Category` 已随 message 插件搬走（pluginization.md §2.2）：
- * 见 `src/plugin/builtin/message/types.ts`。这里留着的 `Message` / `MessageContent` 是 llm 侧的
- * 词汇表，等 llm 插件落地再跟过去。
+ * `Conversation` / `Category` 等契约已搬进 `@agent-chat/plugin-api`（见 `packages/plugin-api/`）。
+ * 这里留着的 `Message` / `MessageContent` 是 llm 侧的词汇表，等 llm 插件落地再跟过去。
  */
 
 export interface Message {

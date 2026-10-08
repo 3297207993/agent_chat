@@ -1,5 +1,5 @@
 import { Tag } from "lucide-react";
-import type { ContributionProps } from "../../vocabulary";
+import type { ContributionProps } from "@agent-chat/plugin-api";
 import { useCategories, useCurrentConversation, useRules } from "./useSessions";
 
 export default function RulesTab({ ctx }: ContributionProps) {

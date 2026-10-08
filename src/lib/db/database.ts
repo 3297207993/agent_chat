@@ -1,39 +1,14 @@
 import Dexie, { type EntityTable } from "dexie";
+import type {
+  CategoryRow,
+  ConversationRow,
+  MessageRow,
+  RuleRow,
+} from "@agent-chat/plugin-api";
 
-export interface ConversationRow {
-  id: string;
-  title: string;
-  categoryId?: string;
-  modelId: string;
-  providerId: string;
-  systemPrompt?: string;
-  ruleIds?: string; // JSON.stringify(string[])
-  pinned: number; // 0/1
-  createdAt: number;
-  updatedAt: number;
-  messageCount: number;
-}
-
-export interface MessageRow {
-  id?: number; // Dexie 自增主键，新增时不传
-  conversationId: string;
-  role: "user" | "assistant" | "system";
-  content: string; // JSON.stringify(MessageContent[])
-  parentId?: string;
-  tokenCount: number;
-  createdAt: number;
-  status: "pending" | "streaming" | "done" | "error";
-}
-
-export interface CategoryRow {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-  sortOrder: number;
-  ruleIds?: string; // JSON.stringify(string[])
-  createdAt: number;
-}
+// 行的形状归 `@agent-chat/plugin-api`（它是插件看得见的契约：`ctx.storage.db` 的表就长这样）。
+// 这里只声明引擎本身——表结构的版本声明归宿主，插件不能自己加表（pluginization.md §2.2）。
+export type { CategoryRow, ConversationRow, MessageRow, RuleRow };
 
 export interface McpServerRow {
   id: string;
@@ -43,22 +18,6 @@ export interface McpServerRow {
   args?: string; // JSON.stringify(string[])
   url?: string;
   env?: string; // JSON.stringify(Record<string, string>)
-  enabled: number; // 0/1
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface RuleRow {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  format: "markdown" | "yaml";
-  type: "always" | "manual";
-  scope: "global" | "category" | "conversation";
-  categoryId?: string;
-  conversationId?: string;
-  globs?: string; // JSON.stringify(string[])
   enabled: number; // 0/1
   createdAt: number;
   updatedAt: number;

@@ -1,19 +1,20 @@
 {
   // 插件包的边界检查（pluginization.md §1.2）：插件只能走两条通道——服务方法与类型化事件，
-  // 也就是只许依赖 `@cambia/core`（类型）与宿主词汇表的类型，**不许 import 宿主内部模块**。
+  // 也就是只许依赖 `@cambia/core`（类型）与契约包 `@agent-chat/plugin-api`（类型），
+  // **不许 import 宿主内部模块**。
   //
-  // 机制：继承主配置后把 `paths` 清空，于是应用内那套 `@/*` 别名在这里解析不到——插件里写
-  // `import "@/stores/uiStore"` 会直接编译失败。位置不决定边界，能解析到什么才决定。
+  // 机制：继承主配置后把 `paths` 清空，于是宿主那套 `@/*` 别名在这里解析不到——插件里写
+  // `import "@/stores/uiStore"` 直接编译失败。插件自身也各有 tsconfig（`plugins/<name>/`），
+  // 这里是**一次覆盖全部插件包**的汇总检查，挂在 `prebuild` 上。
   //
-  // 排除项是**宿主件**（§2 / §6：由宿主提供、不可卸载），它们的实现本来就包着宿主内部：
-  // `storage` 现在直接读 `@/lib/db/database` 的引擎与 `reset()`。这个豁免随"表定义搬进插件"
-  // 或"插件配置通道定案"而消失，见 §2.2 待定项。
+  // 宿主件（§2 / §6：由宿主提供、不可卸载）不在这里：它们本来就包着宿主内部，住在
+  // `src/plugin/host-pieces/`，由主 tsconfig 负责。
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
     "paths": {}
   },
-  "include": ["src/plugin/builtin"],
-  "exclude": ["src/plugin/builtin/storage"],
+  "include": ["plugins"],
+  "exclude": ["plugins/*/dist"],
   "references": []
 }

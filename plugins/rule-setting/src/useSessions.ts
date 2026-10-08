@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, useCallback } from "react";
 import type { Context } from "@cambia/core";
-import type { Category, Conversation, Rule } from "../../vocabulary";
+import type { Category, Conversation, Rule } from "@agent-chat/plugin-api";
 
 /**
  * 插件侧的会话数据视图。

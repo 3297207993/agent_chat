@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { hostContext } from "@/plugin";
-import type { Category } from "@/plugin/builtin/message/types";
+import type { Category } from "@agent-chat/plugin-api";
 import { useUIStore } from "@/stores/uiStore";
 
 /** 数据层的唯一通道：message 插件通过 `ctx.sessions` 提供（pluginization.md §2）。 */

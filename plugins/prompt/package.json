@@ -1,0 +1,21 @@
+{
+    "name":  "@agent-chat/plugin-prompt",
+    "version":  "0.1.0",
+    "private":  true,
+    "description":  "全局系统提示词与变更通知（认领 ctx.prompt）",
+    "type":  "module",
+    "scripts":  {
+                    "build":  "node ../../scripts/build-plugin.mjs .",
+                    "check":  "tsc -p tsconfig.json"
+                },
+    "dependencies":  {
+                         "@agent-chat/plugin-api":  "link:../../packages/plugin-api"
+                     },
+    "peerDependencies":  {
+                             "@cambia/core":  "*"
+                         },
+    "devDependencies":  {
+                            "@cambia/core":  "link:../../cambia/packages/core",
+                            "typescript":  "~5.8.3"
+                        }
+}

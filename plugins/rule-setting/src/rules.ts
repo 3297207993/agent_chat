@@ -1,6 +1,6 @@
 import type { Context } from "@cambia/core";
-import type { Category, Conversation, RulesService, StorageService } from "../../vocabulary";
-import type { Rule, RuleDraft, RulePatch } from "./types";
+import type { Category, Conversation, RulesService, StorageService } from "@agent-chat/plugin-api";
+import type { Rule, RuleDraft, RulePatch } from "@agent-chat/plugin-api";
 
 /**
  * `ctx.rules` 的实现：规则表的存取 + 绑定解析（pluginization.md §2 的 rule-setting）。

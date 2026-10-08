@@ -16,6 +16,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@agent-chat/plugin-api": "link:./packages/plugin-api",
     "@ai-sdk/anthropic": "^4.0.23",
     "@ai-sdk/deepseek": "^3.0.12",
     "@ai-sdk/google": "^4.0.26",

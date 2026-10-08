@@ -1,0 +1,21 @@
+{
+    "name":  "@agent-chat/plugin-message",
+    "version":  "0.1.0",
+    "private":  true,
+    "description":  "对话 / 消息 / 分类的存取 + 当前对话 + 会话事件（认领 ctx.sessions）",
+    "type":  "module",
+    "scripts":  {
+                    "build":  "node ../../scripts/build-plugin.mjs .",
+                    "check":  "tsc -p tsconfig.json"
+                },
+    "dependencies":  {
+                         "@agent-chat/plugin-api":  "link:../../packages/plugin-api"
+                     },
+    "peerDependencies":  {
+                             "@cambia/core":  "*"
+                         },
+    "devDependencies":  {
+                            "@cambia/core":  "link:../../cambia/packages/core",
+                            "typescript":  "~5.8.3"
+                        }
+}

@@ -1,6 +1,6 @@
 import type { Context } from "@cambia/core";
 import { db, resetDatabase } from "@/lib/db/database";
-import type { StorageService } from "../../vocabulary";
+import type { StorageService } from "@agent-chat/plugin-api";
 
 export const name = "storage";
 

@@ -1,6 +1,6 @@
 import type { Context } from "@cambia/core";
 import { BookOpen } from "lucide-react";
-import type { TopbarAction } from "../../vocabulary";
+import type { TopbarAction } from "@agent-chat/plugin-api";
 import { createRulesService } from "./rules";
 import RulesPage from "./RulesPage";
 import RulesTab from "./RulesTab";

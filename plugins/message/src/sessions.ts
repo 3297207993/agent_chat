@@ -1,5 +1,5 @@
 import type { Context } from "@cambia/core";
-import type { SessionChange, SessionsService, StorageService } from "../../vocabulary";
+import type { SessionChange, SessionsService, StorageService } from "@agent-chat/plugin-api";
 
 /**
  * `ctx.sessions` 的实现：对话 / 消息 / 分类三张表的唯一入口（pluginization.md §2）。

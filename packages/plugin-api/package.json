@@ -1,0 +1,26 @@
+{
+  "name": "@agent-chat/plugin-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "agent_chat 的插件契约：服务键位、事件、UI 槽位与领域类型（**只有类型**）",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts"
+    }
+  },
+  "//": "只有类型，没有构建产物：消费方一律 `import type`，编译后被完全擦除。等要发布给外部插件作者时，再补一份 .d.ts 产物与版本策略。",
+  "dependencies": {
+    "@cambia/core": "link:../../cambia/packages/core"
+  },
+  "peerDependencies": {
+    "dexie": "^4",
+    "react": "^19"
+  },
+  "devDependencies": {
+    "dexie": "^4.4.4",
+    "react": "^19.1.0",
+    "typescript": "~5.8.3"
+  }
+}

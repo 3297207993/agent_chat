@@ -1,0 +1,22 @@
+{
+    "name":  "@agent-chat/plugin-legacy-nav",
+    "version":  "0.1.0",
+    "private":  true,
+    "description":  "顶栏管理入口的过渡件：逐行删掉，迁走的插件自己注册入口",
+    "type":  "module",
+    "scripts":  {
+                    "build":  "node ../../scripts/build-plugin.mjs .",
+                    "check":  "tsc -p tsconfig.json"
+                },
+    "dependencies":  {
+                         "@agent-chat/plugin-api":  "link:../../packages/plugin-api"
+                     },
+    "peerDependencies":  {
+                             "@cambia/core":  "*"
+                         },
+    "devDependencies":  {
+                            "@cambia/core":  "link:../../cambia/packages/core",
+                            "lucide-react":  "^1.25.0",
+                            "typescript":  "~5.8.3"
+                        }
+}

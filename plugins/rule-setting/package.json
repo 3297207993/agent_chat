@@ -1,0 +1,24 @@
+{
+    "name":  "@agent-chat/plugin-rule-setting",
+    "version":  "0.1.0",
+    "private":  true,
+    "description":  "规则：数据层 + 绑定解析 + 页面 + 右侧面板页签（认领 ctx.rules）",
+    "type":  "module",
+    "scripts":  {
+                    "build":  "node ../../scripts/build-plugin.mjs .",
+                    "check":  "tsc -p tsconfig.json"
+                },
+    "dependencies":  {
+                         "@agent-chat/plugin-api":  "link:../../packages/plugin-api"
+                     },
+    "peerDependencies":  {
+                             "@cambia/core":  "*",
+                             "react":  "^19"
+                         },
+    "devDependencies":  {
+                            "@cambia/core":  "link:../../cambia/packages/core",
+                            "react":  "^19.1.0",
+                            "lucide-react":  "^1.25.0",
+                            "typescript":  "~5.8.3"
+                        }
+}

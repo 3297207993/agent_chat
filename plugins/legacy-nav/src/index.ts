@@ -1,6 +1,6 @@
 import { Bug, Brain, Plug, Zap } from "lucide-react";
 import type { Context } from "@cambia/core";
-import type { TopbarAction } from "../../vocabulary";
+import type { TopbarAction } from "@agent-chat/plugin-api";
 
 export const name = "legacy-nav";
 

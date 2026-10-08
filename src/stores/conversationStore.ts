@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { hostContext } from "@/plugin";
 import type { Message, MessageContent } from "@/types/chat";
-import type { Conversation, StoredMessage } from "@/plugin/builtin/message/types";
+import type { Conversation, StoredMessage } from "@agent-chat/plugin-api";
 import { resetDatabase } from "@/lib/db/database";
 import { estimateMessageTokens } from "@/lib/ai/tokenizer";
 import { useUIStore } from "@/stores/uiStore";

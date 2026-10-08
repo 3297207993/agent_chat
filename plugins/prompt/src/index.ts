@@ -1,5 +1,5 @@
 import type { Context } from "@cambia/core";
-import type { PromptService } from "../../vocabulary";
+import type { PromptService } from "@agent-chat/plugin-api";
 
 export const name = "prompt";
 

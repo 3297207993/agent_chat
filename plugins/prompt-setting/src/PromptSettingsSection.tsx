@@ -1,6 +1,6 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { Check, X } from "lucide-react";
-import type { ContributionProps } from "../../vocabulary";
+import type { ContributionProps } from "@agent-chat/plugin-api";
 
 /**
  * 「系统提示词」设置分组。原先在 `components/settings/SystemPromptSettings.tsx`，跟着它的插件搬进来。
