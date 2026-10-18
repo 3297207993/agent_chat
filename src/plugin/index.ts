@@ -3,7 +3,7 @@ export { bootHost, hostContext } from "./host";
 export { PluginHostProvider, useGlobalSystemPrompt, useHost, useViewSlot } from "./react";
 export type {
   AppService,
-  CommandResult,
+  CommandOutput,
   ContributionProps,
   FileSystemService,
   MainPage,

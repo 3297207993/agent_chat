@@ -1,41 +1,56 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, FileSystemService } from "@agent-chat/plugin-api";
+import type { FileSystemService } from "@agent-chat/plugin-api";
+import { invokeCommand, splitLines } from "./wire";
 
 /**
- * `ctx.fs` 的实现：只做命令转发。
+ * `ctx.fs` 的实现：把遗留的 Tauri 命令拆成领域结果。
  *
- * 不把 `success: false` 转成异常——现有工具层把整份结果 JSON 化后回注给模型，语义要保持不动。
- * 参数按 Tauri 的 camelCase 约定传（Rust 的 `old_string` ← `oldString`）。
+ * 命令信封只留在 `wire.ts`；这里成功给值、失败抛错。参数按 Tauri 的 camelCase 约定传
+ * （Rust 的 `old_string` ← `oldString`）。
  */
 export function createFileSystemService(): FileSystemService {
   return {
-    readFile: (path) => invoke<CommandResult>("read_file", { path }),
+    readText: (path) => invokeCommand("read_file", { path }),
 
-    writeFile: (path, content) =>
-      invoke<CommandResult>("write_file", { path, content }),
+    writeText: async (path, content) => {
+      await invokeCommand("write_file", { path, content });
+    },
 
-    editFile: (path, oldString, newString) =>
-      invoke<CommandResult>("edit_file", { path, oldString, newString }),
+    editText: async (path, oldText, newText) => {
+      await invokeCommand("edit_file", {
+        path,
+        oldString: oldText,
+        newString: newText,
+      });
+    },
 
-    deleteFile: (path) => invoke<CommandResult>("delete_file", { path }),
+    remove: async (path) => {
+      await invokeCommand("delete_file", { path });
+    },
 
-    copyDirectory: (src, dst) =>
-      invoke<CommandResult>("copy_directory", { src, dst }),
+    copy: async (src, dst) => {
+      await invokeCommand("copy_directory", { src, dst });
+    },
 
-    listDirectory: (path, glob) =>
-      invoke<CommandResult>("list_directory", { path, glob: glob ?? null }),
+    list: async (path, glob) =>
+      splitLines(
+        await invokeCommand("list_directory", { path, glob: glob ?? null }),
+      ),
 
-    searchFile: (pattern, path) =>
-      invoke<CommandResult>("search_file", {
-        pattern,
-        path: path ?? null,
-      }),
+    searchFiles: async (pattern, path) =>
+      splitLines(
+        await invokeCommand("search_file", {
+          pattern,
+          path: path ?? null,
+        }),
+      ),
 
-    searchContent: (pattern, path, glob) =>
-      invoke<CommandResult>("search_content", {
-        pattern,
-        path: path ?? null,
-        glob: glob ?? null,
-      }),
+    searchText: async (pattern, path, glob) =>
+      splitLines(
+        await invokeCommand("search_content", {
+          pattern,
+          path: path ?? null,
+          glob: glob ?? null,
+        }),
+      ),
   };
 }

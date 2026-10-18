@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, ShellService } from "@agent-chat/plugin-api";
+import type { ShellService } from "@agent-chat/plugin-api";
+import { invokeRaw } from "./wire";
 
 /** Rust `execute_script` 的原始返回（snake_case）。 */
 interface RawScriptResult {
@@ -12,19 +13,25 @@ interface RawScriptResult {
 /**
  * `ctx.shell` 的实现。
  *
- * 参数名按 Tauri 的 camelCase 约定（Rust 的 `timeout_secs` ← `timeoutSecs`）；脚本结果是结构化
- * 返回，出口把 snake_case 转成契约里的 camelCase。
+ * 参数名按 Tauri 的 camelCase 约定（Rust 的 `timeout_secs` ← `timeoutSecs`）。命令的非零退出
+ * 是正常结果（`success: false` + stderr），执行本身失败（spawn / 超时）由 invoke 抛错。
  */
 export function createShellService(): ShellService {
   return {
-    executeCommand: (command, options = {}) =>
-      invoke<CommandResult>("execute_command", {
+    async run(command, options = {}) {
+      const result = await invokeRaw("execute_command", {
         command,
         cwd: options.cwd ?? null,
         timeoutSecs: options.timeoutSecs ?? null,
-      }),
+      });
+      return {
+        success: result.success,
+        stdout: result.content,
+        stderr: result.error ?? "",
+      };
+    },
 
-    async executeScript(argv, options) {
+    async runScript(argv, options) {
       const result = await invoke<RawScriptResult>("execute_script", {
         argv,
         cwd: options.cwd,

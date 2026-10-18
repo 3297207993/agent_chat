@@ -85,15 +85,15 @@ export interface StorageService {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Tauri 命令的统一返回形状（`src-tauri/src/commands/mod.rs` 的 `CommandResult`）。
+ * 命令执行的领域结果。
  *
- * 平台层**原样转交**这个结果，不替调用方判断 `success`：要抛错还是把失败文本交给模型，是工具层
- * 自己的决定（现有工具就是把整份结果 JSON 化后回注给模型）。
+ * 非零退出**不是异常**：命令正常跑完但失败时返回 `success: false`，stdout / stderr 仍然有值，
+ * 交给调用方决定怎么呈现。只有 spawn 失败、超时这类执行本身失败才由平台层抛错。
  */
-export interface CommandResult {
+export interface CommandOutput {
   readonly success: boolean;
-  readonly content: string;
-  readonly error?: string | null;
+  readonly stdout: string;
+  readonly stderr: string;
 }
 
 /**
@@ -118,19 +118,29 @@ export interface ShellScriptOptions {
 }
 
 /**
- * `ctx.fs`：文件系统命令桥（`commands/file.rs` / `search.rs`）。
+ * `ctx.fs`：文件系统能力（`commands/file.rs` / `search.rs`）。
  *
- * 方法名与 Rust 命令一一对应，路径校验仍在 Rust 侧（`security.rs`），这里不做第二套。
+ * 对外是**领域结果**，不是 Tauri 命令的返回信封：成功给值，失败抛错。命令信封（`success` /
+ * `content` / `error`）只留在平台实现里。路径校验仍在 Rust 侧（`security.rs`），这里不做第二套。
  */
 export interface FileSystemService {
-  readFile(path: string): Promise<CommandResult>;
-  writeFile(path: string, content: string): Promise<CommandResult>;
-  editFile(path: string, oldString: string, newString: string): Promise<CommandResult>;
-  deleteFile(path: string): Promise<CommandResult>;
-  copyDirectory(src: string, dst: string): Promise<CommandResult>;
-  listDirectory(path: string, glob?: string): Promise<CommandResult>;
-  searchFile(pattern: string, path?: string): Promise<CommandResult>;
-  searchContent(pattern: string, path?: string, glob?: string): Promise<CommandResult>;
+  /** 读取 UTF-8 文本；文件不存在 / 不可读时抛错。 */
+  readText(path: string): Promise<string>;
+  writeText(path: string, content: string): Promise<void>;
+  editText(path: string, oldText: string, newText: string): Promise<void>;
+  /** 删除文件或目录；目录递归删除，语义由 Rust 命令决定。 */
+  remove(path: string): Promise<void>;
+  /** 复制目录（递归）；目标已存在时由 Rust 命令决定覆盖语义。 */
+  copy(src: string, dst: string): Promise<void>;
+
+  /** 目录项；子目录带尾随 `/`（与 Rust 命令的展示约定一致）。 */
+  list(path: string, glob?: string): Promise<string[]>;
+  searchFiles(pattern: string, path?: string): Promise<string[]>;
+  /**
+   * 内容搜索。每项暂时沿用 Rust 的 `path:line:text` 文本格式——结构化匹配需要 Rust 命令一起
+   * 改成返回结构体，等搜索要渲染成卡片时再做。
+   */
+  searchText(pattern: string, path?: string, glob?: string): Promise<string[]>;
 }
 
 /**
@@ -140,18 +150,17 @@ export interface FileSystemService {
  * 包进审批管线，平台层自己不做权限判断。
  */
 export interface ShellService {
-  executeCommand(command: string, options?: ShellCommandOptions): Promise<CommandResult>;
-  executeScript(argv: string[], options: ShellScriptOptions): Promise<ScriptResult>;
+  /** 执行 shell 命令；非零退出返回 `success: false`，不抛错。 */
+  run(command: string, options?: ShellCommandOptions): Promise<CommandOutput>;
+  runScript(argv: string[], options: ShellScriptOptions): Promise<ScriptResult>;
 }
 
 /**
- * `ctx.app`：应用级命令（`commands/system.rs`）。
- *
- * `getDataDir` 在失败时抛错（调用方要的是路径，不是失败结果）；`previewUrl` 原样返回命令结果。
+ * `ctx.app`：应用级能力（`commands/system.rs`）。
  */
 export interface AppService {
   getDataDir(): Promise<string>;
-  previewUrl(url: string): Promise<CommandResult>;
+  openUrl(url: string): Promise<void>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
