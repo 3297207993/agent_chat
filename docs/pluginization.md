@@ -31,7 +31,7 @@
 
 **契约包**：插件依赖 `@agent-chat/plugin-api`（`packages/plugin-api/`）取类型——服务键位、事件、UI 槽位与领域类型都在那里，**只有类型没有实现**，编译后不留任何运行时依赖。它同时是第三方作者唯一的契约来源：不依赖它就只能猜键位，写错要到运行期才发现。
 
-**宿主件是唯一的例外**：`storage` / `views`（以及外壳自身）由宿主**编译进来**，不可卸载（§2 / §6），住在 `src/plugin/host-pieces/`。它们不能成为独立包——`storage` 要拿宿主的 Dexie 引擎，打进去就是第二个实例、同一个库被打开两次。它们的入口在 `src/plugin/host.ts` 的 `HOST_MODULES` 里静态映射，其余（读 manifest、engines 判定、等 `ACTIVE`）与插件包完全同一套关。
+**宿主件是唯一的例外**：`storage` / `views` / `platform`（以及外壳自身）由宿主**编译进来**，不可卸载（§2 / §6），住在 `src/plugin/host-pieces/`。它们不能成为独立包——`storage` 要拿宿主的 Dexie 引擎，打进去就是第二个实例、同一个库被打开两次；`platform` 的文件 / 命令访问属于宿主运行时的 OS 边界（Tauri 命令在编译期注册），做成前端插件包只会变成「调宿主命令的壳」，等 P5 的 backend 机制就绪、且真需要第二个 provider 时再拆。它们的入口在 `src/plugin/host.ts` 的 `HOST_MODULES` 里静态映射，其余（读 manifest、engines 判定、等 `ACTIVE`）与插件包完全同一套关。
 
 **如实说明它的边界**：这个检查只认别名形式，**刻意的相对路径逃逸（`../../../stores/uiStore`）不会被拦住**（实测确认）。要挡住那种写法得靠模块图的规则（如 `import/no-restricted-paths` 或一个小脚本），等第一个插件单测落地时再一起加。位置不决定边界——能解析到什么才决定。
 
@@ -50,7 +50,7 @@
 | agent | **chat-view** | 无 | 对话展示与输入（`components/chat/`）：观察 `agent/*` 事件拿流式增量，经 `ctx.views` 挂到外壳。**不认领键位** |
 | tools | **tools** | `ctx.tools` | 工具注册表、schema 汇集、受守卫的执行管线（`lib/ai/tools.ts`、`stores/toolStore.ts` 的注册/禁用部分、`components/layout/rightPanel/ToolsTab.tsx`） |
 | tools | **approval** | `ctx.approvals` | 监听 `tools/pre-execute` 的策略插件（`lib/ai/tools.ts` 的 `requirePermission`、`stores/toolStore.ts` 的审批部分、`components/settings/ToolPermissionSettings.tsx`）。与 tools **平级**，可单独启停 |
-| platform | **platform** | `ctx.fs`、`ctx.shell`、`ctx.app` | Tauri 命令桥：文件系统（`commands/file.rs`、`search.rs`、`security.rs`）、命令执行（`commands/shell.rs`）、应用目录（`commands/system.rs`）；前端调用点在 `lib/ai/tools.ts` 与 `services/skillService.ts`。tools 与 skills 共用 |
+| platform | **platform**（宿主件） | `ctx.fs`、`ctx.shell`、`ctx.app` | Tauri 命令桥：文件系统（`commands/file.rs`、`search.rs`、`security.rs`）、命令执行（`commands/shell.rs`）、应用目录（`commands/system.rs`）；前端调用点在 `lib/ai/tools.ts` 与 `services/skillService.ts`。tools 与 skills 共用。**已落地（P2a，宿主件）** 在 `src/plugin/host-pieces/platform/`：三个键位只做命令转发，不注册 UI、不参与审批；`security.rs` 的路径校验留在 Rust 侧。**不是可替换的功能插件**，理由见 §1.2 / §6 |
 | prompt | **prompt** | `ctx.prompt` | prompt section 装配（`lib/ai/runAgent.ts` 的 `buildSystemPrompt`）；各插件贡献 section。**已落地**：键位持有全局系统提示词（原寄生在 `stores/uiStore.ts`）与变更通知；装配本身仍在宿主 |
 | prompt | **prompt-setting** | 无 | 注册 settings section（**已落地**在 `plugins/prompt-setting/`，编辑组件随插件搬入）。**不认领键位** |
 | prompt | **rule-setting** | `ctx.rules` | 规则数据与**绑定解析**（迁移自 `stores/ruleStore.ts`、`lib/db/ruleDB.ts`、`pages/RulesPage.tsx`、`components/layout/rightPanel/RulesTab.tsx`；解析对话文档里的 `ruleIds` 与 `categories.ruleIds`——对话侧要自己解 payload）。**已落地**：插件同时认领 `ctx.rules`、注册页面（`main.page`）、右侧页签（`panel.tab`）与顶栏入口（`topbar.action`）——服务 + 状态 + UI 全在一个目录里，是第一个完整切片 |
@@ -122,6 +122,8 @@
 
 **P1 进度（2026-10-18）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、四个槽位（`topbar.action` / `settings.section` / `main.page` / `panel.tab`）、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`、`message`（`ctx.sessions`：分组 → 对话两级容器，对话内容是不透明文档，Dexie v5 迁移旧数据）、`rule-setting`（`ctx.rules` + 页面 + 页签 + 顶栏入口）已落地。**插件已改成独立包**（§1.2 的"形态"）：`plugins/<name>/` 各自有个 `package.json` / `tsconfig.json` / 构建脚本，依赖契约包 `@agent-chat/plugin-api`，宿主侧不再有编译期的插件表。`agent/*`、`tools/*` 等事件随各自域在 P2/P3 进插件，不再由会话层代发。**P1 已完成**，对话 / 规则 / 设置三条链路都实跑验证过（dev 与生产产物各一遍）。
 
+**P2a 进度（2026-10-18）**：`platform` **宿主件**已落地（`src/plugin/host-pieces/platform/`）——`ctx.fs` / `ctx.shell` / `ctx.app` 三个键位只做 Tauri 命令转发，不注册 UI、不参与审批。它不是功能插件：文件 / 命令访问被定为宿主运行时职责，随应用编译、不可卸载（§1.2 / §6）；`ctx.*` 契约仍是将来换 provider 的接缝。参数按 Tauri 的 camelCase 约定（Rust `timeout_secs` ← `timeoutSecs`），`executeScript` 在出口把 snake_case 结果转成 camelCase。`tools` / `approval` 两块尚未开始。
+
 **`ctx.renderers` 为什么后置（2026-10-18 决定）**：它不是 P1 的验收项，也没有任何现有代码引用它——删掉这一项应用照常跑。它的消费方是 `ChatMessage.tsx` 的 `switch (block.type)`，而那个组件要到 **P3 才搬进 chat-view 插件**，现在做等于给一个即将搬家的组件建接口。真正需要它的信号是「某个插件想让工具结果以专属卡片显示」（skills / MCP 都会撞上），或 chat-view 落地时要渲染非文本块。到那时要一起定的几件事：**形态**（React 组件 vs 声明式卡片规格——后者才能让第三方插件用，避开 §2.2 的 React 实例与 Tailwind 边界）、**未知类型的兜底**（现在是静默 `return null`）、**交互回传**（卡片上的按钮怎么通知注册方）、**key 版本化**（`search-results@1`，否则插件改了 data 形状，旧对话直接崩）。
 
 **P5 的前置被提前消化了一部分**：`@cambia/core` 与 `cordis` 的 external 约定、同 realm 共享依赖（React）、依赖图之外的部分（manifest 校验 / engines / 激活判定 / 入口解析）现在由宿主自己的流水线走通。P5 剩下的核心是 `.tap` 安装、`asset:` 通道与 CSP、以及宿主侧管理界面。
@@ -132,6 +134,7 @@
 
 - **宿主外壳插件化**：窗口、路由、主题、插槽容器留在宿主代码——用插件系统开发插件系统的自举困境会拖垮迭代速度。外壳**只暴露注册点**（`ctx.views` / `ctx.renderers`：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位），由宿主作为**不可卸载的内置插件**提供；插件往里注册，外壳自身不参与启停
 - **提前做 capability 三元分离**：蓝本把同一能力切成 definition / provider / consumer 三类包；本项目暂不这么切——当某个能力**真的出现第二个提供者**（例如远程或沙箱 fs）再拆包，现在拆只是为用不到的灵活性付样板成本。但**键位该独立的仍然独立**（`ctx.fs` / `ctx.shell` 从一开始就是接缝，不能塞进 tools）
+- **为通用文件 / 命令能力造插件后端**：`platform` 明确为宿主件（与 storage / views 同类），不按功能插件处理。等 P5 的 backend 机制就绪、且真出现第二个 provider（远程 / 沙箱 fs）时，再按上一条做 capability 拆包
 - **会话事件日志 / 投影读取（事件溯源）**：`ctx.sessions` 只保管「一坨不透明文档」，不做 append-only 日志、不做投影重建、不要求全序。这一层的目标是**让存储层不认识消息格式**，不是让存储层记住每一次变更。将来若真需要审计、撤销、远端同步，那属于对话域或独立插件的能力，不塞回存储层
 - **`ctx.renderers` 提前落地**：结构化渲染器键位后置到 P3（与 chat-view 一起定），不提前为用不到的扩展点付样板成本。现在的 `switch (block.type)` 只有三大件，够用；形态取舍与要一起定的几件事见 §5
 - **为覆盖率而迁移**：迁移按功能推进，未迁移部分保持普通模块形态；不为了"看起来全插件化"做无收益的搬运

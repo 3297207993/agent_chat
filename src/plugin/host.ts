@@ -8,6 +8,7 @@ import {
   parseManifest,
   type Manifest,
 } from "@cambia/host";
+import platformManifest from "./host-pieces/platform/cambia.json";
 import storageManifest from "./host-pieces/storage/cambia.json";
 import viewsManifest from "./host-pieces/views/cambia.json";
 import "./vocabulary";
@@ -34,12 +35,14 @@ const CATALOG_PATH = "plugins/index.json";
 const HOST_MODULES: Record<string, () => Promise<unknown>> = {
   storage: () => import("./host-pieces/storage"),
   views: () => import("./host-pieces/views"),
+  platform: () => import("./host-pieces/platform"),
 };
 
 /** 宿主件自己的 manifest。宿主件没有磁盘包，所以走编译期导入（`resolveJsonModule` 已开）。 */
 const HOST_MANIFEST_TEXT: Record<string, string> = {
   storage: JSON.stringify(storageManifest),
   views: JSON.stringify(viewsManifest),
+  platform: JSON.stringify(platformManifest),
 };
 
 /** 内置插件只支持随应用启动。按需激活（`<prefix>:<pattern>`）宿主侧还没实现。 */

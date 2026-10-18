@@ -81,6 +81,80 @@ export interface StorageService {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 平台能力：`ctx.fs` / `ctx.shell` / `ctx.app`（platform 宿主件）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Tauri 命令的统一返回形状（`src-tauri/src/commands/mod.rs` 的 `CommandResult`）。
+ *
+ * 平台层**原样转交**这个结果，不替调用方判断 `success`：要抛错还是把失败文本交给模型，是工具层
+ * 自己的决定（现有工具就是把整份结果 JSON 化后回注给模型）。
+ */
+export interface CommandResult {
+  readonly success: boolean;
+  readonly content: string;
+  readonly error?: string | null;
+}
+
+/**
+ * `execute_script` 的返回。Rust 侧字段是 snake_case，平台层在出口统一成 camelCase；超时不是
+ * `Err`，而是 `timedOut: true` + `exitCode: -1`（与 Rust 命令的约定一致）。
+ */
+export interface ScriptResult {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number;
+  readonly timedOut: boolean;
+}
+
+export interface ShellCommandOptions {
+  readonly cwd?: string;
+  readonly timeoutSecs?: number;
+}
+
+export interface ShellScriptOptions {
+  readonly cwd: string;
+  readonly timeoutSecs?: number;
+}
+
+/**
+ * `ctx.fs`：文件系统命令桥（`commands/file.rs` / `search.rs`）。
+ *
+ * 方法名与 Rust 命令一一对应，路径校验仍在 Rust 侧（`security.rs`），这里不做第二套。
+ */
+export interface FileSystemService {
+  readFile(path: string): Promise<CommandResult>;
+  writeFile(path: string, content: string): Promise<CommandResult>;
+  editFile(path: string, oldString: string, newString: string): Promise<CommandResult>;
+  deleteFile(path: string): Promise<CommandResult>;
+  copyDirectory(src: string, dst: string): Promise<CommandResult>;
+  listDirectory(path: string, glob?: string): Promise<CommandResult>;
+  searchFile(pattern: string, path?: string): Promise<CommandResult>;
+  searchContent(pattern: string, path?: string, glob?: string): Promise<CommandResult>;
+}
+
+/**
+ * `ctx.shell`：命令与脚本执行（`commands/shell.rs`）。
+ *
+ * 命令走 shell（`cmd /C` / `sh -c`），脚本走完整 argv（无 shell 拼接）；两者都可能被工具层
+ * 包进审批管线，平台层自己不做权限判断。
+ */
+export interface ShellService {
+  executeCommand(command: string, options?: ShellCommandOptions): Promise<CommandResult>;
+  executeScript(argv: string[], options: ShellScriptOptions): Promise<ScriptResult>;
+}
+
+/**
+ * `ctx.app`：应用级命令（`commands/system.rs`）。
+ *
+ * `getDataDir` 在失败时抛错（调用方要的是路径，不是失败结果）；`previewUrl` 原样返回命令结果。
+ */
+export interface AppService {
+  getDataDir(): Promise<string>;
+  previewUrl(url: string): Promise<CommandResult>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 会话：`ctx.sessions` —— 「分组 → 对话」两级容器，对话内容是不透明文档
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -395,6 +469,12 @@ declare module "@cambia/core" {
     storage: StorageService;
     /** 外壳的注册点。宿主提供，永不卸载（pluginization.md §6）。 */
     views: ViewsService;
+    /** 文件系统命令桥（pluginization.md §2 的 platform 宿主件）。 */
+    fs: FileSystemService;
+    /** 命令与脚本执行（pluginization.md §2 的 platform 宿主件）。 */
+    shell: ShellService;
+    /** 应用目录与系统打开（pluginization.md §2 的 platform 宿主件）。 */
+    app: AppService;
     /** prompt section 的装配与全局系统提示词（pluginization.md §2 的 prompt 组）。 */
     prompt: PromptService;
     /** 分组 / 对话文档的存取（pluginization.md §2 的 message 插件）。 */
