@@ -1,7 +1,7 @@
 import { memo } from "react";
+import type { ApprovalRequest } from "@agent-chat/plugin-api";
 import type { Message, MessageContent } from "@/types/chat";
-import type { ApprovalRequest } from "@/types/tool";
-import { useToolStore } from "@/stores/toolStore";
+import { useHost, usePendingApprovals } from "@/plugin";
 import ReasoningBlock from "./ReasoningBlock";
 import ToolCallCard from "./ToolCallCard";
 import CodeBlock from "./CodeBlock";
@@ -23,7 +23,7 @@ function MessageContentRenderer({
   resolveApproval,
 }: {
   content: MessageContent[];
-  approvalQueue: ApprovalRequest[];
+  approvalQueue: readonly ApprovalRequest[];
   resolveApproval: (id: string, approved: boolean) => void;
 }) {
   return (
@@ -98,8 +98,8 @@ function MessageContentRenderer({
 }
 
 function ChatMessage({ message, canRegenerate, onRegenerate }: Props) {
-  const approvalQueue = useToolStore((s) => s.approvalQueue);
-  const resolveApproval = useToolStore((s) => s.resolveApproval);
+  const approvalQueue = usePendingApprovals();
+  const resolveApproval = useHost().approvals.resolve;
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
 

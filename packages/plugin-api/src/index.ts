@@ -222,6 +222,34 @@ export interface ToolsService {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 审批：`ctx.approvals`（approval 插件）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 一条等待用户决定的工具调用。 */
+export interface ApprovalRequest {
+  readonly id: string;
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly args: Record<string, unknown>;
+  readonly createdAt: number;
+}
+
+/**
+ * `ctx.approvals`。
+ *
+ * 只暴露 UI 需要的那部分：待审批队列、用户决定、变更通知。权限模式与按工具覆盖归插件自己
+ * （设置界面也在插件里），不把策略配置做成公共契约。
+ */
+export interface ApprovalsService {
+  /** 当前待审批队列；同一批变更内引用稳定（给 `useSyncExternalStore` 用）。 */
+  getPending(): readonly ApprovalRequest[];
+  /** 用户对某条请求的决定。 */
+  resolve(id: string, approved: boolean): void;
+  /** 队列或决定变化通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 会话：`ctx.sessions` —— 「分组 → 对话」两级容器，对话内容是不透明文档
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -544,6 +572,8 @@ declare module "@cambia/core" {
     app: AppService;
     /** 工具注册表与受守卫的执行管线（pluginization.md §2 的 tools 插件）。 */
     tools: ToolsService;
+    /** 审批队列与用户决定（pluginization.md §2 的 approval 插件）。 */
+    approvals: ApprovalsService;
     /** prompt section 的装配与全局系统提示词（pluginization.md §2 的 prompt 组）。 */
     prompt: PromptService;
     /** 分组 / 对话文档的存取（pluginization.md §2 的 message 插件）。 */

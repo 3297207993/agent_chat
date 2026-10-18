@@ -1,6 +1,19 @@
-import { useToolStore } from "@/stores/toolStore";
-import type { PermissionMode, ToolPermissionOverride } from "@/types/tool";
+import {
+  useCallback,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import type { Context } from "@cambia/core";
 import { Shield, ShieldCheck, Zap, RotateCcw, Lock } from "lucide-react";
+import {
+  getPermissionSettings,
+  resetFirstTimeApprovals,
+  setPermissionMode,
+  setToolOverride,
+  subscribe,
+  type PermissionMode,
+  type ToolPermissionOverride,
+} from "./store";
 
 // ── 全局模式选项 ──
 
@@ -8,7 +21,7 @@ const MODE_OPTIONS: {
   value: PermissionMode;
   label: string;
   description: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }[] = [
   {
     value: "always_ask",
@@ -42,43 +55,30 @@ const OVERRIDE_OPTIONS: {
   { value: "deny", label: "禁止" },
 ];
 
-// ── 内置工具清单（P2c 改为从 ctx.tools 的注册项生成） ──
+/**
+ * 设置页的「工具权限」分组（pluginization.md §2 的 approval 插件）。
+ *
+ * 工具清单来自 `ctx.tools`，不再维护硬编码表：`approval === "always"` 的工具锁定为始终确认，
+ * `approval === "never"` 的工具根本不走审批，也不出现在这里。
+ */
+export default function ToolPermissionSettings({ ctx }: { ctx: Context }) {
+  const settings = useSyncExternalStore(subscribe, getPermissionSettings);
 
-interface BuiltinToolMeta {
-  name: string;
-  description: string;
-  /** 危险操作：始终强制确认，不允许被覆盖 */ alwaysConfirm: boolean;
-}
+  const subscribeTools = useCallback(
+    (listener: () => void) => ctx.tools.subscribe(listener),
+    [ctx],
+  );
+  const getTools = useCallback(() => ctx.tools.list(), [ctx]);
+  const tools = useSyncExternalStore(subscribeTools, getTools);
+  const visibleTools = tools.filter(
+    (tool) => (tool.approval ?? "default") !== "never",
+  );
 
-const BUILTIN_TOOLS: BuiltinToolMeta[] = [
-  { name: "read_file", description: "读取文件", alwaysConfirm: false },
-  { name: "write_file", description: "写入文件", alwaysConfirm: false },
-  { name: "edit_file", description: "编辑文件", alwaysConfirm: false },
-  {
-    name: "delete_file",
-    description: "删除文件",
-    alwaysConfirm: true,
-  },
-  { name: "list_directory", description: "浏览目录", alwaysConfirm: false },
-  { name: "search_file", description: "搜索文件", alwaysConfirm: false },
-  { name: "search_content", description: "搜索内容", alwaysConfirm: false },
-  {
-    name: "execute_command",
-    description: "执行命令",
-    alwaysConfirm: true,
-  },
-  { name: "preview_url", description: "打开链接", alwaysConfirm: false },
-];
-
-export default function ToolPermissionSettings() {
   const {
     permissionMode,
-    setPermissionMode,
     toolOverrides,
-    setToolOverride,
     firstTimeApproved,
-    resetFirstTimeApprovals,
-  } = useToolStore();
+  } = settings;
 
   return (
     <section className="mb-10">
@@ -130,9 +130,7 @@ export default function ToolPermissionSettings() {
           <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-app-bg border border-app-border">
             <div className="flex items-center gap-2 text-[12px] text-app-text-muted">
               <ShieldCheck size={13} className="shrink-0" />
-              <span>
-                本会话已授权 {firstTimeApproved.size} 个工具
-              </span>
+              <span>本会话已授权 {firstTimeApproved.size} 个工具</span>
             </div>
             <button
               onClick={resetFirstTimeApprovals}
@@ -151,17 +149,22 @@ export default function ToolPermissionSettings() {
             对单个工具单独设置，优先级高于全局模式（危险操作不可覆盖）
           </span>
           <div className="space-y-1.5">
-            {BUILTIN_TOOLS.map((tool) => {
-              const current = tool.alwaysConfirm
+            {visibleTools.map((tool) => {
+              const alwaysConfirm =
+                (tool.approval ?? "default") === "always";
+              const current = alwaysConfirm
                 ? "always_ask"
                 : toolOverrides[tool.name] ?? "default";
+              const description =
+                tool.description ?? tool.tool.description ?? "";
+
               return (
                 <div
                   key={tool.name}
                   className="flex items-center gap-3 px-3 py-2 rounded-lg bg-app-bg border border-app-border"
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    {tool.alwaysConfirm ? (
+                    {alwaysConfirm ? (
                       <Lock size={13} className="text-app-warning shrink-0" />
                     ) : (
                       <span className="w-1.5 h-1.5 rounded-full bg-app-accent shrink-0" />
@@ -170,9 +173,9 @@ export default function ToolPermissionSettings() {
                       {tool.name}
                     </span>
                     <span className="text-[11px] text-app-text-faint truncate hidden sm:inline">
-                      {tool.description}
+                      {description}
                     </span>
-                    {tool.alwaysConfirm && (
+                    {alwaysConfirm && (
                       <span className="text-[10px] text-app-warning shrink-0">
                         始终确认
                       </span>
@@ -181,7 +184,7 @@ export default function ToolPermissionSettings() {
 
                   <select
                     value={current}
-                    disabled={tool.alwaysConfirm}
+                    disabled={alwaysConfirm}
                     onChange={(e) =>
                       setToolOverride(
                         tool.name,

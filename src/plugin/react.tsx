@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Context } from "@cambia/core";
-import type { ViewItem, ViewSlot } from "./vocabulary";
+import type { ApprovalRequest, ViewItem, ViewSlot } from "./vocabulary";
 
 const HostContext = createContext<Context | null>(null);
 
@@ -28,6 +28,19 @@ export function useViewSlot<K extends ViewSlot>(slot: K): readonly ViewItem<K>[]
 
   const subscribe = useCallback((listener: () => void) => views.subscribe(listener), [views]);
   const getSnapshot = useCallback(() => views.list(slot), [views, slot]);
+
+  return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+/** 当前待审批队列；approval 插件解除请求后自动重渲染。 */
+export function usePendingApprovals(): readonly ApprovalRequest[] {
+  const approvals = useHost().approvals;
+
+  const subscribe = useCallback(
+    (listener: () => void) => approvals.subscribe(listener),
+    [approvals],
+  );
+  const getSnapshot = useCallback(() => approvals.getPending(), [approvals]);
 
   return useSyncExternalStore(subscribe, getSnapshot);
 }

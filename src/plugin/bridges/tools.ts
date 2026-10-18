@@ -2,7 +2,6 @@ import type { Context } from "@cambia/core";
 import type { ToolContribution, ToolLike } from "@agent-chat/plugin-api";
 import { tool } from "ai";
 import { z } from "zod";
-import { requirePermission } from "@/lib/ai/approval";
 import { parseSkillFile } from "@/lib/skills/parser";
 import {
   listSkillFiles,
@@ -13,14 +12,13 @@ import {
 import { useMcpStore } from "@/stores/mcpStore";
 
 /**
- * P2b 的宿主侧临时 bridges。
+ * 宿主侧临时 tool bridges。
  *
- * 这些能力最终都有自己的插件（P2c 的 approval、P4 的 mcp / skills），现在先把它们接到
- * `ctx.tools` 上，保证工具调用与审批流零回归。每迁走一块，就删掉这里对应的函数。
+ * skill / MCP 能力最终都有自己的插件（P4），现在先把它们接到 `ctx.tools` 上，保证工具调用零
+ * 回归。每迁走一块，就删掉这里对应的函数。
  */
 export function installToolBridges(ctx: Context): void {
   installSkillTools(ctx);
-  installApprovalBridge(ctx);
   installMcpBridge(ctx);
 }
 
@@ -122,30 +120,6 @@ function installSkillTools(ctx: Context): void {
   ];
 
   for (const contribution of tools) ctx.tools.register(contribution);
-}
-
-/**
- * 审批临时监听：P2c 会替换成 approval 插件。
- *
- * `approval` 元数据由 tools 注册表带给它；`read_skill` 标了 `never`，与迁移前完全一致。
- */
-function installApprovalBridge(ctx: Context): void {
-  ctx.on("tools/pre-execute", async (call, next) => {
-    const contribution = ctx.tools
-      .list()
-      .find((item) => item.name === call.toolName);
-    const approval = contribution?.approval ?? "default";
-
-    if (approval === "never") return next();
-
-    await requirePermission(
-      call.toolCallId,
-      call.toolName,
-      call.args,
-      approval === "always",
-    );
-    return next();
-  });
 }
 
 /**
