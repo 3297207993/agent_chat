@@ -48,9 +48,9 @@
 | core | **llm** | `ctx.llm` | provider 适配与模型解析（`lib/ai/providers.ts`、`registry.ts`、`stores/providerStore.ts`）、**消息与流的词汇表**（对话域的 `Message` / `MessageContent`，现在写在 `@agent-chat/plugin-api`；llm 插件落地后由它解释与演进）、上下文裁剪（`lib/ai/window.ts`） |
 | agent | **agent-loop** | `ctx.agentLoop` | Agent 生命周期、turn/step 驱动（`lib/ai/agent.ts`、`chat.ts`、`messages.ts`、`runAgent.ts` 的 `startAgentRun` / `stopStreaming` / `regenerateAssistant`） |
 | agent | **chat-view** | 无 | 对话展示与输入（`components/chat/`）：观察 `agent/*` 事件拿流式增量，经 `ctx.views` 挂到外壳。**不认领键位** |
-| tools | **tools** | `ctx.tools` | 工具注册表、schema 汇集、受守卫的执行管线（`lib/ai/tools.ts`、`stores/toolStore.ts` 的注册/禁用部分、`components/layout/rightPanel/ToolsTab.tsx`） |
-| tools | **approval** | `ctx.approvals` | 监听 `tools/pre-execute` 的策略插件（`lib/ai/tools.ts` 的 `requirePermission`、`stores/toolStore.ts` 的审批部分、`components/settings/ToolPermissionSettings.tsx`）。与 tools **平级**，可单独启停 |
-| platform | **platform**（宿主件） | `ctx.fs`、`ctx.shell`、`ctx.app` | Tauri 命令桥：文件系统（`commands/file.rs`、`search.rs`、`security.rs`）、命令执行（`commands/shell.rs`）、应用目录（`commands/system.rs`）；前端调用点在 `lib/ai/tools.ts` 与 `services/skillService.ts`。tools 与 skills 共用。**已落地（P2a，宿主件）** 在 `src/plugin/host-pieces/platform/`：三个键位只做命令转发，不注册 UI、不参与审批；`security.rs` 的路径校验留在 Rust 侧。**不是可替换的功能插件**，理由见 §1.2 / §6 |
+| tools | **tools** | `ctx.tools` | 工具注册表、schema 汇集、受守卫的执行管线（迁移自 `lib/ai/tools.ts`、`stores/toolStore.ts` 的注册/禁用部分、`components/layout/rightPanel/ToolsTab.tsx`）。**已落地（P2b）** 在 `plugins/tools/`：注册表 + `tools/pre-execute` waterfall + 9 个平台工具 + 右侧「工具」页签；MCP / skill 工具暂由宿主 bridge 注册（P4 迁走） |
+| tools | **approval** | `ctx.approvals` | 监听 `tools/pre-execute` 的策略插件（`src/lib/ai/approval.ts` 的 `requirePermission`、`stores/toolStore.ts` 的审批部分、`components/settings/ToolPermissionSettings.tsx`）。与 tools **平级**，可单独启停。P2b 先由宿主 bridge 监听，P2c 搬成插件 |
+| platform | **platform**（宿主件） | `ctx.fs`、`ctx.shell`、`ctx.app` | Tauri 命令桥：文件系统（`commands/file.rs`、`search.rs`、`security.rs`）、命令执行（`commands/shell.rs`）、应用目录（`commands/system.rs`）；前端调用点在 `plugins/tools/` 与 `services/skillService.ts`。tools 与 skills 共用。**已落地（P2a，宿主件）** 在 `src/plugin/host-pieces/platform/`：三个键位只做命令转发，不注册 UI、不参与审批；`security.rs` 的路径校验留在 Rust 侧。**不是可替换的功能插件**，理由见 §1.2 / §6 |
 | prompt | **prompt** | `ctx.prompt` | prompt section 装配（`lib/ai/runAgent.ts` 的 `buildSystemPrompt`）；各插件贡献 section。**已落地**：键位持有全局系统提示词（原寄生在 `stores/uiStore.ts`）与变更通知；装配本身仍在宿主 |
 | prompt | **prompt-setting** | 无 | 注册 settings section（**已落地**在 `plugins/prompt-setting/`，编辑组件随插件搬入）。**不认领键位** |
 | prompt | **rule-setting** | `ctx.rules` | 规则数据与**绑定解析**（迁移自 `stores/ruleStore.ts`、`lib/db/ruleDB.ts`、`pages/RulesPage.tsx`、`components/layout/rightPanel/RulesTab.tsx`；解析对话文档里的 `ruleIds` 与 `categories.ruleIds`——对话侧要自己解 payload）。**已落地**：插件同时认领 `ctx.rules`、注册页面（`main.page`）、右侧页签（`panel.tab`）与顶栏入口（`topbar.action`）——服务 + 状态 + UI 全在一个目录里，是第一个完整切片 |
@@ -68,7 +68,7 @@
 
 - **失效通知（已落地）**：`session/changed`（`{ kind, action, id }`，`kind` 只有 `conversation` / `category`，`id` 是重取的键）与 `session/current-changed`（`string | null`）。payload 不透明，所以消息级的变更也只能报成"所属对话变了"——这不是缺陷，而是这一层的定义：`ctx.sessions` 说不出文档里改了什么。没有它们，任何依赖会话数据的插件 UI 都只能轮询服务
 - **Agent 事件**（进行中的工作，可观察可拦截，随 P3 归 agent-loop）：`agent/pre-step`、`agent/request`、`agent/assistant-stream`——`chat-view` 以观察者身份订阅它取流式增量，这是"展示"与"驱动"分开的接口。`turn/*` / `step/*` 属于这一域，不归会话存储
-- **能力事件**（向接缝挂策略/适配器，随 P2 / P4 归各域）：`tools/pre-execute`、`tools/execute`、`tools/post-execute`、`fs/*`、`shell/*`
+- **能力事件**：`tools/pre-execute`（**已落地**，waterfall；tools 注册表在每次 execute 前派发，审批与临时 bridge 挂在这里）。`tools/execute` / `tools/post-execute` / `fs/*` / `shell/*` 还没有消费方，等出现再定义
 
 `waterfall` 用于拦截点（`agent/request`、`tools/pre-execute`），`emit` 用于观察点（`agent/assistant-stream` 等），`bail` 用于审批决策。
 
@@ -78,7 +78,7 @@
 
 - **词汇表归属**：`Message` / `MessageContent` / `role` 取值 / tool-call 结构归**对话域**（现在写在 `@agent-chat/plugin-api` 的「对话域」一节，与 `ConversationDoc` 一起；llm 插件落地后由它解释与演进）。`ctx.sessions` 的契约里只有 `SessionDoc` / `Category`——它不认识消息。`Conversation` 是派生类型：信封 + 文档里除 `messages` 之外的字段，给列表与规则绑定用
 - **`tokenCount` 的位置（2026-10-18 起）**：算它必须懂内容格式，所以存储层不算——它只是对话文档里的一个字段，由写入方算好再序列化。`ctx.sessions` 对它一无所知（旧的 `StoredMessage.content` / `MessageDraft` 已随消息表一起删除）
-- **依赖方向**（无环）：`chat-view → agentLoop + sessions + llm + views`；`agent-loop → llm + tools + prompt`；`prompt → rules`；`rule-setting → sessions`；`tools → platform`；`skills → platform`；`mcp → tools`。**已落地的两条实测口径**：`rule-setting → sessions` 走的是"`ctx.sessions` 的异步读 + `session/changed` / `session/current-changed` 事件重取"（插件自己搭一层薄壳，见 `useSessions.ts`）；`agent-loop`（宿主里的 `runAgent.buildSystemPrompt`）→ `rules` 走的是同步快照 `ctx.rules.getEffectiveRules()`
+- **依赖方向**（无环）：`chat-view → agentLoop + sessions + llm + views`；`agent-loop → llm + tools + prompt`；`prompt → rules`；`rule-setting → sessions`；`tools → platform`；`skills → platform`；`mcp → tools`。**已落地的实测口径**：`rule-setting → sessions` 走的是"`ctx.sessions` 的异步读 + `session/changed` / `session/current-changed` 事件重取"（插件自己搭一层薄壳，见 `useSessions.ts`）；`agent-loop`（宿主里的 `runAgent.buildSystemPrompt`）→ `rules` 走的是同步快照 `ctx.rules.getEffectiveRules()`；`tools → platform` 走的是 `ctx.fs` / `ctx.shell` / `ctx.app` 的领域方法；P2b 的 `mcp → tools` / `skills → tools` 暂时由宿主 bridge 注册工具，P4 才变成插件间依赖
 - **prompt 与 prompt-setting 的接口已定（2026-10-08 落地）**：键位归 **prompt**——`ctx.prompt` 目前只做两件事：持有全局系统提示词、广播变更，section 的装配仍留在 `lib/ai/runAgent.ts`；**prompt-setting** 不认领键位，只往 `ctx.views` 的 `settings.section` 槽位注册编辑界面。两者靠 `inject` 表达依赖，且**必须把用到的服务全列上**：cordis 的 `inject` 是可访问服务的白名单，漏列就报 `cannot get property "views" without inject`（漏 `views` 是首次实跑踩到的）
 - **插件包的形态**：功能插件是**独立的包**（见 §1.2 的"形态"）：源码在 `plugins/<name>/`，包自己的 `build` 写进自己的 `dist/`；宿主的 `scripts/build-plugins.mjs` 用同一个预设把产物装到 `public/plugins/<name>/`，宿主启动时扫清单逐个装载。运行时走**同一套关**：读 manifest 文本 → 校验 → `engines` 判定 → 解析入口 → 等 `ACTIVE` / `FAILED`，任何一步不过都带 spec 错误码报错并阻止启动（不是悄悄跳过）。入口按内核约定写成模块本体导出 `apply`（可选 `name` / `inject`）。宿主身份（`engines.host` 要比对的 `agent-chat@0.1.0`）写在 [src/plugin/host.ts](../src/plugin/host.ts)
 - **共享运行时依赖（新增，2026-10-08 落地）**：插件包是独立 bundle，`react` 既不能留成裸导入（浏览器解析不了），也不能自带一份（两份 React → hooks 抛 invalid hook call、context 读不到同一棵树）。做法是**宿主注入全局 + 构建期改写 import**：宿主先把自己那份放到 `globalThis.__AGENT_CHAT_SHARED__`，**再** import 插件包（顺序是硬要求：lucide-react 这类包在**模块初始化时**就用 React）；构建期把 `import { useState } from "react"` 改写成 `import __r from "<shim>"; const useState = __r.useState`，即运行时属性访问。**必须改写而不是逐名转发**：React 的具名导出里有类（`Component`，会被 `class X extends Component` 用）和符号（`Fragment` / `Suspense`），转发成函数就废了。JSX 运行时同样转发宿主那份官方运行时——用 `createElement` 自己拼会丢掉 React 对静态子元素的标记，冒出一堆假的 key 警告
@@ -112,7 +112,7 @@
 | 阶段 | 内容 | 验收 |
 |---|---|---|
 | **P1 首次接入** | 引入内核；内置插件以插件包形态落地（`cambia.json` + 入口），启动走 manifest 校验与装载编排；宿主提供 `ctx.storage` 与 `ctx.views`（内置、不可卸载）；**message 插件化——`ctx.sessions` 只做「分组 → 对话」两级容器，对话内容是序列化后的不透明文档**；外壳注册点就位（topbar 导航、sidebar 页、settings section）；首个带 UI 的功能插件（rule-setting 或 prompt）验证"服务+事件+视图"三链路 | 对话功能零回归，旧数据经 Dexie v5 迁移后不丢 |
-| **P2 tools** | builtinTools 逐个搬进 tools 插件，其依赖的 fs/shell 能力先经 platform 键位；requirePermission 变 waterfall/bail 监听 | 工具调用 + 审批流零回归 |
+| **P2 tools** | builtinTools 逐个搬进 tools 插件，其依赖的 fs/shell 能力先经 platform 键位；requirePermission 变 waterfall/bail 监听。**tools 已落地（P2b）**，approval 待 P2c | 工具调用 + 审批流零回归 |
 | **P3 agent-loop** | createAgentStream 插件化，暴露 `agent/request`、`tools/*` waterfall；**`ctx.renderers` 与 chat-view 一起定**（见下） | 流式对话零回归 |
 | **P4 llm + 周边迁移** | llm 适配器、MCP、skills 迁移为插件 | 全功能等价 |
 | **P5 第三方装载接入** | 接入内核的 `@cambia/host`（manifest 规范化 + 依赖图 + 激活 + `.tap` 安装 + CSP/保险丝）；宿主侧补管理界面 | 外部插件注册工具跑通 |
@@ -122,7 +122,9 @@
 
 **P1 进度（2026-10-18）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、四个槽位（`topbar.action` / `settings.section` / `main.page` / `panel.tab`）、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`、`message`（`ctx.sessions`：分组 → 对话两级容器，对话内容是不透明文档，Dexie v5 迁移旧数据）、`rule-setting`（`ctx.rules` + 页面 + 页签 + 顶栏入口）已落地。**插件已改成独立包**（§1.2 的"形态"）：`plugins/<name>/` 各自有个 `package.json` / `tsconfig.json` / 构建脚本，依赖契约包 `@agent-chat/plugin-api`，宿主侧不再有编译期的插件表。`agent/*`、`tools/*` 等事件随各自域在 P2/P3 进插件，不再由会话层代发。**P1 已完成**，对话 / 规则 / 设置三条链路都实跑验证过（dev 与生产产物各一遍）。
 
-**P2a 进度（2026-10-18）**：`platform` **宿主件**已落地（`src/plugin/host-pieces/platform/`）——`ctx.fs` / `ctx.shell` / `ctx.app` 三个键位不注册 UI、不参与审批。它不是功能插件：文件 / 命令访问被定为宿主运行时职责，随应用编译、不可卸载（§1.2 / §6）；`ctx.*` 契约仍是将来换 provider 的接缝。对外返回**领域结果**（失败抛错），Tauri 的 `CommandResult` 信封只留在平台内部；参数按 Tauri 的 camelCase 约定（Rust `timeout_secs` ← `timeoutSecs`），脚本结果在出口把 snake_case 转成 camelCase。`searchText` 暂时沿用 Rust 的 `path:line:text` 行格式，结构化匹配等搜索要渲染卡片时再改。`tools` / `approval` 两块尚未开始。
+**P2a 进度（2026-10-18）**：`platform` **宿主件**已落地（`src/plugin/host-pieces/platform/`）——`ctx.fs` / `ctx.shell` / `ctx.app` 三个键位不注册 UI、不参与审批。它不是功能插件：文件 / 命令访问被定为宿主运行时职责，随应用编译、不可卸载（§1.2 / §6）；`ctx.*` 契约仍是将来换 provider 的接缝。对外返回**领域结果**（失败抛错），Tauri 的 `CommandResult` 信封只留在平台内部；参数按 Tauri 的 camelCase 约定（Rust `timeout_secs` ← `timeoutSecs`），脚本结果在出口把 snake_case 转成 camelCase。`searchText` 暂时沿用 Rust 的 `path:line:text` 行格式，结构化匹配等搜索要渲染卡片时再改。`tools` 随后在 P2b 落地；`approval` 待 P2c。
+
+**P2b 进度（2026-10-18）**：`tools` 插件已落地（`plugins/tools/`）——`ctx.tools` 注册表、`tools/pre-execute` waterfall、9 个平台工具、右侧「工具」页签；`agent.ts` 只取 `ctx.tools.getAISDKTools()`。MCP / skill 工具由 `src/plugin/bridges/tools.ts` 临时注册，旧 `requirePermission` 也暂由该 bridge 监听；`approval` 插件与这两块 bridge 的移除归 P2c / P4。MCP 适配器顺带把 AI SDK 的旧字段 `parameters` 校正为 `inputSchema`。
 
 **`ctx.renderers` 为什么后置（2026-10-18 决定）**：它不是 P1 的验收项，也没有任何现有代码引用它——删掉这一项应用照常跑。它的消费方是 `ChatMessage.tsx` 的 `switch (block.type)`，而那个组件要到 **P3 才搬进 chat-view 插件**，现在做等于给一个即将搬家的组件建接口。真正需要它的信号是「某个插件想让工具结果以专属卡片显示」（skills / MCP 都会撞上），或 chat-view 落地时要渲染非文本块。到那时要一起定的几件事：**形态**（React 组件 vs 声明式卡片规格——后者才能让第三方插件用，避开 §2.2 的 React 实例与 Tailwind 边界）、**未知类型的兜底**（现在是静默 `return null`）、**交互回传**（卡片上的按钮怎么通知注册方）、**key 版本化**（`search-results@1`，否则插件改了 data 形状，旧对话直接崩）。
 

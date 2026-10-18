@@ -7,7 +7,6 @@
 
 import { tool } from "ai";
 import { z } from "zod";
-import { requirePermission } from "@/lib/ai/tools";
 import type { McpDiscoveredTool } from "@/types/mcp";
 
 // ── JSON Schema → Zod Schema ──
@@ -118,18 +117,10 @@ export function mcpToolToAISDK(
   return {
     [toolName]: (tool as any)({
       description: mcpTool.description ?? `MCP 工具: ${mcpTool.name}`,
-      parameters: jsonSchemaToZod(mcpTool.inputSchema),
-      execute: async (
-        args: unknown,
-        options: { toolCallId: string },
-      ) => {
-        // 复用现有权限审批系统
-        await requirePermission(
-          options.toolCallId,
-          `mcp:${mcpTool.serverId}:${mcpTool.name}`,
-          { toolName: mcpTool.name, args } as Record<string, unknown>,
-          false,
-        );
+      // AI SDK v7 读 `inputSchema`；`parameters` 是旧字段。审批由 ctx.tools 的
+      // tools/pre-execute 管线统一处理，这里不再直接调 requirePermission。
+      inputSchema: jsonSchemaToZod(mcpTool.inputSchema),
+      execute: async (args: unknown) => {
         const result = await executeFn(args);
         return typeof result === "string"
           ? result

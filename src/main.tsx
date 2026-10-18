@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { bootHost, PluginHostProvider } from "./plugin";
+import { installToolBridges } from "./plugin/bridges/tools";
 import { provideSharedRuntime } from "./plugin/shared";
 import "./index.css";
 
@@ -11,6 +12,9 @@ provideSharedRuntime();
 
 bootHost().then(
   (host) => {
+    // 临时 bridges：skill / MCP 工具注册与旧审批逻辑，P2c / P4 逐块删除
+    installToolBridges(host);
+
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <React.StrictMode>
         <PluginHostProvider ctx={host}>

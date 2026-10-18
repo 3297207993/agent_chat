@@ -42,7 +42,7 @@ const OVERRIDE_OPTIONS: {
   { value: "deny", label: "禁止" },
 ];
 
-// ── 内置工具清单（与 src/lib/ai/tools.ts 保持一致） ──
+// ── 内置工具清单（P2c 改为从 ctx.tools 的注册项生成） ──
 
 interface BuiltinToolMeta {
   name: string;

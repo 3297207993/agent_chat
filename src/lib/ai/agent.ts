@@ -1,5 +1,4 @@
 import { streamText, isStepCount } from "ai";
-import { builtinTools } from "./tools";
 import { convertToAISDKMessages } from "./messages";
 import { getProvider, getModel } from "./providers";
 import {
@@ -8,7 +7,7 @@ import {
   estimateToolsTokens,
   trimModelMessages,
 } from "./window";
-import { useMcpStore } from "@/stores/mcpStore";
+import { hostContext } from "@/plugin";
 import type { ProviderConfig } from "@/types/provider";
 import type { Message } from "@/types/chat";
 
@@ -61,12 +60,8 @@ export function createAgentStream(
   const provider = getProvider(providerConfig);
   const model = getModel(provider, modelId);
 
-  // 获取 MCP 工具（如果任何 MCP Server 已连接）
-  const mcpTools = useMcpStore.getState().getToolsForAI();
-  const tools = {
-    ...builtinTools,
-    ...mcpTools,
-  };
+  // 工具表归 tools 插件：内置、MCP、skill 工具都由它注册，宿主只取走 AI SDK 形状
+  const tools = hostContext().tools.getAISDKTools();
 
   // ── 层 1：发送前滑动窗口（主防线） ──
   // 用内部 Message 已维护好的 tokenCount 精确裁剪初始窗口（字段求和，零重算），

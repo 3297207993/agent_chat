@@ -1,8 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { FileText, Wrench, Plug, Brain, Zap } from "lucide-react";
+import { FileText, Plug, Brain, Zap } from "lucide-react";
 import { useHost, useViewSlot } from "@/plugin";
 import ContextTab from "./rightPanel/ContextTab";
-import ToolsTab from "./rightPanel/ToolsTab";
 import McpTab from "./rightPanel/McpTab";
 import MemoryTab from "./rightPanel/MemoryTab";
 import SkillsTab from "./rightPanel/SkillsTab";
@@ -16,12 +15,11 @@ interface Tab {
 }
 
 /**
- * 外壳自己的页签。顺序值只有相对意义：插件页签的 `order` 落在它们中间（规则是 30，就排在工具与
- * MCP 之间），排好之后一起渲染。
+ * 外壳自己的页签。顺序值只有相对意义：插件页签的 `order` 落在它们中间（工具是 20、规则是 30），
+ * 排好之后一起渲染。
  */
 const HOST_TABS: Tab[] = [
   { id: "context", order: 10, label: "上下文", icon: <FileText size={13} />, content: <ContextTab /> },
-  { id: "tools", order: 20, label: "工具", icon: <Wrench size={13} />, content: <ToolsTab /> },
   { id: "mcp", order: 40, label: "MCP", icon: <Plug size={13} />, content: <McpTab /> },
   { id: "skills", order: 50, label: "技能", icon: <Zap size={13} />, content: <SkillsTab /> },
   { id: "memory", order: 60, label: "记忆", icon: <Brain size={13} />, content: <MemoryTab /> },

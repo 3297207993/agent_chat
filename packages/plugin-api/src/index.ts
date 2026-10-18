@@ -164,6 +164,64 @@ export interface AppService {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 工具：`ctx.tools`（tools 插件）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 一次工具调用的身份与参数；`tools/pre-execute` 的载荷。 */
+export interface ToolCall {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly args: Record<string, unknown>;
+}
+
+/** AI SDK 传给 `execute` 的选项里，注册表只依赖 `toolCallId`。 */
+export interface ToolExecutionOptions {
+  readonly toolCallId: string;
+  readonly [key: string]: unknown;
+}
+
+/**
+ * 工具对象的形状：注册表只包 `execute`，不解释 schema。
+ * 具体字段由 AI SDK 解释（`description` / `inputSchema` / ...）。
+ */
+export interface ToolLike {
+  readonly description?: string;
+  readonly execute?: (input: any, options: ToolExecutionOptions) => unknown;
+  readonly [key: string]: unknown;
+}
+
+/** 审批策略：`default` 走全局设置 / `always` 强制确认 / `never` 完全跳过。 */
+export type ToolApproval = "default" | "always" | "never";
+
+/**
+ * 工具注册项。
+ *
+ * `tool` 是**已经构造好的 AI SDK tool 对象**：注册表不重新定义 schema，只把 `execute` 包进
+ * `tools/pre-execute` 管线。这样 MCP / skills 的现有工具对象可以原样注册，不用重编码。
+ */
+export interface ToolContribution {
+  readonly name: string;
+  /** 来源分组（`builtin` / `mcp` / `skill` / 插件名），只用于 UI。 */
+  readonly source?: string;
+  /** 审批策略；缺省为 `default`。 */
+  readonly approval?: ToolApproval;
+  readonly description?: string;
+  readonly tool: ToolLike;
+}
+
+/** `ctx.tools`。 */
+export interface ToolsService {
+  /** 注册或替换同名工具；返回撤销函数（只撤销自己那次注册）。 */
+  register(contribution: ToolContribution): () => void;
+  /** 当前工具快照；同一批变更内引用稳定（给 `useSyncExternalStore` 用）。 */
+  list(): readonly ToolContribution[];
+  /** 注册 / 撤销之后通知一次；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
+  /** 给 AI SDK 的工具表；每个工具的 `execute` 都经过 `tools/pre-execute`。 */
+  getAISDKTools(): Record<string, any>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 会话：`ctx.sessions` —— 「分组 → 对话」两级容器，对话内容是不透明文档
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -484,6 +542,8 @@ declare module "@cambia/core" {
     shell: ShellService;
     /** 应用目录与系统打开（pluginization.md §2 的 platform 宿主件）。 */
     app: AppService;
+    /** 工具注册表与受守卫的执行管线（pluginization.md §2 的 tools 插件）。 */
+    tools: ToolsService;
     /** prompt section 的装配与全局系统提示词（pluginization.md §2 的 prompt 组）。 */
     prompt: PromptService;
     /** 分组 / 对话文档的存取（pluginization.md §2 的 message 插件）。 */
@@ -510,5 +570,15 @@ declare module "@cambia/core" {
      * 会话数据的 UI 必须跟着它走，否则会拿着上一个对话的数据渲染。
      */
     "session/current-changed"(conversationId: string | null): void;
+
+    /**
+     * 工具执行前的拦截点（waterfall）：监听者拿到 `(call, next)`，调 `next()` 委托给下游 /
+     * 原执行，不调则短路。审批插件在这里决定放行、拒绝或改写；临时宿主 bridge 也在这里接
+     * 旧的 `requirePermission`（P2c 后由 approval 插件接管）。
+     */
+    "tools/pre-execute"(
+      call: ToolCall,
+      next: () => Promise<unknown>,
+    ): Promise<unknown>;
   }
 }
