@@ -56,7 +56,7 @@
 | prompt | **rule-setting** | `ctx.rules` | 规则数据与**绑定解析**（迁移自 `stores/ruleStore.ts`、`lib/db/ruleDB.ts`、`pages/RulesPage.tsx`、`components/layout/rightPanel/RulesTab.tsx`；解析对话文档里的 `ruleIds` 与 `categories.ruleIds`——对话侧要自己解 payload）。**已落地**：插件同时认领 `ctx.rules`、注册页面（`main.page`）、右侧页签（`panel.tab`）与顶栏入口（`topbar.action`）——服务 + 状态 + UI 全在一个目录里，是第一个完整切片 |
 | extension | **mcp** | `ctx.mcp` | MCP Server 连接管理、工具发现（`lib/mcp/`、`stores/mcpStore.ts`、`lib/db/mcpDB.ts`、`pages/McpPage.tsx`、`components/layout/rightPanel/McpTab.tsx`、`src-tauri/src/commands/mcp.rs` 与 `src-tauri/src/mcp/`，含 `mcp_*` 命令族），向 `ctx.tools` 贡献工具 |
 | extension | **skills** | `ctx.skills` | 技能扫描、解析与执行（`lib/skills/parser.ts`、`services/skillService.ts`、`stores/skillStore.ts`、`pages/SkillPage.tsx`、`components/layout/rightPanel/SkillsTab.tsx`），向 `ctx.tools` 贡献工具 |
-| 宿主 | **app-shell** | `ctx.views`、`ctx.renderers` | 外壳与注册点：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位（**已落地** `src/plugin/` 与四个槽位：`topbar.action` / `settings.section` / `main.page`（路由页面，插件给 `path`，外壳挂进 router）/ `panel.tab`；`ctx.renderers` 未落地。外壳代码 `App.tsx`、`components/layout/` 的 `AppLayout` / `TopBar` / `RightPanel`、`pages/` 的路由、`components/settings/ThemeSettings.tsx`、`stores/uiStore.ts` 的主题 / 布局 / 面板开关）。由宿主作为**不可卸载的内置插件**提供 |
+| 宿主 | **app-shell** | `ctx.views`（`ctx.renderers` 后置到 P3） | 外壳与注册点：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位（**已落地** `src/plugin/` 与四个槽位：`topbar.action` / `settings.section` / `main.page`（路由页面，插件给 `path`，外壳挂进 router）/ `panel.tab`；`ctx.renderers` **未落地且已决定后置**，理由见 §5。外壳代码 `App.tsx`、`components/layout/` 的 `AppLayout` / `TopBar` / `RightPanel`、`pages/` 的路由、`components/settings/ThemeSettings.tsx`、`stores/uiStore.ts` 的主题 / 布局 / 面板开关）。由宿主作为**不可卸载的内置插件**提供 |
 
 `types/*.ts` 按同样的域跟随各自插件：`SessionDoc` / `Category` 写在 `packages/plugin-api/` 的会话一节（`ctx.sessions` 的签名只认它们）；`ConversationDoc` / `Conversation` / `Message` / `MessageContent` 写在同一个包的「对话域」一节——它们**不是**存储契约，只是消费方之间共享的文档格式；`src/types/chat.ts` 现在只做转出，等 llm 插件落地再把 `Message` 的解释权跟过去。
 
@@ -91,7 +91,7 @@
 ## 3. UI 贡献的三层阶梯
 
 1. **声明式配置**：`contributes.configuration` 表单 schema（string/number/boolean/enum/array），本项目的渲染器映射到现有 Tailwind 组件——零插件代码进 UI
-2. **结构化渲染器**：插件按类型键位注册"数据 → 卡片"契约（如 `search-results` → 本项目预定义卡片），对应 DeepSeek Harness 的 ConversationNodeDefinition + keyed renderer
+2. **结构化渲染器**：插件按类型键位注册"数据 → 卡片"契约（如 `search-results` → 本项目预定义卡片），对应 DeepSeek Harness 的 ConversationNodeDefinition + keyed renderer。**注册点（`ctx.renderers`）暂未落地**：当前 `ChatMessage.tsx` 的 `switch (block.type)` 是硬编码的，只有三大件（text / reasoning / tool_call）。推迟理由与形态取舍见 §5 的 P3 说明
 3. **独立文档 iframe 视图**：插件自带 HTML/JS，独立文档、无同源（DOM 隔离，**不是安全边界**）；网络请求走宿主桥
 
 ---
@@ -111,16 +111,18 @@
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| **P1 首次接入** | 引入内核；内置插件以插件包形态落地（`cambia.json` + 入口），启动走 manifest 校验与装载编排；宿主提供 `ctx.storage` 与 `ctx.views`/`ctx.renderers`（内置、不可卸载）；**message 插件化——`ctx.sessions` 只做「分组 → 对话」两级容器，对话内容是序列化后的不透明文档**；外壳注册点就位（topbar 导航、sidebar 页、settings section）；首个带 UI 的功能插件（rule-setting 或 prompt）验证"服务+事件+视图"三链路 | 对话功能零回归，旧数据经 Dexie v5 迁移后不丢 |
+| **P1 首次接入** | 引入内核；内置插件以插件包形态落地（`cambia.json` + 入口），启动走 manifest 校验与装载编排；宿主提供 `ctx.storage` 与 `ctx.views`（内置、不可卸载）；**message 插件化——`ctx.sessions` 只做「分组 → 对话」两级容器，对话内容是序列化后的不透明文档**；外壳注册点就位（topbar 导航、sidebar 页、settings section）；首个带 UI 的功能插件（rule-setting 或 prompt）验证"服务+事件+视图"三链路 | 对话功能零回归，旧数据经 Dexie v5 迁移后不丢 |
 | **P2 tools** | builtinTools 逐个搬进 tools 插件，其依赖的 fs/shell 能力先经 platform 键位；requirePermission 变 waterfall/bail 监听 | 工具调用 + 审批流零回归 |
-| **P3 agent-loop** | createAgentStream 插件化，暴露 `agent/request`、`tools/*` waterfall | 流式对话零回归 |
+| **P3 agent-loop** | createAgentStream 插件化，暴露 `agent/request`、`tools/*` waterfall；**`ctx.renderers` 与 chat-view 一起定**（见下） | 流式对话零回归 |
 | **P4 llm + 周边迁移** | llm 适配器、MCP、skills 迁移为插件 | 全功能等价 |
 | **P5 第三方装载接入** | 接入内核的 `@cambia/host`（manifest 规范化 + 依赖图 + 激活 + `.tap` 安装 + CSP/保险丝）；宿主侧补管理界面 | 外部插件注册工具跑通 |
 | **P6 生态验证** | 以本项目为参考宿主，验证 spec v1 与 `@cambia/kit` CLI、参考插件 | 第二个宿主应用可用 Cambia 起步 |
 
 依赖：P1–P4 需要内核核心就绪，P5–P6 需要内核的装载运行时与生态件就绪。
 
-**P1 进度（2026-10-18）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、四个槽位（`topbar.action` / `settings.section` / `main.page` / `panel.tab`）、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`、`message`（`ctx.sessions`：分组 → 对话两级容器，对话内容是不透明文档，Dexie v5 迁移旧数据）、`rule-setting`（`ctx.rules` + 页面 + 页签 + 顶栏入口）已落地。**插件已改成独立包**（§1.2 的"形态"）：`plugins/<name>/` 各自有个 `package.json` / `tsconfig.json` / 构建脚本，依赖契约包 `@agent-chat/plugin-api`，宿主侧不再有编译期的插件表。**还差**：`ctx.renderers`（结构化渲染器键位）。`agent/*`、`tools/*` 等事件随各自域在 P2/P3 进插件，不再由会话层代发。其余 P1 项已达成，对话 / 规则 / 设置三条链路都实跑验证过（dev 与生产产物各一遍）。
+**P1 进度（2026-10-18）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、四个槽位（`topbar.action` / `settings.section` / `main.page` / `panel.tab`）、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`、`message`（`ctx.sessions`：分组 → 对话两级容器，对话内容是不透明文档，Dexie v5 迁移旧数据）、`rule-setting`（`ctx.rules` + 页面 + 页签 + 顶栏入口）已落地。**插件已改成独立包**（§1.2 的"形态"）：`plugins/<name>/` 各自有个 `package.json` / `tsconfig.json` / 构建脚本，依赖契约包 `@agent-chat/plugin-api`，宿主侧不再有编译期的插件表。`agent/*`、`tools/*` 等事件随各自域在 P2/P3 进插件，不再由会话层代发。**P1 已完成**，对话 / 规则 / 设置三条链路都实跑验证过（dev 与生产产物各一遍）。
+
+**`ctx.renderers` 为什么后置（2026-10-18 决定）**：它不是 P1 的验收项，也没有任何现有代码引用它——删掉这一项应用照常跑。它的消费方是 `ChatMessage.tsx` 的 `switch (block.type)`，而那个组件要到 **P3 才搬进 chat-view 插件**，现在做等于给一个即将搬家的组件建接口。真正需要它的信号是「某个插件想让工具结果以专属卡片显示」（skills / MCP 都会撞上），或 chat-view 落地时要渲染非文本块。到那时要一起定的几件事：**形态**（React 组件 vs 声明式卡片规格——后者才能让第三方插件用，避开 §2.2 的 React 实例与 Tailwind 边界）、**未知类型的兜底**（现在是静默 `return null`）、**交互回传**（卡片上的按钮怎么通知注册方）、**key 版本化**（`search-results@1`，否则插件改了 data 形状，旧对话直接崩）。
 
 **P5 的前置被提前消化了一部分**：`@cambia/core` 与 `cordis` 的 external 约定、同 realm 共享依赖（React）、依赖图之外的部分（manifest 校验 / engines / 激活判定 / 入口解析）现在由宿主自己的流水线走通。P5 剩下的核心是 `.tap` 安装、`asset:` 通道与 CSP、以及宿主侧管理界面。
 
@@ -131,5 +133,6 @@
 - **宿主外壳插件化**：窗口、路由、主题、插槽容器留在宿主代码——用插件系统开发插件系统的自举困境会拖垮迭代速度。外壳**只暴露注册点**（`ctx.views` / `ctx.renderers`：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位），由宿主作为**不可卸载的内置插件**提供；插件往里注册，外壳自身不参与启停
 - **提前做 capability 三元分离**：蓝本把同一能力切成 definition / provider / consumer 三类包；本项目暂不这么切——当某个能力**真的出现第二个提供者**（例如远程或沙箱 fs）再拆包，现在拆只是为用不到的灵活性付样板成本。但**键位该独立的仍然独立**（`ctx.fs` / `ctx.shell` 从一开始就是接缝，不能塞进 tools）
 - **会话事件日志 / 投影读取（事件溯源）**：`ctx.sessions` 只保管「一坨不透明文档」，不做 append-only 日志、不做投影重建、不要求全序。这一层的目标是**让存储层不认识消息格式**，不是让存储层记住每一次变更。将来若真需要审计、撤销、远端同步，那属于对话域或独立插件的能力，不塞回存储层
+- **`ctx.renderers` 提前落地**：结构化渲染器键位后置到 P3（与 chat-view 一起定），不提前为用不到的扩展点付样板成本。现在的 `switch (block.type)` 只有三大件，够用；形态取舍与要一起定的几件事见 §5
 - **为覆盖率而迁移**：迁移按功能推进，未迁移部分保持普通模块形态；不为了"看起来全插件化"做无收益的搬运
 - **第三方插件的降权执行区**：本项目选择全信任同进程，不引入 Worker/WASM 隔离，也不为它预留架构；若将来要分发不受信插件再评估（见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 5.3）
