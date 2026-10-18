@@ -43,9 +43,9 @@
 
 | 分组 | 插件 | 键位 | 职责（迁移自） |
 |---|---|---|---|
-| core | **message** | `ctx.sessions` | 对话 + 消息 + **分类**的大粒度管理：对话列表、当前对话、分类 CRUD（迁移自 `stores/conversationStore.ts`、`stores/categoryStore.ts`、`lib/db/` 的 conversation / message / category 三张表、`components/layout/Sidebar.tsx`）。消息内容按**不透明字符串**存取，不解释格式。**已落地**：三张表的**数据层**（含行编码与排序）与**当前对话**搬进插件、经 `ctx.sessions` 唯一可达，写入时广播 §2.1 的会话事实与 `session/changed`；`conversationStore` 退化成它的订阅方（组件照旧读 `currentConversationId`） |
+| core | **message** | `ctx.sessions` | **「分组 → 对话」两级容器**（迁移自 `stores/conversationStore.ts`、`stores/categoryStore.ts`、`lib/db/` 的 conversation / message / category 三张表、`components/layout/Sidebar.tsx`）。对话在它眼里只是 `{ id, categoryId, payload, createdAt, updatedAt }`——`payload` 是**序列化后的对话文档**，里面是消息数组、map 还是别的组织形式，它一概不看、不建索引、不解析。**已落地（2026-10-18）**：对话收成「信封 + 不透明文档」，`messages` 表已删、旧行由 Dexie v5 迁移折进 payload；写入只广播 `session/changed`；`conversationStore` 变成文档的编解码方与订阅方 |
 | core | **storage** | `ctx.storage` | Dexie 引擎与版本声明、`reset()`。由**宿主**提供（**新增**，引擎来自 `lib/db/database.ts`）；表定义暂集中在宿主，插件登记表定义见 §2.2 待定 |
-| core | **llm** | `ctx.llm` | provider 适配与模型解析（`lib/ai/providers.ts`、`registry.ts`、`stores/providerStore.ts`）、**消息与流的词汇表**（`types/chat.ts` 的 `Message` / `MessageContent`）、上下文裁剪（`lib/ai/window.ts`） |
+| core | **llm** | `ctx.llm` | provider 适配与模型解析（`lib/ai/providers.ts`、`registry.ts`、`stores/providerStore.ts`）、**消息与流的词汇表**（对话域的 `Message` / `MessageContent`，现在写在 `@agent-chat/plugin-api`；llm 插件落地后由它解释与演进）、上下文裁剪（`lib/ai/window.ts`） |
 | agent | **agent-loop** | `ctx.agentLoop` | Agent 生命周期、turn/step 驱动（`lib/ai/agent.ts`、`chat.ts`、`messages.ts`、`runAgent.ts` 的 `startAgentRun` / `stopStreaming` / `regenerateAssistant`） |
 | agent | **chat-view** | 无 | 对话展示与输入（`components/chat/`）：观察 `agent/*` 事件拿流式增量，经 `ctx.views` 挂到外壳。**不认领键位** |
 | tools | **tools** | `ctx.tools` | 工具注册表、schema 汇集、受守卫的执行管线（`lib/ai/tools.ts`、`stores/toolStore.ts` 的注册/禁用部分、`components/layout/rightPanel/ToolsTab.tsx`） |
@@ -53,12 +53,12 @@
 | platform | **platform** | `ctx.fs`、`ctx.shell`、`ctx.app` | Tauri 命令桥：文件系统（`commands/file.rs`、`search.rs`、`security.rs`）、命令执行（`commands/shell.rs`）、应用目录（`commands/system.rs`）；前端调用点在 `lib/ai/tools.ts` 与 `services/skillService.ts`。tools 与 skills 共用 |
 | prompt | **prompt** | `ctx.prompt` | prompt section 装配（`lib/ai/runAgent.ts` 的 `buildSystemPrompt`）；各插件贡献 section。**已落地**：键位持有全局系统提示词（原寄生在 `stores/uiStore.ts`）与变更通知；装配本身仍在宿主 |
 | prompt | **prompt-setting** | 无 | 注册 settings section（**已落地**在 `plugins/prompt-setting/`，编辑组件随插件搬入）。**不认领键位** |
-| prompt | **rule-setting** | `ctx.rules` | 规则数据与**绑定解析**（迁移自 `stores/ruleStore.ts`、`lib/db/ruleDB.ts`、`pages/RulesPage.tsx`、`components/layout/rightPanel/RulesTab.tsx`；解析 `conversations.ruleIds` / `categories.ruleIds`）。**已落地**：插件同时认领 `ctx.rules`、注册页面（`main.page`）、右侧页签（`panel.tab`）与顶栏入口（`topbar.action`）——服务 + 状态 + UI 全在一个目录里，是第一个完整切片 |
+| prompt | **rule-setting** | `ctx.rules` | 规则数据与**绑定解析**（迁移自 `stores/ruleStore.ts`、`lib/db/ruleDB.ts`、`pages/RulesPage.tsx`、`components/layout/rightPanel/RulesTab.tsx`；解析对话文档里的 `ruleIds` 与 `categories.ruleIds`——对话侧要自己解 payload）。**已落地**：插件同时认领 `ctx.rules`、注册页面（`main.page`）、右侧页签（`panel.tab`）与顶栏入口（`topbar.action`）——服务 + 状态 + UI 全在一个目录里，是第一个完整切片 |
 | extension | **mcp** | `ctx.mcp` | MCP Server 连接管理、工具发现（`lib/mcp/`、`stores/mcpStore.ts`、`lib/db/mcpDB.ts`、`pages/McpPage.tsx`、`components/layout/rightPanel/McpTab.tsx`、`src-tauri/src/commands/mcp.rs` 与 `src-tauri/src/mcp/`，含 `mcp_*` 命令族），向 `ctx.tools` 贡献工具 |
 | extension | **skills** | `ctx.skills` | 技能扫描、解析与执行（`lib/skills/parser.ts`、`services/skillService.ts`、`stores/skillStore.ts`、`pages/SkillPage.tsx`、`components/layout/rightPanel/SkillsTab.tsx`），向 `ctx.tools` 贡献工具 |
 | 宿主 | **app-shell** | `ctx.views`、`ctx.renderers` | 外壳与注册点：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位（**已落地** `src/plugin/` 与四个槽位：`topbar.action` / `settings.section` / `main.page`（路由页面，插件给 `path`，外壳挂进 router）/ `panel.tab`；`ctx.renderers` 未落地。外壳代码 `App.tsx`、`components/layout/` 的 `AppLayout` / `TopBar` / `RightPanel`、`pages/` 的路由、`components/settings/ThemeSettings.tsx`、`stores/uiStore.ts` 的主题 / 布局 / 面板开关）。由宿主作为**不可卸载的内置插件**提供 |
 
-`types/*.ts` 按同样的域跟随各自插件：`Conversation` / `Category` **已搬进** `packages/plugin-api/`（契约包）（词汇表只把它们的形状写进 `ctx.sessions` 的签名）；`types/chat.ts` 里剩下的 `Message` / `MessageContent` 归 llm，等 llm 插件落地再跟过去。
+`types/*.ts` 按同样的域跟随各自插件：`SessionDoc` / `Category` 写在 `packages/plugin-api/` 的会话一节（`ctx.sessions` 的签名只认它们）；`ConversationDoc` / `Conversation` / `Message` / `MessageContent` 写在同一个包的「对话域」一节——它们**不是**存储契约，只是消费方之间共享的文档格式；`src/types/chat.ts` 现在只做转出，等 llm 插件落地再把 `Message` 的解释权跟过去。
 
 **不算插件**：`lib/ai/tokenizer.ts` 是零依赖纯函数，留作宿主共享工具；`memory` 现在是占位空壳（`pages/MemoryPage.tsx`、`components/layout/rightPanel/MemoryTab.tsx`），暂不切（见 §2.2）。
 
@@ -66,25 +66,25 @@
 
 ### 2.1 事件域规划
 
-- **会话事件**（持久事实）：`turn/*`、`step/*`、`user/message`、`assistant/message`、`tool/call`、`tool/result`——**"追加进日志"是 message 数据层改造（§5 的 P1b）之后的事**；P1 只划边界，这些事件按可广播形式发出，存储仍是现有 Dexie 结构
-- **Agent 事件**（进行中的工作，可观察可拦截）：`agent/pre-step`、`agent/request`、`agent/assistant-stream`——`chat-view` 以观察者身份订阅它取流式增量，这是"展示"与"驱动"分开的接口
-- **能力事件**（向接缝挂策略/适配器）：`tools/pre-execute`、`tools/execute`、`tools/post-execute`、`fs/*`、`shell/*`
+- **失效通知（已落地）**：`session/changed`（`{ kind, action, id }`，`kind` 只有 `conversation` / `category`，`id` 是重取的键）与 `session/current-changed`（`string | null`）。payload 不透明，所以消息级的变更也只能报成"所属对话变了"——这不是缺陷，而是这一层的定义：`ctx.sessions` 说不出文档里改了什么。没有它们，任何依赖会话数据的插件 UI 都只能轮询服务
+- **Agent 事件**（进行中的工作，可观察可拦截，随 P3 归 agent-loop）：`agent/pre-step`、`agent/request`、`agent/assistant-stream`——`chat-view` 以观察者身份订阅它取流式增量，这是"展示"与"驱动"分开的接口。`turn/*` / `step/*` 属于这一域，不归会话存储
+- **能力事件**（向接缝挂策略/适配器，随 P2 / P4 归各域）：`tools/pre-execute`、`tools/execute`、`tools/post-execute`、`fs/*`、`shell/*`
 
 `waterfall` 用于拦截点（`agent/request`、`tools/pre-execute`），`emit` 用于观察点（`agent/assistant-stream` 等），`bail` 用于审批决策。
 
-**已落地（2026-10-08）**：`user/message` / `assistant/message` 由 message 插件在消息落库时 `emit`，负载就是持久化形状 `StoredMessage`（P1b 里它就是日志条目的形状）；其他 role 没有对应的事实名，只发下面那条通知。此外补了一个 `session/changed`（`{ kind, action, id }`，`id` 是重取的键：对话 / 分类是自身 id，消息是所属对话 id）覆盖对话 / 分类 / 消息的**每次**写入——它是**失效通知**，不是持久事实（P1b 的日志不追加它），存在的理由是：没有它，任何依赖会话数据的插件 UI 都只能轮询服务。还有 `session/current-changed`（`string | null`）报"当前对话换了谁"——它不是数据变更（没有东西落库），但依赖会话数据的 UI 必须跟着它走。`turn/*`、`step/*`、`tool/*`、`agent/*` 仍等 P2/P3（那些域还没搬进插件）。
+**为什么没有"消息落库"事件（2026-10-18）**：之前有过 `user/message` / `assistant/message`，由 message 插件读 `role` 后 `emit`——这恰好违反了"存储层不解释 payload"：为了发事件它得知道里面的结构，而且全仓没有订阅者。现在这两条已删除：**谁写文档，谁知道里面是什么，领域事件由写它的插件自己发**（例如 P3 的 agent-loop 发 `assistant/message`）。
 
 ### 2.2 连带结论与待定项
 
-- **词汇表归属**：`Message` / `MessageContent` / `role` 取值 / tool-call 结构归 **llm**；`Conversation` / `Category` 归 **message**（`src/types/chat.ts` 按此拆分）。message 侧不 import llm 的类型
-- **`tokenCount` 挪位（已落地）**：算它必须懂内容格式，所以不再由 message 侧计算——改由调用方（llm 侧）算好、写进 `MessageDraft.tokenCount`。`StoredMessage.content` 就是那个不透明字符串，两侧各自负责编解码
+- **词汇表归属**：`Message` / `MessageContent` / `role` 取值 / tool-call 结构归**对话域**（现在写在 `@agent-chat/plugin-api` 的「对话域」一节，与 `ConversationDoc` 一起；llm 插件落地后由它解释与演进）。`ctx.sessions` 的契约里只有 `SessionDoc` / `Category`——它不认识消息。`Conversation` 是派生类型：信封 + 文档里除 `messages` 之外的字段，给列表与规则绑定用
+- **`tokenCount` 的位置（2026-10-18 起）**：算它必须懂内容格式，所以存储层不算——它只是对话文档里的一个字段，由写入方算好再序列化。`ctx.sessions` 对它一无所知（旧的 `StoredMessage.content` / `MessageDraft` 已随消息表一起删除）
 - **依赖方向**（无环）：`chat-view → agentLoop + sessions + llm + views`；`agent-loop → llm + tools + prompt`；`prompt → rules`；`rule-setting → sessions`；`tools → platform`；`skills → platform`；`mcp → tools`。**已落地的两条实测口径**：`rule-setting → sessions` 走的是"`ctx.sessions` 的异步读 + `session/changed` / `session/current-changed` 事件重取"（插件自己搭一层薄壳，见 `useSessions.ts`）；`agent-loop`（宿主里的 `runAgent.buildSystemPrompt`）→ `rules` 走的是同步快照 `ctx.rules.getEffectiveRules()`
 - **prompt 与 prompt-setting 的接口已定（2026-10-08 落地）**：键位归 **prompt**——`ctx.prompt` 目前只做两件事：持有全局系统提示词、广播变更，section 的装配仍留在 `lib/ai/runAgent.ts`；**prompt-setting** 不认领键位，只往 `ctx.views` 的 `settings.section` 槽位注册编辑界面。两者靠 `inject` 表达依赖，且**必须把用到的服务全列上**：cordis 的 `inject` 是可访问服务的白名单，漏列就报 `cannot get property "views" without inject`（漏 `views` 是首次实跑踩到的）
 - **插件包的形态**：功能插件是**独立的包**（见 §1.2 的"形态"）：源码在 `plugins/<name>/`，包自己的 `build` 写进自己的 `dist/`；宿主的 `scripts/build-plugins.mjs` 用同一个预设把产物装到 `public/plugins/<name>/`，宿主启动时扫清单逐个装载。运行时走**同一套关**：读 manifest 文本 → 校验 → `engines` 判定 → 解析入口 → 等 `ACTIVE` / `FAILED`，任何一步不过都带 spec 错误码报错并阻止启动（不是悄悄跳过）。入口按内核约定写成模块本体导出 `apply`（可选 `name` / `inject`）。宿主身份（`engines.host` 要比对的 `agent-chat@0.1.0`）写在 [src/plugin/host.ts](../src/plugin/host.ts)
 - **共享运行时依赖（新增，2026-10-08 落地）**：插件包是独立 bundle，`react` 既不能留成裸导入（浏览器解析不了），也不能自带一份（两份 React → hooks 抛 invalid hook call、context 读不到同一棵树）。做法是**宿主注入全局 + 构建期改写 import**：宿主先把自己那份放到 `globalThis.__AGENT_CHAT_SHARED__`，**再** import 插件包（顺序是硬要求：lucide-react 这类包在**模块初始化时**就用 React）；构建期把 `import { useState } from "react"` 改写成 `import __r from "<shim>"; const useState = __r.useState`，即运行时属性访问。**必须改写而不是逐名转发**：React 的具名导出里有类（`Component`，会被 `class X extends Component` 用）和符号（`Fragment` / `Suspense`），转发成函数就废了。JSX 运行时同样转发宿主那份官方运行时——用 `createElement` 自己拼会丢掉 React 对静态子元素的标记，冒出一堆假的 key 警告
 - **两条构建后断言**（`scripts/build-plugins.mjs`）：产物**不带任何外部导入**（用 Rollup 的 chunk 账本判断，不是扫文本——扫文本会被"生成 import 语句的字符串模板"骗到，react-router 里就有），且**能带着真 React 求值并导出 `apply`**
 - **宿主导航接缝（新增）**：插件包用不了宿主那份 `react-router`（第二份 router = 另一个 context，`useNavigate` 直接抛"不在 Router 里"）。所以路由留在外壳，插件经 `ctx.views.navigate(path)` 请求跳转（外壳渲染时把 `useNavigate()` 交给 `src/plugin/navigation.ts`）
-- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地；`ctx.sessions` 的**投影读取**——事件已经发了（§2.1），但读还是"每次回表 + 内存投影"，P1b 才改成日志 + 投影；**第三方装载的入口**——现在插件包从 `public/plugins/`（应用同源）装载，`.tap` + `asset:` 通道与 CSP 放行归 P5；**类型分发**——词汇表仍是宿主源码（`src/plugin/vocabulary.ts`），外部插件拿不到它的类型，要发包才能让第三方写出带类型的插件；**Tailwind 的硬边界**——宿主 CSS 只含构建时扫描到的类名，后续安装的第三方插件用自己的类名会没有样式（只能自带 CSS 或走声明式 schema 让宿主渲染）；**插件构建与 dev 循环**——改插件源码要重跑 `pnpm build:plugins`（`predev` 会跑一次），还没有 `vite build --watch` + `reloadPlugin(id)` 的热重载；`memory` 何时切；**token 估算何时对插件可见**——它现在是宿主共享工具（`lib/ai/tokenizer.ts`），插件按 §1.2 的边界够不着，所以 prompt-setting 的分组暂时不显示"约 N tokens"（右侧「上下文」面板仍在算，因为那是宿主代码）
+- **待定**：`ctx.storage` 的表级接缝——插件登记自己的表要 bump Dexie 版本并重开，等第一个真的需要新表的插件再落地；**第三方装载的入口**——现在插件包从 `public/plugins/`（应用同源）装载，`.tap` + `asset:` 通道与 CSP 放行归 P5；**类型分发**——词汇表仍是宿主源码（`src/plugin/vocabulary.ts`），外部插件拿不到它的类型，要发包才能让第三方写出带类型的插件；**Tailwind 的硬边界**——宿主 CSS 只含构建时扫描到的类名，后续安装的第三方插件用自己的类名会没有样式（只能自带 CSS 或走声明式 schema 让宿主渲染）；**插件构建与 dev 循环**——改插件源码要重跑 `pnpm build:plugins`（`predev` 会跑一次），还没有 `vite build --watch` + `reloadPlugin(id)` 的热重载；`memory` 何时切；**token 估算何时对插件可见**——它现在是宿主共享工具（`lib/ai/tokenizer.ts`），插件按 §1.2 的边界够不着，所以 prompt-setting 的分组暂时不显示"约 N tokens"（右侧「上下文」面板仍在算，因为那是宿主代码）；**`listDocs` 的粒度**——它返回整份 payload，宿主启动时会把所有对话的文档都解码进内存（长对话多了会重）；要懒加载就得给信封加 summary 字段，那等于把一部分结构放回信封，暂不做；**文档版本**——payload 按对话域自己的约定向后兼容（缺字段用默认值），单份文档解析失败只跳过它，不 reset 整库
 
 ---
 
@@ -111,8 +111,7 @@
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| **P1 首次接入** | 引入内核；内置插件以插件包形态落地（`cambia.json` + 入口），启动走 manifest 校验与装载编排；宿主提供 `ctx.storage` 与 `ctx.views`/`ctx.renderers`（内置、不可卸载）；**message 插件化——只划边界，数据层保持现有 Dexie 结构**；外壳注册点就位（topbar 导航、sidebar 页、settings section）；首个带 UI 的功能插件（rule-setting 或 prompt）验证"服务+事件+视图"三链路 | 对话功能零回归 |
-| **P1b 会话日志化** | message 的数据层改为**追加式会话事件日志 + 投影读取**（§2.1 的会话事件真正落进日志），并迁移既有历史数据 | 日志与投影行为等价于现版本，旧数据不丢 |
+| **P1 首次接入** | 引入内核；内置插件以插件包形态落地（`cambia.json` + 入口），启动走 manifest 校验与装载编排；宿主提供 `ctx.storage` 与 `ctx.views`/`ctx.renderers`（内置、不可卸载）；**message 插件化——`ctx.sessions` 只做「分组 → 对话」两级容器，对话内容是序列化后的不透明文档**；外壳注册点就位（topbar 导航、sidebar 页、settings section）；首个带 UI 的功能插件（rule-setting 或 prompt）验证"服务+事件+视图"三链路 | 对话功能零回归，旧数据经 Dexie v5 迁移后不丢 |
 | **P2 tools** | builtinTools 逐个搬进 tools 插件，其依赖的 fs/shell 能力先经 platform 键位；requirePermission 变 waterfall/bail 监听 | 工具调用 + 审批流零回归 |
 | **P3 agent-loop** | createAgentStream 插件化，暴露 `agent/request`、`tools/*` waterfall | 流式对话零回归 |
 | **P4 llm + 周边迁移** | llm 适配器、MCP、skills 迁移为插件 | 全功能等价 |
@@ -121,7 +120,7 @@
 
 依赖：P1–P4 需要内核核心就绪，P5–P6 需要内核的装载运行时与生态件就绪。
 
-**P1 进度（2026-10-08）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、四个槽位（`topbar.action` / `settings.section` / `main.page` / `panel.tab`）、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`、`message` 的数据层与当前对话边界（`ctx.sessions` + 会话事件，见 §2.1）、`rule-setting`（`ctx.rules` + 页面 + 页签 + 顶栏入口）已落地。**插件已改成独立包**（§1.2 的"形态"）：`plugins/<name>/` 各自有个 `package.json` / `tsconfig.json` / 构建脚本，依赖契约包 `@agent-chat/plugin-api`，宿主侧不再有编译期的插件表。**还差**：`ctx.renderers`（结构化渲染器键位），以及 `turn/*` / `step/*` / `tool/*` / `agent/*` 那些事件（要等它们所属的域进插件，P2/P3）。其余 P1 项已达成，对话 / 规则 / 设置三条链路都实跑验证过（dev 与生产产物各一遍）。
+**P1 进度（2026-10-18）**：内核接入与装载编排（`src/plugin/host.ts`）、宿主件 `ctx.storage` / `ctx.views`、四个槽位（`topbar.action` / `settings.section` / `main.page` / `panel.tab`）、manifest 边界检查（`check:plugins`）、`prompt` + `prompt-setting`、`message`（`ctx.sessions`：分组 → 对话两级容器，对话内容是不透明文档，Dexie v5 迁移旧数据）、`rule-setting`（`ctx.rules` + 页面 + 页签 + 顶栏入口）已落地。**插件已改成独立包**（§1.2 的"形态"）：`plugins/<name>/` 各自有个 `package.json` / `tsconfig.json` / 构建脚本，依赖契约包 `@agent-chat/plugin-api`，宿主侧不再有编译期的插件表。**还差**：`ctx.renderers`（结构化渲染器键位）。`agent/*`、`tools/*` 等事件随各自域在 P2/P3 进插件，不再由会话层代发。其余 P1 项已达成，对话 / 规则 / 设置三条链路都实跑验证过（dev 与生产产物各一遍）。
 
 **P5 的前置被提前消化了一部分**：`@cambia/core` 与 `cordis` 的 external 约定、同 realm 共享依赖（React）、依赖图之外的部分（manifest 校验 / engines / 激活判定 / 入口解析）现在由宿主自己的流水线走通。P5 剩下的核心是 `.tap` 安装、`asset:` 通道与 CSP、以及宿主侧管理界面。
 
@@ -131,5 +130,6 @@
 
 - **宿主外壳插件化**：窗口、路由、主题、插槽容器留在宿主代码——用插件系统开发插件系统的自举困境会拖垮迭代速度。外壳**只暴露注册点**（`ctx.views` / `ctx.renderers`：topbar 导航、sidebar 页、settings section、panel tab、结构化渲染器键位），由宿主作为**不可卸载的内置插件**提供；插件往里注册，外壳自身不参与启停
 - **提前做 capability 三元分离**：蓝本把同一能力切成 definition / provider / consumer 三类包；本项目暂不这么切——当某个能力**真的出现第二个提供者**（例如远程或沙箱 fs）再拆包，现在拆只是为用不到的灵活性付样板成本。但**键位该独立的仍然独立**（`ctx.fs` / `ctx.shell` 从一开始就是接缝，不能塞进 tools）
+- **会话事件日志 / 投影读取（事件溯源）**：`ctx.sessions` 只保管「一坨不透明文档」，不做 append-only 日志、不做投影重建、不要求全序。这一层的目标是**让存储层不认识消息格式**，不是让存储层记住每一次变更。将来若真需要审计、撤销、远端同步，那属于对话域或独立插件的能力，不塞回存储层
 - **为覆盖率而迁移**：迁移按功能推进，未迁移部分保持普通模块形态；不为了"看起来全插件化"做无收益的搬运
 - **第三方插件的降权执行区**：本项目选择全信任同进程，不引入 Worker/WASM 隔离，也不为它预留架构；若将来要分发不受信插件再评估（见 [cambia/docs/kernel.md](../cambia/docs/kernel.md) 5.3）

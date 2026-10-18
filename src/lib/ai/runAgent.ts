@@ -83,7 +83,6 @@ export function startAgentRun(opts: {
   if (!providerConfig || !modelConfig) {
     const errorText = "请先在设置中配置 API Key 并选择模型。";
     store.addMessage(conversationId, {
-      conversationId,
       role: "assistant",
       content: [{ type: "text", text: errorText }],
       tokenCount: estimateTokens(errorText),
@@ -96,7 +95,6 @@ export function startAgentRun(opts: {
   }
 
   store.addMessage(conversationId, {
-    conversationId,
     role: "assistant",
     content: [],
     tokenCount: 0,

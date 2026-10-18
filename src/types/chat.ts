@@ -1,22 +1,7 @@
 /**
- * 宿主还在用的对话域类型。
+ * 对话域类型现在归 `@agent-chat/plugin-api` 的「对话域」一节（对话文档 v1）。
  *
- * `Conversation` / `Category` 等契约已搬进 `@agent-chat/plugin-api`（见 `packages/plugin-api/`）。
- * 这里留着的 `Message` / `MessageContent` 是 llm 侧的词汇表，等 llm 插件落地再跟过去。
+ * 这里只做转出，免得宿主的 import 站点全部改路径。存储层（`ctx.sessions`）看不到这些类型——
+ * 它只保管序列化后的文档字符串（pluginization.md §2）。
  */
-
-export interface Message {
-  id: number;
-  conversationId: string;
-  role: "user" | "assistant" | "system";
-  content: MessageContent[];
-  parentId?: string;
-  tokenCount: number;
-  createdAt: number;
-  status: "pending" | "streaming" | "done" | "error";
-}
-
-export type MessageContent =
-  | { type: "text"; text: string }
-  | { type: "reasoning"; text: string }
-  | { type: "tool_call"; toolCallId: string; toolName: string; args: Record<string, unknown>; result?: string };
+export type { Message, MessageContent } from "@agent-chat/plugin-api";

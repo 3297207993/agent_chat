@@ -18,32 +18,17 @@ import type { ComponentType } from "react";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 表里的行形状。**行（row）是持久化形状**，与领域对象不同（`ruleIds` 在行里是 JSON 字符串、
- * `pinned` 是 0/1）——编码与解码归 `ctx.sessions` / `ctx.rules` 的实现方，调用方只看领域对象。
+ * 表里的行形状。**行（row）是持久化形状**，与领域对象不同：对话行只有信封 + 一个不透明的
+ * `payload`；分类行的 `ruleIds` 是 JSON 字符串（Dexie 不给数组建索引）。编码与解码归各服务的
+ * 实现方，调用方只看领域对象。
  */
-export interface ConversationRow {
+export interface SessionDocRow {
   id: string;
-  title: string;
   categoryId?: string;
-  modelId: string;
-  providerId: string;
-  systemPrompt?: string;
-  ruleIds?: string; // JSON.stringify(string[])
-  pinned: number; // 0/1
+  /** 序列化后的对话文档（`ConversationDoc`）。存储层只保管，不解析。 */
+  payload: string;
   createdAt: number;
   updatedAt: number;
-  messageCount: number;
-}
-
-export interface MessageRow {
-  id?: number; // Dexie 自增主键，新增时不传
-  conversationId: string;
-  role: MessageRole;
-  content: string; // JSON.stringify(MessageContent[])
-  parentId?: string;
-  tokenCount: number;
-  createdAt: number;
-  status: MessageStatus;
 }
 
 export interface CategoryRow {
@@ -78,8 +63,7 @@ export interface RuleRow {
  * 表**全是宿主的**：插件登记自己的表要 bump Dexie 版本并重开，见 pluginization.md §2.2 的待定项。
  */
 export interface StorageEngine extends Dexie {
-  readonly conversations: EntityTable<ConversationRow, "id">;
-  readonly messages: EntityTable<MessageRow, "id">;
+  readonly sessions: EntityTable<SessionDocRow, "id">;
   readonly categories: EntityTable<CategoryRow, "id">;
   readonly rules: EntityTable<RuleRow, "id">;
 }
@@ -97,64 +81,27 @@ export interface StorageService {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 会话：`ctx.sessions`
+// 会话：`ctx.sessions` —— 「分组 → 对话」两级容器，对话内容是不透明文档
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type MessageRole = "user" | "assistant" | "system";
-
-export type MessageStatus = "pending" | "streaming" | "done" | "error";
-
 /**
- * 一条持久化消息。
+ * 存储里的一条对话：信封 + 一坨不透明数据。
  *
- * `content` 是**不透明字符串**：格式归 llm 侧，message 侧只存不解释。`tokenCount` 由调用方算好
- * 传入——算它必须懂内容格式，那是 llm 侧的事（pluginization.md §2.2 的"`tokenCount` 挪位"）。
+ * `payload` 里装的是什么（消息数组、map、还是别的组织形式），`ctx.sessions` **不看也不猜**——它
+ * 只负责序列化存、原样取。格式由写它的那一侧定义（pluginization.md §2）。
  */
-export interface StoredMessage {
-  readonly id: number;
-  readonly conversationId: string;
-  readonly role: MessageRole;
-  readonly content: string;
-  readonly parentId?: string;
-  readonly tokenCount: number;
+export interface SessionDoc {
+  readonly id: string;
+  readonly categoryId?: string;
+  readonly payload: string;
   readonly createdAt: number;
-  readonly status: MessageStatus;
+  readonly updatedAt: number;
 }
 
-/** 追加消息要给的字段：`id` 由存储分配。 */
-export type MessageDraft = Omit<StoredMessage, "id">;
-
-/** 改一条消息能改的部分。 */
-export type MessagePatch = Partial<Omit<StoredMessage, "id" | "conversationId">>;
-
-export interface Conversation {
-  id: string;
-  title: string;
-  categoryId?: string;
-  modelId: string;
-  providerId: string;
-  systemPrompt?: string;
-  ruleIds: string[];
-  pinned: boolean;
-  createdAt: number;
-  updatedAt: number;
-  messageCount: number;
-}
-
-/**
- * 新建对话要给的字段。
- *
- * `id` 是**必填**：内存里的对象先于持久化存在（乐观更新），id 得先定下来，所以由调用方生成。
- */
-export type ConversationDraft = Omit<
-  Conversation,
-  "id" | "ruleIds" | "pinned" | "createdAt" | "updatedAt" | "messageCount"
-> &
-  Partial<Pick<Conversation, "ruleIds" | "pinned" | "createdAt" | "updatedAt" | "messageCount">> & {
-    id: string;
-  };
-
-export type ConversationPatch = Partial<Omit<Conversation, "id">>;
+/** 新建对话文档要给的字段；`id` 不给就由实现方生成。 */
+export type SessionDocDraft = Partial<Pick<SessionDoc, "id" | "categoryId" | "createdAt">> & {
+  payload: string;
+};
 
 export interface Category {
   id: string;
@@ -166,7 +113,7 @@ export interface Category {
   createdAt: number;
 }
 
-/** 新建分类要给的字段；`id` 必填的理由同 `ConversationDraft`。 */
+/** 新建分类要给的字段；`id` 必填——内存对象先于持久化存在（乐观更新），得先定下来。 */
 export type CategoryDraft = Omit<Category, "id" | "ruleIds" | "sortOrder" | "createdAt"> &
   Partial<Pick<Category, "ruleIds" | "sortOrder" | "createdAt">> & {
     id: string;
@@ -177,11 +124,11 @@ export type CategoryPatch = Partial<Omit<Category, "id">>;
 /**
  * `session/changed` 的负载。
  *
- * `id` 是**重取的键**：对话与分类是自身 id；消息是所属对话的 id（UI 的粒度是"重取这个对话的消息"，
- * 不是按单条消息刷）。
+ * `id` 是**重取的键**：对话与分类都是自身 id。它只是失效通知——`ctx.sessions` 不知道 payload 里
+ * 改了什么，所以消息级的变更也只能归到所属对话上。
  */
 export interface SessionChange {
-  readonly kind: "conversation" | "category" | "message";
+  readonly kind: "conversation" | "category";
   readonly action: "created" | "updated" | "deleted";
   readonly id: string;
 }
@@ -189,28 +136,24 @@ export interface SessionChange {
 /**
  * `ctx.sessions`。
  *
- * 对话 / 消息 / 分类三张表的**唯一**入口：行编码、排序与 id 分配都归实现方，调用方只看领域对象。
- * 消息内容按不透明字符串存取。
+ * 只管**容器**：分组、对话文档、当前选择。没有消息级接口——追加 / 改写 / 删除一条消息是消费方
+ * 自己的事：读出文档、改内存里的对象、整份写回。
  */
 export interface SessionsService {
-  /** 按最近更新倒序。 */
-  listConversations(): Promise<Conversation[]>;
-  createConversation(draft: ConversationDraft): Promise<Conversation>;
-  /** 会顺带把 `updatedAt` 更新为当前时间。 */
-  updateConversation(id: string, updates: ConversationPatch): Promise<void>;
-  deleteConversation(id: string): Promise<void>;
+  /** 按最近更新倒序。`payload` 原样返回，不解析。 */
+  listDocs(): Promise<SessionDoc[]>;
+  readDoc(id: string): Promise<SessionDoc | undefined>;
+  createDoc(draft: SessionDocDraft): Promise<SessionDoc>;
+  /**
+   * 整份覆盖。`touch` 默认 true，会把 `updatedAt` 设成写入时刻；后台校正这类不该打乱排序的
+   * 写入传 false。
+   */
+  writeDoc(id: string, payload: string, options?: { touch?: boolean }): Promise<void>;
+  /** 改所属分组（信封字段，不在 payload 里）；`undefined` 表示移出分组。 */
+  moveDoc(id: string, categoryId: string | undefined): Promise<void>;
+  deleteDoc(id: string): Promise<void>;
 
-  listMessages(conversationId: string): Promise<StoredMessage[]>;
-  /** 返回存储分配的消息 id。 */
-  appendMessage(draft: MessageDraft): Promise<number>;
-  updateMessage(id: number, updates: MessagePatch): Promise<void>;
-  deleteMessage(id: number): Promise<void>;
-  /** 删掉某个对话的全部消息。 */
-  deleteMessages(conversationId: string): Promise<void>;
-  /** 该对话最后写入的一条；流式期的临时负 id 回填靠它兜底。 */
-  latestMessage(conversationId: string): Promise<StoredMessage | undefined>;
-
-  /** 当前选中的对话（§2 表里归 message）。它不落库：每次启动都是"没选"。 */
+  /** 当前选中的对话。它不落库：每次启动都是"没选"。 */
   getCurrentId(): string | null;
   /** 切换当前对话；广播 `session/current-changed`。 */
   setCurrent(conversationId: string | null): void;
@@ -221,6 +164,56 @@ export interface SessionsService {
   updateCategory(id: string, updates: CategoryPatch): Promise<void>;
   deleteCategory(id: string): Promise<void>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 对话域：对话文档 v1（**不属于** `ctx.sessions`）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 对话文档的形状：`ctx.sessions` 把它当一坨不透明数据保管；写成它的插件（chat-view、agent-loop、
+ * rule-setting）靠这份定义互相看懂。换消息组织形式 = 改这里，`ctx.sessions` 一行不动。
+ */
+export type MessageRole = "user" | "assistant" | "system";
+
+export type MessageStatus = "pending" | "streaming" | "done" | "error";
+
+export type MessageContent =
+  | { type: "text"; text: string }
+  | { type: "reasoning"; text: string }
+  | {
+      type: "tool_call";
+      toolCallId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+      result?: string;
+    };
+
+export interface Message {
+  id: number;
+  role: MessageRole;
+  content: MessageContent[];
+  parentId?: string;
+  tokenCount: number;
+  createdAt: number;
+  status: MessageStatus;
+}
+
+export interface ConversationDoc {
+  title: string;
+  modelId: string;
+  providerId: string;
+  systemPrompt?: string;
+  ruleIds: string[];
+  pinned: boolean;
+  messages: Message[];
+}
+
+/**
+ * 解码后的对话：信封 + 文档里除 `messages` 之外的字段。
+ *
+ * 列表与规则绑定只需要这些；消息由宿主在内存里另存一份（按对话懒加载、整份写回）。
+ */
+export type Conversation = Omit<SessionDoc, "payload"> & Omit<ConversationDoc, "messages">;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 规则：`ctx.rules`
@@ -404,7 +397,7 @@ declare module "@cambia/core" {
     views: ViewsService;
     /** prompt section 的装配与全局系统提示词（pluginization.md §2 的 prompt 组）。 */
     prompt: PromptService;
-    /** 对话 / 消息 / 分类的存取（pluginization.md §2 的 message 插件）。 */
+    /** 分组 / 对话文档的存取（pluginization.md §2 的 message 插件）。 */
     sessions: SessionsService;
     /** 规则数据与绑定解析（pluginization.md §2 的 rule-setting 插件）。 */
     rules: RulesService;
@@ -418,14 +411,8 @@ declare module "@cambia/core" {
     "internal/status"(changed: FiberStatusChange): void;
 
     /**
-     * 消息落库（§2.1 的会话事实）。负载就是持久化形状：P1b 把它改成日志之后，它就是日志条目的形状。
-     */
-    "user/message"(message: StoredMessage): void;
-    "assistant/message"(message: StoredMessage): void;
-
-    /**
-     * 会话数据的变更通知（对话 / 分类 / 消息），用于**失效重取**——不是持久事实，P1b 的日志不追加
-     * 它。观察者靠它知道"该重取了"，不靠它重建状态。
+     * 会话数据的变更通知，用于**失效重取**。它只说明「哪个容器变了」，不携带文档内容——payload 是
+     * 不透明的，`ctx.sessions` 说不出里面改了什么。
      */
     "session/changed"(change: SessionChange): void;
 

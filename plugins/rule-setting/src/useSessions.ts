@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, useCallback } from "react";
 import type { Context } from "@cambia/core";
-import type { Category, Conversation, Rule } from "@agent-chat/plugin-api";
+import type { Category, Conversation, ConversationDoc, Rule, SessionDoc } from "@agent-chat/plugin-api";
 
 /**
  * 插件侧的会话数据视图。
@@ -37,7 +37,25 @@ function useSessionList<T>(
   return items;
 }
 
-const loadConversations = (ctx: Context) => ctx.sessions.listConversations();
+/** 对话文档的形状归对话域（`ConversationDoc`）；`ctx.sessions` 只给一坨 payload，这里自己解。 */
+function decodeConversation(doc: SessionDoc): Conversation {
+  const payload = (JSON.parse(doc.payload) ?? {}) as ConversationDoc;
+  return {
+    id: doc.id,
+    categoryId: doc.categoryId,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    title: payload.title ?? "新对话",
+    modelId: payload.modelId ?? "",
+    providerId: payload.providerId ?? "",
+    systemPrompt: payload.systemPrompt,
+    ruleIds: payload.ruleIds ?? [],
+    pinned: payload.pinned ?? false,
+  };
+}
+
+const loadConversations = async (ctx: Context) =>
+  (await ctx.sessions.listDocs()).map(decodeConversation);
 const loadCategories = (ctx: Context) => ctx.sessions.listCategories();
 
 export function useConversations(ctx: Context): Conversation[] {

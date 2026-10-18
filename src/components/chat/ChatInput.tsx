@@ -4,7 +4,7 @@ import { useProviderStore } from "@/stores/providerStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { startAgentRun, buildSystemPrompt, stopStreaming } from "@/lib/ai/runAgent";
 import { estimateTokens } from "@/lib/ai/tokenizer";
-import type { Message, MessageContent } from "@/types/chat";
+import type { MessageContent } from "@/types/chat";
 import { Send, Paperclip, Image, Square } from "lucide-react";
 
 export default function ChatInput() {
@@ -13,7 +13,6 @@ export default function ChatInput() {
 
   const {
     currentConversationId,
-    conversations,
     messages,
     addMessage,
     isStreaming,
@@ -57,7 +56,6 @@ export default function ChatInput() {
       const errorText = "请先在设置中配置 API Key 并选择模型。";
       const errorMessage: MessageContent[] = [{ type: "text", text: errorText }];
       addMessage(currentConversationId, {
-        conversationId: currentConversationId,
         role: "assistant",
         content: errorMessage,
         tokenCount: estimateTokens(errorText),
@@ -69,35 +67,27 @@ export default function ChatInput() {
 
     // 1. 添加用户消息
     const userContent: MessageContent[] = [{ type: "text", text }];
-    const userMessage: Message = {
-      id: 0,
-      conversationId: currentConversationId,
+    addMessage(currentConversationId, {
       role: "user",
       content: userContent,
       tokenCount: estimateTokens(text),
       createdAt: Date.now(),
       status: "done",
-    };
-    addMessage(currentConversationId, userMessage);
+    });
     setInput("");
 
     // 更新对话元数据
-    const conv = conversations.find((c) => c.id === currentConversationId);
-    const isFirstMessage = conv ? conv.messageCount === 0 : true;
+    const isFirstMessage = (messages[currentConversationId] || []).length === 0;
     const newTitle =
       isFirstMessage && text.length > 0
         ? text.length > 20
           ? text.slice(0, 20) + "…"
           : text
         : undefined;
-    updateConversationMeta(currentConversationId, {
-      ...(newTitle ? { title: newTitle } : {}),
-      messageCount: (conv?.messageCount || 0) + 1,
-    });
+    updateConversationMeta(currentConversationId, newTitle ? { title: newTitle } : {});
 
-    // 2. 构建消息历史（包含刚发送的用户消息）
-    const currentMessages = messages[currentConversationId] || [];
-    const allMessages = [...currentMessages, userMessage];
+    // 2. 构建消息历史（包含刚发送的用户消息；`addMessage` 已把它同步写进 store）
+    const allMessages = useConversationStore.getState().messages[currentConversationId] || [];
 
     // 3. 调用 Agent 循环（支持工具调用 + maxSteps 多步交互）
     startAgentRun({

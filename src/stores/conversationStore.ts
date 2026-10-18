@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { hostContext } from "@/plugin";
 import type { Message, MessageContent } from "@/types/chat";
-import type { Conversation, StoredMessage } from "@agent-chat/plugin-api";
+import type { Conversation, ConversationDoc, SessionDoc } from "@agent-chat/plugin-api";
 import { resetDatabase } from "@/lib/db/database";
 import { estimateMessageTokens } from "@/lib/ai/tokenizer";
 import { useUIStore } from "@/stores/uiStore";
@@ -26,35 +26,91 @@ function mirrorSelection() {
   });
 }
 
-/** 持久化消息 → 内存消息：内容是不透明字符串，解回结构是 llm 侧的事（§2.2）。 */
-function toMessage(row: StoredMessage): Message {
-  return {
-    id: row.id,
-    conversationId: row.conversationId,
-    role: row.role,
-    content: JSON.parse(row.content) as MessageContent[],
-    parentId: row.parentId,
-    tokenCount: row.tokenCount,
-    createdAt: row.createdAt,
-    status: row.status,
-  };
+/**
+ * 对话文档的编解码归**对话域**（这里是宿主这一侧的实现）——`ctx.sessions` 只保管序列化后的
+ * 字符串，不知道里面有消息、更不知道是数组还是 map（pluginization.md §2）。
+ */
+function decodeDoc(doc: SessionDoc): { conversation: Conversation; messages: Message[] } | undefined {
+  try {
+    const payload = JSON.parse(doc.payload) as ConversationDoc;
+    return {
+      conversation: {
+        id: doc.id,
+        categoryId: doc.categoryId,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+        title: payload.title ?? "新对话",
+        modelId: payload.modelId ?? "",
+        providerId: payload.providerId ?? "",
+        systemPrompt: payload.systemPrompt,
+        ruleIds: payload.ruleIds ?? [],
+        pinned: payload.pinned ?? false,
+      },
+      messages: (Array.isArray(payload.messages) ? payload.messages : []).map((message) => ({
+        ...message,
+        content: Array.isArray(message.content) ? message.content : [],
+        tokenCount: typeof message.tokenCount === "number" ? message.tokenCount : 0,
+      })),
+    };
+  } catch {
+    // 单份文档坏了不该拖垮整个会话列表（更不该触发 resetDatabase）
+    return undefined;
+  }
 }
 
-/** 内存消息 → 持久化消息。 */
-function toStored(message: Message): Omit<StoredMessage, "id"> {
-  return {
-    conversationId: message.conversationId,
-    role: message.role,
-    content: JSON.stringify(message.content),
-    parentId: message.parentId,
-    tokenCount: message.tokenCount,
-    createdAt: message.createdAt,
-    status: message.status,
+function encodeDoc(conversation: Conversation, messages: Message[]): string {
+  const doc: ConversationDoc = {
+    title: conversation.title,
+    modelId: conversation.modelId,
+    providerId: conversation.providerId,
+    systemPrompt: conversation.systemPrompt,
+    ruleIds: conversation.ruleIds,
+    pinned: conversation.pinned,
+    messages,
   };
+  return JSON.stringify(doc);
 }
 
-// 自减计数器，生成运行时临时负 id，避免与 DB 自增 id 冲突
-let _msgIdCounter = 0;
+/** 同一对话的写入串行化：整份覆盖时，后一次必须看到前一次之后的内存状态。 */
+const writeQueues = new Map<string, Promise<unknown>>();
+
+function persistConversation(conversationId: string, touch = true): Promise<void> {
+  const next = (writeQueues.get(conversationId) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(async () => {
+      const conversation = useConversationStore
+        .getState()
+        .conversations.find((item) => item.id === conversationId);
+      if (!conversation) return;
+
+      // `writeDoc` 把 `updatedAt` 设成写入时刻；内存这一侧跟着改，侧边栏排序才与库里一致
+      if (touch) {
+        const updatedAt = Date.now();
+        useConversationStore.setState((state) => ({
+          conversations: state.conversations.map((item) =>
+            item.id === conversationId ? { ...item, updatedAt } : item,
+          ),
+        }));
+      }
+
+      const latest =
+        useConversationStore.getState().conversations.find((item) => item.id === conversationId) ??
+        conversation;
+      await sessions().writeDoc(
+        conversationId,
+        encodeDoc(latest, useConversationStore.getState().messages[conversationId] ?? []),
+        { touch },
+      );
+    });
+
+  writeQueues.set(conversationId, next);
+  return next;
+}
+
+/** 消息 id 由对话文档自己分配——存储层不再有自增主键。 */
+function nextMessageId(messages: Message[]): number {
+  return messages.reduce((max, message) => (message.id > max ? message.id : max), 0) + 1;
+}
 
 interface ConversationState {
   conversations: Conversation[];
@@ -79,7 +135,7 @@ interface ConversationState {
   removeMessage: (conversationId: string, messageId: number) => Promise<void>;
 
   // Messages
-  addMessage: (conversationId: string, message: Omit<Message, "id">) => void;
+  addMessage: (conversationId: string, message: Omit<Message, "id">) => number;
   updateMessage: (conversationId: string, messageId: number, updates: Partial<Message>) => void;
   appendToLastAssistantMessage: (conversationId: string, text: string) => void;
   appendReasoningToLastAssistantMessage: (conversationId: string, text: string) => void;
@@ -114,12 +170,37 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   loadFromDB: async () => {
     mirrorSelection();
     try {
-      const conversations = await sessions().listConversations();
+      const docs = await sessions().listDocs();
+      const conversations: Conversation[] = [];
+      const messages: Record<string, Message[]> = {};
+      const corrected: string[] = [];
+
+      for (const doc of docs) {
+        const decoded = decodeDoc(doc);
+        if (!decoded) continue;
+        conversations.push(decoded.conversation);
+
+        // 迁移：旧数据的 tokenCount 为 0 或旧算法（length/4，对中文严重低估）粗略值，
+        // 用 tokenizer 校正为真实估算值，写完一次整份文档（幂等，校正后相等就不再写）
+        let changed = false;
+        messages[doc.id] = decoded.messages.map((message) => {
+          const real = estimateMessageTokens(message);
+          if (real === message.tokenCount) return message;
+          changed = true;
+          return { ...message, tokenCount: real };
+        });
+        if (changed) corrected.push(doc.id);
+      }
+
       set({
         conversations,
         currentConversationId: sessions().getCurrentId(),
+        messages,
         initialized: true,
       });
+
+      // 校正不该打乱侧边栏顺序，所以不 touch（保留原来的 updatedAt）
+      for (const id of corrected) void persistConversation(id, false);
     } catch {
       // 数据库升级失败时重置
       await resetDatabase();
@@ -133,27 +214,6 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     // 权威在服务：先切它（事件回来会镜像），本地再补一次以免订阅还没装上
     sessions().setCurrent(id);
     set((state) => (state.currentConversationId === id ? state : { currentConversationId: id }));
-
-    if (id) {
-      // 按需加载当前对话的消息
-      const { messages } = get();
-      if (!messages[id]) {
-        const msgRows = await sessions().listMessages(id);
-        const loaded = msgRows.map(toMessage);
-        // 迁移：旧数据的 tokenCount 为 0 或旧算法（length/4，对中文严重低估）粗略值，
-        // 用 tokenizer 校正为真实估算值，并异步回写 DB（幂等，校正后相等不再写）
-        for (const m of loaded) {
-          const real = estimateMessageTokens(m);
-          if (real !== m.tokenCount) {
-            m.tokenCount = real;
-            void sessions().updateMessage(m.id, { tokenCount: real });
-          }
-        }
-        set((state) => ({
-          messages: { ...state.messages, [id]: loaded },
-        }));
-      }
-    }
   },
 
   // ── CRUD ──
@@ -168,6 +228,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         const active = useUIStore.getState().activeCategory;
         return active && active !== "all" ? active : undefined;
       })();
+    const now = Date.now();
     const conversation: Conversation = {
       id,
       title: title || "新对话",
@@ -176,9 +237,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       providerId: "",
       ruleIds: [],
       pinned: false,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      messageCount: 0,
+      createdAt: now,
+      updatedAt: now,
     };
 
     set((state) => ({
@@ -187,18 +247,24 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }));
     sessions().setCurrent(id);
 
-    void sessions().createConversation(conversation);
+    // 建文档也进写队列：紧接着的整份写回必须排在它后面，否则会写到还不存在的行上
+    writeQueues.set(
+      id,
+      sessions().createDoc({
+        id,
+        categoryId: resolvedCategoryId,
+        payload: encodeDoc(conversation, []),
+      }),
+    );
 
     return id;
   },
 
   renameConversation: async (id, title) => {
     set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === id ? { ...c, title, updatedAt: Date.now() } : c
-      ),
+      conversations: state.conversations.map((c) => (c.id === id ? { ...c, title } : c)),
     }));
-    await sessions().updateConversation(id, { title });
+    await persistConversation(id);
   },
 
   togglePin: async (id) => {
@@ -209,29 +275,25 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       newPinned = !conv.pinned;
       return {
         conversations: state.conversations.map((c) =>
-          c.id === id ? { ...c, pinned: newPinned, updatedAt: Date.now() } : c
+          c.id === id ? { ...c, pinned: newPinned } : c
         ),
       };
     });
-    await sessions().updateConversation(id, { pinned: newPinned });
+    await persistConversation(id);
   },
 
   setCategory: async (id, categoryId) => {
     set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === id ? { ...c, categoryId, updatedAt: Date.now() } : c
-      ),
+      conversations: state.conversations.map((c) => (c.id === id ? { ...c, categoryId } : c)),
     }));
-    await sessions().updateConversation(id, { categoryId });
+    await sessions().moveDoc(id, categoryId);
   },
 
   setConversationRules: async (id, ruleIds) => {
     set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === id ? { ...c, ruleIds, updatedAt: Date.now() } : c
-      ),
+      conversations: state.conversations.map((c) => (c.id === id ? { ...c, ruleIds } : c)),
     }));
-    await sessions().updateConversation(id, { ruleIds });
+    await persistConversation(id);
   },
 
   deleteConversation: async (id) => {
@@ -247,41 +309,35 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     });
     if (wasCurrent) sessions().setCurrent(null);
 
-    await Promise.all([sessions().deleteConversation(id), sessions().deleteMessages(id)]);
+    writeQueues.delete(id);
+    await sessions().deleteDoc(id);
   },
 
   removeMessage: async (conversationId, messageId) => {
-    const { messages } = get();
-    const msgs = messages[conversationId] || [];
+    const msgs = get().messages[conversationId] || [];
     if (!msgs.some((m) => m.id === messageId)) return;
 
-    // 从内存移除
-    set({
+    set((state) => ({
       messages: {
-        ...messages,
-        [conversationId]: msgs.filter((m) => m.id !== messageId),
+        ...state.messages,
+        [conversationId]: (state.messages[conversationId] || []).filter(
+          (m) => m.id !== messageId,
+        ),
       },
-    });
+    }));
 
-    // 从 DB 移除（尽力而为）
+    // 整份写回（删除失败不阻塞重新生成这类调用方）
     try {
-      if (messageId > 0) {
-        await sessions().deleteMessage(messageId);
-      } else {
-        // 临时负 id（流式结束后持久化回填尚未完成的极端时序）：
-        // 此时该消息正是 DB 中最新插入的一条
-        const latest = await sessions().latestMessage(conversationId);
-        if (latest) await sessions().deleteMessage(latest.id);
-      }
+      await persistConversation(conversationId);
     } catch {
-      // DB 删除失败不阻塞重新生成
+      // 尽力而为
     }
   },
 
   // ── Messages ──
 
   addMessage: (conversationId, message) => {
-    const id = --_msgIdCounter; // 临时负 id，持久化时 DB 会分配正 id
+    const id = nextMessageId(get().messages[conversationId] || []);
     const msg: Message = { ...message, id };
 
     set((state) => ({
@@ -290,24 +346,13 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         [conversationId]: [...(state.messages[conversationId] || []), msg],
       },
     }));
-    // 持久化消息到 IndexedDB（done/error 立即持久化，streaming 等 finish 再持久化）
+
+    // done/error 立即落库；流式期只在内存里滚，结束时整份写回
     if (msg.status !== "pending" && msg.status !== "streaming") {
-      // 持久化后把临时负 id 回填为 DB 自增 id，保证内存 id 与 DB 一致
-      //（removeMessage / 重新生成等操作需要按 id 精确删除）
-      void sessions()
-        .appendMessage(toStored(msg))
-        .then((dbId) => {
-          set((state) => ({
-            messages: {
-              ...state.messages,
-              [conversationId]:
-                state.messages[conversationId]?.map((m) =>
-                  m.id === id ? { ...m, id: dbId } : m
-                ) || [],
-            },
-          }));
-        });
+      void persistConversation(conversationId);
     }
+
+    return id;
   },
 
   updateMessage: (conversationId, messageId, updates) =>
@@ -431,21 +476,9 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
     set({ messages: { ...messages, [conversationId]: updatedMsgs } });
 
-    // 当消息变为 done/error 时持久化（带真实 tokenCount），并把临时负 id 回填为 DB id
+    // 消息变为 done/error 时整份写回（带真实 tokenCount）
     if (status === "done" || status === "error") {
-      void sessions()
-        .appendMessage(toStored(updatedMsg))
-        .then((dbId) => {
-          set((state) => ({
-            messages: {
-              ...state.messages,
-              [conversationId]:
-                state.messages[conversationId]?.map((m) =>
-                  m.id === updatedMsg.id ? { ...m, id: dbId } : m
-                ) || [],
-            },
-          }));
-        });
+      void persistConversation(conversationId);
     }
   },
 
@@ -455,11 +488,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   updateConversationMeta: (id, updates) => {
     set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c
-      ),
+      conversations: state.conversations.map((c) => (c.id === id ? { ...c, ...updates } : c)),
     }));
-    // 行编码（pinned 存 0/1）归 `ctx.sessions`，这里只管领域对象
-    void sessions().updateConversation(id, updates);
+    void persistConversation(id);
   },
 }));
