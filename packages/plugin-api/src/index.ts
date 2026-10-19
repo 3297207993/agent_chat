@@ -11,6 +11,7 @@
 import type { Context } from "@cambia/core";
 import type { EntityTable } from "dexie";
 import type Dexie from "dexie";
+import type { LanguageModel, ModelMessage } from "ai";
 import type { ComponentType } from "react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,6 +79,92 @@ export interface StorageService {
   readonly db: StorageEngine;
   /** 删库并重载页面，让新的 Dexie 实例从头建表。 */
   reset(): Promise<void>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 模型：`ctx.llm`（P4 的 llm 插件；现在由宿主桥接提供）
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ModelCapabilities {
+  vision: boolean;
+  toolCalling: boolean;
+  reasoning: boolean;
+  streaming: boolean;
+  maxTokens: number;
+}
+
+export interface ModelConfig {
+  id: string;
+  name: string;
+  providerId: string;
+  capabilities: ModelCapabilities;
+  isFavorite: boolean;
+  sortOrder: number;
+  customHeaders?: Record<string, string>;
+}
+
+export interface ProviderConfig {
+  id: string;
+  name: string;
+  type: "official" | "openai-compatible" | "custom";
+  providerKey: string;
+  packageName?: string;
+  baseURL?: string;
+  apiKey: string;
+  models: ModelConfig[];
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 当前选中的 provider / model 快照。 */
+export interface ActiveModel {
+  readonly provider: ProviderConfig;
+  readonly model: ModelConfig;
+}
+
+/** `ctx.llm.computeContextBudget()` 的输入。 */
+export interface ContextBudgetInput {
+  readonly model?: ModelConfig | null;
+  readonly systemPrompt: string;
+  readonly toolsTokens: number;
+}
+
+/** 发送前的消息窗口裁剪结果。 */
+export interface ContextWindowResult {
+  readonly messages: Message[];
+  readonly droppedCount: number;
+  readonly droppedTokens: number;
+  readonly usedTokens: number;
+}
+
+/**
+ * `ctx.llm`。
+ *
+ * P3 期间这是**宿主桥接服务**（provider 解析、token 估算、窗口裁剪、消息转换仍在
+ * `lib/ai/`），P4 会把它们整体搬进 llm 插件；agent-loop 只依赖这里的方法，不 import 宿主。
+ */
+export interface LlmService {
+  /** 当前 provider + model；没配置时返回 `undefined`。 */
+  getActive(): ActiveModel | undefined;
+  /** provider / model 选择变化通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
+
+  /** 把配置解析成 AI SDK 的 LanguageModel 实例。 */
+  createModel(active: ActiveModel): LanguageModel;
+  /** 内部 `Message[]` → AI SDK `ModelMessage[]`。 */
+  convertMessages(messages: Message[]): ModelMessage[];
+
+  estimateTokens(text: string): number;
+  estimateMessageTokens(message: Message): number;
+  estimateToolsTokens(tools: Record<string, unknown>): number;
+  computeContextBudget(input: ContextBudgetInput): number;
+  buildMessageWindow(messages: Message[], budget: number): ContextWindowResult;
+  trimModelMessages(
+    messages: ModelMessage[],
+    budget: number,
+    referenceTotalTokens: number,
+  ): ModelMessage[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,6 +306,29 @@ export interface ToolsService {
   subscribe(listener: () => void): () => void;
   /** 给 AI SDK 的工具表；每个工具的 `execute` 都经过 `tools/pre-execute`。 */
   getAISDKTools(): Record<string, any>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 技能目录：`ctx.skillCatalog`（P4 的 skills 插件；现在由宿主桥接提供）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 一条可用于 prompt Discovery 列表 / `/技能名` 翻译的技能摘要。 */
+export interface SkillCatalogEntry {
+  readonly name: string;
+  readonly description: string;
+}
+
+/**
+ * `ctx.skillCatalog`。
+ *
+ * 只给 agent-loop 装配 system prompt、chat-view 翻译 `/技能名` 用——不是完整的 skills 插件。
+ * P4 会由 `ctx.skills` 取代。
+ */
+export interface SkillCatalogService {
+  /** 已启用的技能（缺省视为启用）。 */
+  listEnabled(): readonly SkillCatalogEntry[];
+  /** 技能列表 / 启用状态变化通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -384,6 +494,62 @@ export interface ConversationDoc {
  */
 export type Conversation = Omit<SessionDoc, "payload"> & Omit<ConversationDoc, "messages">;
 
+/**
+ * 对话文档的**内存视图**：列表、当前选择、每个对话的消息、流式状态。
+ *
+ * 这一层是 P3 的宿主桥（`conversationStore` 的只读快照）；对话文档的编解码仍由宿主承担。
+ * P4 之后如果对话域独立成插件，这个键位随之迁移。
+ */
+export interface ConversationsSnapshot {
+  readonly conversations: readonly Conversation[];
+  readonly currentConversationId: string | null;
+  readonly messages: Readonly<Record<string, readonly Message[]>>;
+  readonly isStreaming: boolean;
+  readonly initialized: boolean;
+}
+
+/**
+ * `ctx.conversations`。
+ *
+ * P3 的临时宿主服务：agent-loop 往里写消息、chat-view 从里读消息。它比 `ctx.sessions` 高一层
+ * ——`ctx.sessions` 只保管不透明文档，这里知道 `ConversationDoc` 里是消息数组。
+ */
+export interface ConversationsService {
+  /** 当前快照；同一批变更内引用稳定（给 `useSyncExternalStore` 用）。 */
+  snapshot(): ConversationsSnapshot;
+  /** 快照变化通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
+
+  load(): Promise<void>;
+  setCurrent(conversationId: string | null): Promise<void>;
+  create(title?: string, categoryId?: string): string;
+
+  addMessage(conversationId: string, message: Omit<Message, "id">): number;
+  updateMessage(
+    conversationId: string,
+    messageId: number,
+    updates: Partial<Message>,
+  ): void;
+  appendToLastAssistantMessage(conversationId: string, text: string): void;
+  appendReasoningToLastAssistantMessage(conversationId: string, text: string): void;
+  appendToolCallToMessage(
+    conversationId: string,
+    toolCallId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): void;
+  updateToolResultInMessage(
+    conversationId: string,
+    toolCallId: string,
+    toolName: string,
+    result: string,
+  ): void;
+  setLastMessageStatus(conversationId: string, status: Message["status"]): void;
+  setStreaming(streaming: boolean): void;
+  removeMessage(conversationId: string, messageId: number): Promise<void>;
+  updateMeta(id: string, updates: Partial<Conversation>): void;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 规则：`ctx.rules`
 // ─────────────────────────────────────────────────────────────────────────────
@@ -459,6 +625,65 @@ export interface PromptService {
   getGlobalPrompt(): string;
   setGlobalPrompt(prompt: string): void;
   /** 变更通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent 循环：`ctx.agentLoop`（agent-loop 插件）
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AgentSendOptions {
+  readonly conversationId: string;
+  /** 已由输入层处理过的用户文本（例如 `/技能名` 已翻译成自然语言）。 */
+  readonly text: string;
+}
+
+/**
+ * `ctx.agentLoop`。
+ *
+ * 只暴露生命周期：发送、停止、重新生成、是否在跑。流式内容、工具调用等过程事实走
+ * `agent/*` 事件；对话文档的读写经 `ctx.conversations`。这样 chat-view 不必知道 Agent 是怎么
+ * 驱动的，驱动方也不必知道 UI 怎么显示。
+ */
+export interface AgentLoopService {
+  /** 追加用户消息并启动一轮 Agent 输出；同一时间只允许一轮。 */
+  send(options: AgentSendOptions): void;
+  /** 中止当前流（若在跑）。 */
+  stop(): void;
+  /** 删除最后一条助手消息并用剩余上下文重新生成。 */
+  regenerate(conversationId: string, messageId: number): Promise<void>;
+  /** 是否有 Agent 正在运行；变化时通知订阅者。 */
+  isRunning(): boolean;
+  /** 运行状态变化通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 结构化渲染器：`ctx.renderers`（宿主件）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 渲染器拿到的 props：宿主 context + 该类型的数据。 */
+export interface RendererProps<T = unknown> {
+  readonly ctx: Context;
+  readonly data: T;
+}
+
+export type RendererComponent<T = unknown> = ComponentType<RendererProps<T>>;
+
+/**
+ * `ctx.renderers`。
+ *
+ * 按类型键位注册「数据 → 卡片」的渲染器。键由贡献方定义（例如 `code`、
+ * `tool:<toolName>`），chat-view 只负责在对应位置查询并渲染。未知键返回 `undefined`。
+ */
+export interface RenderersService {
+  /** 注册 / 替换一个键；返回撤销函数。 */
+  register<T>(key: string, renderer: RendererComponent<T>): () => void;
+  /** 查询当前渲染器；没有则 `undefined`。 */
+  get(key: string): RendererComponent | undefined;
+  /** 已注册的键（用于诊断/调试）。 */
+  list(): readonly string[];
+  /** 注册或撤销之后通知一次；返回退订函数。 */
   subscribe(listener: () => void): () => void;
 }
 
@@ -558,6 +783,64 @@ export interface FiberStatusChange {
   readonly state: number;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent 事件负载（pluginization.md §2.1）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 一轮 Agent 输出开始：助手占位消息已经写入对话文档。 */
+export interface AgentRunStarted {
+  readonly conversationId: string;
+  readonly messageId: number;
+}
+
+/** 流式增量（text / reasoning）。观察者只读，不回写。 */
+export interface AgentStreamEvent {
+  readonly conversationId: string;
+  readonly messageId: number;
+  readonly kind: "text" | "reasoning";
+  readonly text: string;
+}
+
+/** 工具调用 / 结果；同一 `toolCallId` 先 call 后 result。 */
+export interface AgentToolEvent {
+  readonly conversationId: string;
+  readonly messageId: number;
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly args?: Record<string, unknown>;
+  readonly result?: string;
+}
+
+/** 一轮 Agent 输出结束（正常、中止或出错）。 */
+export interface AgentRunFinished {
+  readonly conversationId: string;
+  readonly messageId: number;
+  readonly status: "done" | "error";
+  readonly error?: string;
+}
+
+/** 每一步开始（waterfall，给观察者/改写者留的接缝）。 */
+export interface AgentStepEvent {
+  readonly conversationId: string;
+  readonly stepNumber: number;
+}
+
+/**
+ * `agent/request` 的请求快照。
+ *
+ * 监听者可以在 `next()` 之前改写它（例如追加 system prompt、裁剪消息）；agent-loop 只读取
+ * 最终对象。`tools` 是 AI SDK 形状的工具表（`ctx.tools.getAISDKTools()` 的结果）。
+ */
+export interface AgentRequest {
+  readonly conversationId: string;
+  provider: ProviderConfig;
+  model: ModelConfig;
+  systemPrompt?: string;
+  messages: Message[];
+  tools: Record<string, unknown>;
+  maxSteps: number;
+}
+
 declare module "@cambia/core" {
   interface Services {
     /** Dexie 引擎与引擎级重置。宿主提供，永不卸载（pluginization.md §2）。 */
@@ -580,6 +863,16 @@ declare module "@cambia/core" {
     sessions: SessionsService;
     /** 规则数据与绑定解析（pluginization.md §2 的 rule-setting 插件）。 */
     rules: RulesService;
+    /** 模型解析、token 估算与窗口裁剪（P4 的 llm 插件；P3 由宿主桥接提供）。 */
+    llm: LlmService;
+    /** 已启用技能的目录（P4 的 skills 插件；P3 由宿主桥接提供）。 */
+    skillCatalog: SkillCatalogService;
+    /** 对话文档的内存视图（P3 的临时宿主服务，见 pluginization.md §5）。 */
+    conversations: ConversationsService;
+    /** Agent 生命周期：发送、停止、重新生成（pluginization.md §2 的 agent-loop 插件）。 */
+    agentLoop: AgentLoopService;
+    /** 结构化渲染器注册表（pluginization.md §3 的 ctx.renderers）。 */
+    renderers: RenderersService;
   }
 
   interface Events {
@@ -608,6 +901,39 @@ declare module "@cambia/core" {
      */
     "tools/pre-execute"(
       call: ToolCall,
+      next: () => Promise<unknown>,
+    ): Promise<unknown>;
+
+    /** 一轮 Agent 输出开始（助手占位消息已写入对话文档）。 */
+    "agent/run-started"(event: AgentRunStarted): void;
+
+    /** 流式增量；观察点，监听者不应回写对话文档。 */
+    "agent/assistant-stream"(event: AgentStreamEvent): void;
+
+    /** 模型发起工具调用（execute 正在等待审批/执行）。 */
+    "agent/tool-call"(event: AgentToolEvent): void;
+
+    /** 工具执行完成、结果已回注。 */
+    "agent/tool-result"(event: AgentToolEvent): void;
+
+    /** 一轮 Agent 输出结束。 */
+    "agent/run-finished"(event: AgentRunFinished): void;
+
+    /**
+     * 每一步开始（waterfall）。监听者可以在 `next()` 前后做观察或准备；不调 `next()` 会短路
+     * 该步的后续监听者（agent-loop 本身仍会继续）。
+     */
+    "agent/pre-step"(
+      event: AgentStepEvent,
+      next: () => Promise<unknown>,
+    ): Promise<unknown>;
+
+    /**
+     * 请求发出前的拦截点（waterfall）：监听者可以改写 request（追加 prompt、裁剪消息、换工具表）。
+     * `next()` 委托给下游。
+     */
+    "agent/request"(
+      request: AgentRequest,
       next: () => Promise<unknown>,
     ): Promise<unknown>;
   }

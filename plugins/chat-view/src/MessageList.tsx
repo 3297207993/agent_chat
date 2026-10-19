@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
-import type { Message } from "@/types/chat";
-import { APP_NAME } from "@/lib/constants";
+import type { Message } from "@agent-chat/plugin-api";
+import { APP_NAME } from "./constants";
 import ChatMessage from "./ChatMessage";
 
 interface Props {
-  messages: Message[];
-  isStreaming: boolean;
-  onRegenerate?: (messageId: number) => void;
+  readonly messages: readonly Message[];
+  readonly isStreaming: boolean;
+  readonly onRegenerate?: (messageId: number) => void;
 }
 
 export default function MessageList({
@@ -36,14 +36,14 @@ export default function MessageList({
 
   return (
     <div className="flex-1 overflow-y-auto py-6">
-      {messages.map((msg, i) => {
-        const isLast = i === messages.length - 1;
+      {messages.map((message, index) => {
+        const isLast = index === messages.length - 1;
         return (
           <ChatMessage
-            key={msg.id}
-            message={msg}
+            key={message.id}
+            message={message}
             canRegenerate={
-              isLast && msg.role === "assistant" && !isStreaming
+              isLast && message.role === "assistant" && !isStreaming
             }
             onRegenerate={isLast ? onRegenerate : undefined}
           />

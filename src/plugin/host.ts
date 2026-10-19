@@ -9,6 +9,7 @@ import {
   type Manifest,
 } from "@cambia/host";
 import platformManifest from "./host-pieces/platform/cambia.json";
+import renderersManifest from "./host-pieces/renderers/cambia.json";
 import storageManifest from "./host-pieces/storage/cambia.json";
 import viewsManifest from "./host-pieces/views/cambia.json";
 import "./vocabulary";
@@ -35,6 +36,7 @@ const CATALOG_PATH = "plugins/index.json";
 const HOST_MODULES: Record<string, () => Promise<unknown>> = {
   storage: () => import("./host-pieces/storage"),
   views: () => import("./host-pieces/views"),
+  renderers: () => import("./host-pieces/renderers"),
   platform: () => import("./host-pieces/platform"),
 };
 
@@ -42,6 +44,7 @@ const HOST_MODULES: Record<string, () => Promise<unknown>> = {
 const HOST_MANIFEST_TEXT: Record<string, string> = {
   storage: JSON.stringify(storageManifest),
   views: JSON.stringify(viewsManifest),
+  renderers: JSON.stringify(renderersManifest),
   platform: JSON.stringify(platformManifest),
 };
 
@@ -59,8 +62,8 @@ const MOUNT_TIMEOUT_MS = 5_000;
 /**
  * 已启动的宿主 context。
  *
- * 组件树走 `<PluginHostProvider>` + `useHost()`；**非组件代码**（如 `lib/ai/runAgent.ts` 的 prompt
- * 装配）用 `hostContext()` 取服务。两者是同一个 context——`bootHost()` 记录的就是它返回的那个，
+ * 组件树走 `<PluginHostProvider>` + `useHost()`；**非组件代码**（如宿主侧临时 bridge）用
+ * `hostContext()` 取服务。两者是同一个 context——`bootHost()` 记录的就是它返回的那个，
  * 所以不存在"两套宿主"的可能。
  */
 let bootedHost: Context | null = null;
@@ -84,8 +87,13 @@ async function loadPlugin(ctx: Context, item: MountPlanItem) {
  * 宿主件是编译进来的模块，其余是插件目录里由 manifest 指定的 bundle。装载顺序不由宿主规定——
  * 依赖写在插件的 `inject` 里、由内核解析，所以先把所有插件挂上去，再统一等判定。
  */
-export async function bootHost(): Promise<Context> {
+export async function bootHost(setup?: (ctx: Context) => void): Promise<Context> {
   const ctx = new Context();
+
+  // 宿主桥接服务（P3 的 llm / conversations / skillCatalog）必须在插件挂载前就位，否则插件
+  // 的 `inject` 会一直等不到它们。它们是服务，不是插件——P4 收编后这里会变空。
+  setup?.(ctx);
+
   const mounting: Promise<void>[] = [];
   const failures: string[] = [];
 

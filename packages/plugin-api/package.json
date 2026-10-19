@@ -15,10 +15,12 @@
     "@cambia/core": "link:../../cambia/packages/core"
   },
   "peerDependencies": {
+    "ai": "^7",
     "dexie": "^4",
     "react": "^19"
   },
   "devDependencies": {
+    "ai": "^7.0.31",
     "dexie": "^4.4.4",
     "react": "^19.1.0",
     "typescript": "~5.8.3"

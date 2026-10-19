@@ -112,7 +112,7 @@ function nextMessageId(messages: Message[]): number {
   return messages.reduce((max, message) => (message.id > max ? message.id : max), 0) + 1;
 }
 
-interface ConversationState {
+export interface ConversationState {
   conversations: Conversation[];
   currentConversationId: string | null;
   messages: Record<string, Message[]>;

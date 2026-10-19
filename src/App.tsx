@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
-import ChatPage from "@/pages/ChatPage";
 import SettingsPage from "@/pages/SettingsPage";
 import McpPage from "@/pages/McpPage";
 import SkillPage from "@/pages/SkillPage";
@@ -60,7 +59,7 @@ function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<ChatPage />} />
+        {/* `/` 由 chat-view 插件经 `main.page` 注册（pluginization.md §2 的 P3） */}
         <Route path="/settings" element={<SettingsPage />} />
         {pages.map((page) => (
           <Route key={page.id} path={page.path} element={<page.render ctx={ctx} />} />

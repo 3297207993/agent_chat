@@ -1,14 +1,22 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
+import type { RendererProps } from "@agent-chat/plugin-api";
 import { highlightCode } from "@/lib/shiki";
 
-interface Props {
-  language: string;
-  code: string;
+export interface CodeRendererData {
+  readonly language: string;
+  readonly code: string;
 }
 
-export default function CodeBlock({ language, code }: Props) {
-  const [html, setHtml] = useState<string>("");
+/**
+ * `code` 渲染器：shiki 高亮 + 复制按钮。
+ *
+ * 它是宿主件而不是 chat-view 插件的一部分——shiki 及其语言包是宿主依赖，插件包应保持自包含
+ * 且不重复打包它们（pluginization.md §3 的渲染器分层）。
+ */
+export default function CodeRenderer({ data }: RendererProps<CodeRendererData>) {
+  const { language, code } = data;
+  const [html, setHtml] = useState("");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

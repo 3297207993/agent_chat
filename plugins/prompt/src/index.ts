@@ -14,7 +14,7 @@ const LEGACY_FIELD = "globalSystemPrompt";
  * `ctx.prompt`（pluginization.md §2 的 prompt 组）。
  *
  * 状态搬进来之后，宿主代码与别的插件都只能通过这个键位读它——`uiStore` 不再有这个字段。装配
- * （section 的拼接）暂时留在 `lib/ai/runAgent.ts`，等各插件开始贡献 section 再收进来（§2.2）。
+ * （section 的拼接）已在 P3 随 `buildSystemPrompt` 搬进 agent-loop 插件（§2.2）。
  */
 export function apply(ctx: Context) {
   ctx.provide("prompt", createPromptService());

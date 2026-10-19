@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 interface Props {
-  text: string;
+  readonly text: string;
 }
 
 export default function ReasoningBlock({ text }: Props) {

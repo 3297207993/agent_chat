@@ -1,0 +1,24 @@
+{
+  "name": "@agent-chat/plugin-chat-view",
+  "version": "0.1.0",
+  "private": true,
+  "description": "对话展示与输入（观察 agent/* 事件，不认领键位）",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/build-plugin.mjs .",
+    "check": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-chat/plugin-api": "link:../../packages/plugin-api"
+  },
+  "peerDependencies": {
+    "@cambia/core": "*",
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@cambia/core": "link:../../cambia/packages/core",
+    "lucide-react": "^1.25.0",
+    "react": "^19.1.0",
+    "typescript": "~5.8.3"
+  }
+}

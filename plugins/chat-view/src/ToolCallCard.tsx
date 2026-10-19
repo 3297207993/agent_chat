@@ -1,23 +1,23 @@
 import { useState } from "react";
 import {
+  CheckCircle,
   ChevronDown,
   ChevronRight,
-  Wrench,
-  CheckCircle,
   Loader2,
-  XCircle,
   ShieldAlert,
+  Wrench,
+  XCircle,
 } from "lucide-react";
 
 interface Props {
-  toolName: string;
-  args: Record<string, unknown>;
-  result?: string;
-  status: "running" | "done" | "error" | "waiting";
+  readonly toolName: string;
+  readonly args: Record<string, unknown>;
+  readonly result?: string;
+  readonly status: "running" | "done" | "error" | "waiting";
   /** 待审批时提供：允许 */
-  onApprove?: () => void;
+  readonly onApprove?: () => void;
   /** 待审批时提供：拒绝 */
-  onReject?: () => void;
+  readonly onReject?: () => void;
 }
 
 export default function ToolCallCard({
@@ -51,7 +51,11 @@ export default function ToolCallCard({
         onClick={() => setCollapsed(!collapsed)}
         className="flex items-center gap-2 w-full px-3 py-2 bg-app-elevated border-b border-app-border text-left cursor-pointer border-none"
       >
-        {collapsed ? <ChevronRight size={14} className="text-app-text-faint" /> : <ChevronDown size={14} className="text-app-text-faint" />}
+        {collapsed ? (
+          <ChevronRight size={14} className="text-app-text-faint" />
+        ) : (
+          <ChevronDown size={14} className="text-app-text-faint" />
+        )}
         <Wrench size={14} className="text-app-text-muted" />
         <span className="font-medium text-[13px] text-app-text">{toolName}</span>
         <span className="ml-auto flex items-center gap-1 text-[11px] text-app-text-faint">
