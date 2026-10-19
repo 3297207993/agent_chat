@@ -67,6 +67,7 @@ export interface StorageEngine extends Dexie {
   readonly sessions: EntityTable<SessionDocRow, "id">;
   readonly categories: EntityTable<CategoryRow, "id">;
   readonly rules: EntityTable<RuleRow, "id">;
+  readonly mcpServers: EntityTable<McpServerRow, "id">;
 }
 
 /**
@@ -82,7 +83,7 @@ export interface StorageService {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 模型：`ctx.llm`（P4 的 llm 插件；现在由宿主桥接提供）
+// 模型：`ctx.llm`（llm 插件）
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ModelCapabilities {
@@ -123,6 +124,13 @@ export interface ActiveModel {
   readonly model: ModelConfig;
 }
 
+/** provider 状态快照：宿主外壳（顶栏模型选择、上下文面板）只读这一份。 */
+export interface LlmSnapshot {
+  readonly providers: readonly ProviderConfig[];
+  readonly activeProviderId: string | null;
+  readonly activeModelId: string | null;
+}
+
 /** `ctx.llm.computeContextBudget()` 的输入。 */
 export interface ContextBudgetInput {
   readonly model?: ModelConfig | null;
@@ -141,14 +149,19 @@ export interface ContextWindowResult {
 /**
  * `ctx.llm`。
  *
- * P3 期间这是**宿主桥接服务**（provider 解析、token 估算、窗口裁剪、消息转换仍在
- * `lib/ai/`），P4 会把它们整体搬进 llm 插件；agent-loop 只依赖这里的方法，不 import 宿主。
+ * 实现归 llm 插件（provider 解析、token 估算、窗口裁剪、消息转换）；agent-loop 与外壳
+ * 只依赖这里的方法，不 import 插件内部模块。
  */
 export interface LlmService {
+  /** provider 状态快照；同一批变更内引用稳定（给 `useSyncExternalStore` 用）。 */
+  getSnapshot(): LlmSnapshot;
   /** 当前 provider + model；没配置时返回 `undefined`。 */
   getActive(): ActiveModel | undefined;
-  /** provider / model 选择变化通知；返回退订函数。 */
+  /** provider 状态变化通知；返回退订函数。 */
   subscribe(listener: () => void): () => void;
+
+  /** 切换当前模型（外壳顶栏用）。 */
+  setActiveModel(providerId: string, modelId: string): void;
 
   /** 把配置解析成 AI SDK 的 LanguageModel 实例。 */
   createModel(active: ActiveModel): LanguageModel;
@@ -309,7 +322,7 @@ export interface ToolsService {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 技能目录：`ctx.skillCatalog`（P4 的 skills 插件；现在由宿主桥接提供）
+// 技能：`ctx.skills`（skills 插件）
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 一条可用于 prompt Discovery 列表 / `/技能名` 翻译的技能摘要。 */
@@ -319,16 +332,95 @@ export interface SkillCatalogEntry {
 }
 
 /**
- * `ctx.skillCatalog`。
+ * `ctx.skills`。
  *
- * 只给 agent-loop 装配 system prompt、chat-view 翻译 `/技能名` 用——不是完整的 skills 插件。
- * P4 会由 `ctx.skills` 取代。
+ * 技能扫描、启用状态与 CRUD 的实现都在 skills 插件里；插件外部只需要目录能力
+ * （agent-loop 装配 system prompt、chat-view 翻译 `/技能名`）。
  */
-export interface SkillCatalogService {
+export interface SkillsService {
   /** 已启用的技能（缺省视为启用）。 */
   listEnabled(): readonly SkillCatalogEntry[];
+  /** 重新扫描 `{appDataDir}/skills`。 */
+  refresh(): Promise<void>;
   /** 技能列表 / 启用状态变化通知；返回退订函数。 */
   subscribe(listener: () => void): () => void;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP：`ctx.mcp`（mcp 插件）
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type McpTransportType = "stdio" | "sse";
+
+export interface McpServerConfig {
+  id: string;
+  name: string;
+  transport: McpTransportType;
+  command?: string;
+  args?: string[];
+  url?: string;
+  env?: Record<string, string>;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface McpServerRow {
+  id: string;
+  name: string;
+  transport: McpTransportType;
+  command?: string;
+  args?: string; // JSON.stringify(string[])
+  url?: string;
+  env?: string; // JSON.stringify(Record<string, string>)
+  enabled: number; // 0/1
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type McpConnectionStatus =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "error";
+
+export interface McpDiscoveredTool {
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  serverId: string;
+}
+
+export interface McpConnectionState {
+  serverId: string;
+  status: McpConnectionStatus;
+  error?: string;
+  tools: McpDiscoveredTool[];
+  connectedAt?: number;
+}
+
+/** MCP 配置与连接状态快照。 */
+export interface McpSnapshot {
+  readonly servers: readonly McpServerConfig[];
+  readonly connections: Readonly<Record<string, McpConnectionState>>;
+}
+
+/** `ctx.mcp`：连接管理、工具发现与配置 CRUD。 */
+export interface McpService {
+  /** 配置 + 连接状态快照；同一批变更内引用稳定。 */
+  snapshot(): McpSnapshot;
+  /** 快照变化通知；返回退订函数。 */
+  subscribe(listener: () => void): () => void;
+
+  initialize(): Promise<void>;
+  connectAllEnabled(): Promise<void>;
+  connect(id: string): Promise<void>;
+  disconnect(id: string): Promise<void>;
+  reconnect(id: string): Promise<void>;
+
+  addServer(config: Omit<McpServerConfig, "createdAt" | "updatedAt">): Promise<void>;
+  updateServer(id: string, updates: Partial<McpServerConfig>): Promise<void>;
+  removeServer(id: string): Promise<void>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -863,10 +955,12 @@ declare module "@cambia/core" {
     sessions: SessionsService;
     /** 规则数据与绑定解析（pluginization.md §2 的 rule-setting 插件）。 */
     rules: RulesService;
-    /** 模型解析、token 估算与窗口裁剪（P4 的 llm 插件；P3 由宿主桥接提供）。 */
+    /** 模型解析、token 估算与窗口裁剪（pluginization.md §2 的 llm 插件）。 */
     llm: LlmService;
-    /** 已启用技能的目录（P4 的 skills 插件；P3 由宿主桥接提供）。 */
-    skillCatalog: SkillCatalogService;
+    /** 技能目录、扫描与启用状态（pluginization.md §2 的 skills 插件）。 */
+    skills: SkillsService;
+    /** MCP 连接管理、工具发现与配置（pluginization.md §2 的 mcp 插件）。 */
+    mcp: McpService;
     /** 对话文档的内存视图（P3 的临时宿主服务，见 pluginization.md §5）。 */
     conversations: ConversationsService;
     /** Agent 生命周期：发送、停止、重新生成（pluginization.md §2 的 agent-loop 插件）。 */

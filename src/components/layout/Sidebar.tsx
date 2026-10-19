@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { useUIStore } from "@/stores/uiStore";
-import { estimateTokens } from "@/lib/ai/tokenizer";
+import { useHost } from "@/plugin";
 import {
   Plus,
   Search,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 export default function Sidebar() {
+  const { llm } = useHost();
   const { toggleSidebar, activeCategory, setActiveCategory } = useUIStore();
   const {
     conversations,
@@ -518,7 +519,7 @@ export default function Sidebar() {
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-app-text">对话系统提示词</p>
               <span className="text-[11px] text-app-text-faint">
-                约 {estimateTokens(promptDraft).toLocaleString()} tokens
+                约 {llm.estimateTokens(promptDraft).toLocaleString()} tokens
               </span>
             </div>
             <p className="text-xs text-app-text-muted mb-3">

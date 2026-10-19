@@ -13,7 +13,7 @@ export const inject = [
   "tools",
   "prompt",
   "rules",
-  "skillCatalog",
+  "skills",
   "sessions",
 ];
 

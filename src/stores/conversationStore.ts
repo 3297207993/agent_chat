@@ -3,11 +3,14 @@ import { hostContext } from "@/plugin";
 import type { Message, MessageContent } from "@/types/chat";
 import type { Conversation, ConversationDoc, SessionDoc } from "@agent-chat/plugin-api";
 import { resetDatabase } from "@/lib/db/database";
-import { estimateMessageTokens } from "@/lib/ai/tokenizer";
 import { useUIStore } from "@/stores/uiStore";
 
 /** 数据层的唯一通道：message 插件通过 `ctx.sessions` 提供（pluginization.md §2）。 */
 const sessions = () => hostContext().sessions;
+
+/** token 估算归 llm 插件；对话文档的写入方只经服务使用它。 */
+const estimateMessageTokens = (message: Message) =>
+  hostContext().llm.estimateMessageTokens(message);
 
 /** 镜像订阅只装一次（`loadFromDB` 是宿主启动后的第一个入口）。 */
 let mirroring = false;

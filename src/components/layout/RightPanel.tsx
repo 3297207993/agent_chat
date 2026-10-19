@@ -1,10 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { FileText, Plug, Brain, Zap } from "lucide-react";
+import { FileText, Brain } from "lucide-react";
 import { useHost, useViewSlot } from "@/plugin";
 import ContextTab from "./rightPanel/ContextTab";
-import McpTab from "./rightPanel/McpTab";
 import MemoryTab from "./rightPanel/MemoryTab";
-import SkillsTab from "./rightPanel/SkillsTab";
 
 interface Tab {
   id: string;
@@ -20,8 +18,6 @@ interface Tab {
  */
 const HOST_TABS: Tab[] = [
   { id: "context", order: 10, label: "上下文", icon: <FileText size={13} />, content: <ContextTab /> },
-  { id: "mcp", order: 40, label: "MCP", icon: <Plug size={13} />, content: <McpTab /> },
-  { id: "skills", order: 50, label: "技能", icon: <Zap size={13} />, content: <SkillsTab /> },
   { id: "memory", order: 60, label: "记忆", icon: <Brain size={13} />, content: <MemoryTab /> },
 ];
 

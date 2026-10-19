@@ -29,7 +29,7 @@ export default function ChatInput({ conversationId, isStreaming }: Props) {
     const match = text.match(/^\/[a-z0-9-]+(?=[\s\n]|$)/);
     if (match) {
       const name = match[0].slice(1);
-      const skill = ctx.skillCatalog
+      const skill = ctx.skills
         .listEnabled()
         .find((item) => item.name === name);
       if (skill) {

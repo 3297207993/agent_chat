@@ -6,7 +6,12 @@ import {
   type ReactNode,
 } from "react";
 import type { Context } from "@cambia/core";
-import type { ApprovalRequest, ViewItem, ViewSlot } from "./vocabulary";
+import type {
+  ApprovalRequest,
+  LlmSnapshot,
+  ViewItem,
+  ViewSlot,
+} from "./vocabulary";
 
 const HostContext = createContext<Context | null>(null);
 
@@ -41,6 +46,16 @@ export function usePendingApprovals(): readonly ApprovalRequest[] {
     [approvals],
   );
   const getSnapshot = useCallback(() => approvals.getPending(), [approvals]);
+
+  return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+/** provider / model 状态；切换模型后顶栏与上下文面板自动重渲染。 */
+export function useLlmSnapshot(): LlmSnapshot {
+  const { llm } = useHost();
+
+  const subscribe = useCallback((listener: () => void) => llm.subscribe(listener), [llm]);
+  const getSnapshot = useCallback(() => llm.getSnapshot(), [llm]);
 
   return useSyncExternalStore(subscribe, getSnapshot);
 }

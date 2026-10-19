@@ -1,5 +1,4 @@
 import ThemeSettings from "@/components/settings/ThemeSettings";
-import ProviderSettings from "@/components/settings/ProviderSettings";
 import AboutSection from "@/components/settings/AboutSection";
 import { useHost, useViewSlot } from "@/plugin";
 
@@ -16,7 +15,6 @@ export default function SettingsPage() {
         {sections.map((section) => (
           <section.render key={section.id} ctx={ctx} />
         ))}
-        <ProviderSettings />
         <AboutSection />
       </div>
     </div>

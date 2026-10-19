@@ -61,7 +61,9 @@ export async function buildPlugin(dir, outDir) {
     build: {
       outDir,
       emptyOutDir: true,
-      target: "es2022",
+      // 跳过 target lowering：Windows + esbuild 0.28 在转译大 chunk 时会在临时文件删除上报
+      // Access denied；Tauri 的 WebView 支持 ESNext（宿主 vite.config 用同一取舍）。
+      target: "esnext",
       minify: false,
       sourcemap: true,
       lib: { entry, formats: ["es"], fileName: () => entryName },

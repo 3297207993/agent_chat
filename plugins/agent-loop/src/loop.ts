@@ -332,7 +332,7 @@ async function buildSystemPrompt(
   const globalSystemPrompt = ctx.prompt.getGlobalPrompt();
 
   // Skill 注入：仅 Discovery 列表（name + description），放最末占 recency 优势
-  const skills = ctx.skillCatalog.listEnabled();
+  const skills = ctx.skills.listEnabled();
   const skillPrompt =
     skills.length > 0
       ? `[可用技能]\n${skills

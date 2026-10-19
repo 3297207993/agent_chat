@@ -1,22 +1,14 @@
 import Dexie, { type EntityTable, type Transaction } from "dexie";
-import type { CategoryRow, RuleRow, SessionDocRow } from "@agent-chat/plugin-api";
+import type {
+  CategoryRow,
+  McpServerRow,
+  RuleRow,
+  SessionDocRow,
+} from "@agent-chat/plugin-api";
 
-// 行的形状归 `@agent-chat/plugin-api`（它是插件看得见的契约：`ctx.storage.db` 的表就长这样）。
+// 行的形状在 `@agent-chat/plugin-api`（它是插件看得见的契约：`ctx.storage.db` 的表就长这样）。
 // 这里只声明引擎本身——表结构的版本声明归宿主，插件不能自己加表（pluginization.md §2.2）。
-export type { CategoryRow, RuleRow, SessionDocRow };
-
-export interface McpServerRow {
-  id: string;
-  name: string;
-  transport: "stdio" | "sse";
-  command?: string;
-  args?: string; // JSON.stringify(string[])
-  url?: string;
-  env?: string; // JSON.stringify(Record<string, string>)
-  enabled: number; // 0/1
-  createdAt: number;
-  updatedAt: number;
-}
+export type { CategoryRow, McpServerRow, RuleRow, SessionDocRow };
 
 export class AgentChatDB extends Dexie {
   sessions!: EntityTable<SessionDocRow, "id">;

@@ -4,9 +4,6 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { bootHost, PluginHostProvider } from "./plugin";
 import { installConversationsBridge } from "./plugin/bridges/conversations";
-import { installLlmBridge } from "./plugin/bridges/llm";
-import { installSkillCatalogBridge } from "./plugin/bridges/skills";
-import { installToolBridges } from "./plugin/bridges/tools";
 import { provideSharedRuntime } from "./plugin/shared";
 import "./index.css";
 
@@ -14,16 +11,10 @@ import "./index.css";
 provideSharedRuntime();
 
 bootHost((ctx) => {
-  // P3 的临时宿主服务：agent-loop / chat-view 的 inject 依赖它们，必须在插件挂载前就位。
-  // P4 把 llm / skills / 对话域收编成插件后，这里逐块删除。
-  installLlmBridge(ctx);
+  // 对话域仍是 P3 的临时宿主服务（agent-loop / chat-view 的 inject 依赖它）。
   installConversationsBridge(ctx);
-  installSkillCatalogBridge(ctx);
 }).then(
   (host) => {
-    // 临时 bridges：skill / MCP 工具注册与旧审批逻辑，P2c / P4 逐块删除
-    installToolBridges(host);
-
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <React.StrictMode>
         <PluginHostProvider ctx={host}>

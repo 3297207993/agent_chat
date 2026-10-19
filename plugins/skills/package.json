@@ -1,0 +1,28 @@
+{
+  "name": "@agent-chat/plugin-skills",
+  "version": "0.1.0",
+  "private": true,
+  "description": "技能扫描、启用状态、工具贡献与管理界面（认领 ctx.skills）",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/build-plugin.mjs .",
+    "check": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-chat/plugin-api": "link:../../packages/plugin-api",
+    "ai": "^7.0.31",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
+  },
+  "peerDependencies": {
+    "@cambia/core": "*",
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@cambia/core": "link:../../cambia/packages/core",
+    "react": "^19.1.0",
+    "lucide-react": "^1.25.0",
+    "typescript": "~5.8.3"
+  }
+}

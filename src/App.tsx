@@ -2,16 +2,12 @@ import { useEffect } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import SettingsPage from "@/pages/SettingsPage";
-import McpPage from "@/pages/McpPage";
-import SkillPage from "@/pages/SkillPage";
 import MemoryPage from "@/pages/MemoryPage";
 import DebugPage from "@/pages/DebugPage";
 import { useHost, useViewSlot } from "@/plugin";
 import { setNavigator } from "@/plugin/navigation";
 import { useConversationStore } from "@/stores/conversationStore";
 import { useCategoryStore } from "@/stores/categoryStore";
-import { useMcpStore } from "@/stores/mcpStore";
-import { useSkillStore } from "@/stores/skillStore";
 import { useUIStore } from "@/stores/uiStore";
 
 function App() {
@@ -30,12 +26,6 @@ function App() {
   useEffect(() => {
     loadConversations();
     loadCategories();
-    // 扫描 skills 目录，生成 Discovery 索引
-    useSkillStore.getState().loadSkills();
-    // 初始化 MCP：从 DB 加载 Server 配置 → 自动连接已启用的
-    useMcpStore.getState().initialize().then(() => {
-      useMcpStore.getState().connectAllEnabled();
-    });
   }, [loadConversations, loadCategories]);
 
   // 启动时把持久化的主题应用到 <html>（setTheme 仅在用户切换时触发，刷新后需补挂 class），
@@ -64,8 +54,6 @@ function App() {
         {pages.map((page) => (
           <Route key={page.id} path={page.path} element={<page.render ctx={ctx} />} />
         ))}
-        <Route path="/mcp" element={<McpPage />} />
-        <Route path="/skills" element={<SkillPage />} />
         <Route path="/memory" element={<MemoryPage />} />
         <Route path="/debug" element={<DebugPage />} />
       </Route>

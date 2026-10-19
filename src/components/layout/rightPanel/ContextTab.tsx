@@ -1,16 +1,12 @@
 import { useMemo } from "react";
 import { useConversationStore } from "@/stores/conversationStore";
-import { useProviderStore } from "@/stores/providerStore";
-import { useGlobalSystemPrompt } from "@/plugin";
-import { getContextLength, estimateTokens } from "@/lib/ai/tokenizer";
+import { useGlobalSystemPrompt, useHost, useLlmSnapshot } from "@/plugin";
 
 export default function ContextTab() {
   const { currentConversationId, messages, conversations } = useConversationStore();
   const globalSystemPrompt = useGlobalSystemPrompt();
-  // 订阅数据而非 getActiveModel 函数（函数引用稳定，模型切换不会触发重渲染）
-  const providers = useProviderStore((s) => s.providers);
-  const activeProviderId = useProviderStore((s) => s.activeProviderId);
-  const activeModelId = useProviderStore((s) => s.activeModelId);
+  const { llm } = useHost();
+  const { providers, activeProviderId, activeModelId } = useLlmSnapshot();
   const modelConfig = useMemo(() => {
     const provider = providers.find((p) => p.id === activeProviderId);
     return provider?.models.find((m) => m.id === activeModelId);
@@ -31,7 +27,7 @@ export default function ContextTab() {
     0,
   );
 
-  const contextLength = getContextLength(modelConfig);
+  const contextLength = modelConfig?.capabilities.maxTokens ?? 128000;
   const tokenPercent = Math.min((totalTokens / contextLength) * 100, 100);
   const barColor =
     tokenPercent < 70
@@ -79,7 +75,7 @@ export default function ContextTab() {
               <span className="text-[10px] font-medium text-app-text-muted">全局</span>
               <span className="text-[10px] text-app-text-faint">
                 {globalSystemPrompt
-                  ? `${estimateTokens(globalSystemPrompt).toLocaleString()} tokens`
+                  ? `${llm.estimateTokens(globalSystemPrompt).toLocaleString()} tokens`
                   : ""}
               </span>
             </div>
@@ -99,7 +95,7 @@ export default function ContextTab() {
               </span>
               <span className="text-[10px] text-app-text-faint">
                 {convSystemPrompt
-                  ? `${estimateTokens(convSystemPrompt).toLocaleString()} tokens`
+                  ? `${llm.estimateTokens(convSystemPrompt).toLocaleString()} tokens`
                   : ""}
               </span>
             </div>

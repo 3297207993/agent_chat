@@ -1,0 +1,33 @@
+{
+  "name": "@agent-chat/plugin-llm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provider 适配、模型解析、token 估算与上下文窗口（认领 ctx.llm）",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/build-plugin.mjs .",
+    "check": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-chat/plugin-api": "link:../../packages/plugin-api",
+    "@ai-sdk/anthropic": "^4.0.23",
+    "@ai-sdk/deepseek": "^3.0.12",
+    "@ai-sdk/google": "^4.0.26",
+    "@ai-sdk/openai": "^4.0.16",
+    "@ai-sdk/openai-compatible": "^3.0.12",
+    "@ai-sdk/xai": "^4.0.20",
+    "ai": "^7.0.31",
+    "gpt-tokenizer": "^3.4.0",
+    "zustand": "^5.0.14"
+  },
+  "peerDependencies": {
+    "@cambia/core": "*",
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@cambia/core": "link:../../cambia/packages/core",
+    "react": "^19.1.0",
+    "lucide-react": "^1.25.0",
+    "typescript": "~5.8.3"
+  }
+}

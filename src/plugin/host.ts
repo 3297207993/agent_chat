@@ -90,8 +90,8 @@ async function loadPlugin(ctx: Context, item: MountPlanItem) {
 export async function bootHost(setup?: (ctx: Context) => void): Promise<Context> {
   const ctx = new Context();
 
-  // 宿主桥接服务（P3 的 llm / conversations / skillCatalog）必须在插件挂载前就位，否则插件
-  // 的 `inject` 会一直等不到它们。它们是服务，不是插件——P4 收编后这里会变空。
+  // 启动前注入的服务（目前只剩 P3 的临时 `ctx.conversations`）必须在插件挂载前就位，
+  // 否则依赖它的插件 `inject` 会一直等不到。P4 的 llm / skills / mcp 已改成插件自带服务。
   setup?.(ctx);
 
   const mounting: Promise<void>[] = [];

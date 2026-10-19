@@ -21,6 +21,7 @@ export const inject = [
   "llm",
   "renderers",
   "approvals",
+  "skills",
 ];
 
 /** 对话页归本插件——路径 `/` 与组件一起注册，外壳只负责挂进 router。 */

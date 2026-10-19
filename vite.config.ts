@@ -15,6 +15,13 @@ export default defineConfig(async () => ({
     },
   },
 
+  // Windows + esbuild 0.28 的临时文件删除会在转译阶段报 Access denied；
+  // Tauri 的 WebView 支持 ESNext，跳过 target lowering（插件构建同此设置）。
+  build: {
+    target: "esnext",
+    minify: false,
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

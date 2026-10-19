@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUIStore } from "@/stores/uiStore";
-import { useProviderStore } from "@/stores/providerStore";
 import { APP_NAME } from "@/lib/constants";
-import { useViewSlot } from "@/plugin";
+import { useHost, useLlmSnapshot, useViewSlot } from "@/plugin";
 import {
   Settings,
   PanelRightOpen,
@@ -17,7 +16,8 @@ export default function TopBar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { sidebarOpen, toggleSidebar, rightPanelOpen, toggleRightPanel } = useUIStore();
-  const { providers, activeProviderId, activeModelId, setActiveModel } = useProviderStore();
+  const { providers, activeProviderId, activeModelId } = useLlmSnapshot();
+  const { llm } = useHost();
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const topbarActions = useViewSlot("topbar.action");
 
@@ -127,7 +127,7 @@ export default function TopBar() {
                           <button
                             key={model.id}
                             onClick={() => {
-                              setActiveModel(provider.id, model.id);
+                              llm.setActiveModel(provider.id, model.id);
                               setModelMenuOpen(false);
                             }}
                             className={`w-full flex items-center gap-2 pl-6 pr-3 py-1.5 text-left text-xs cursor-pointer ${
