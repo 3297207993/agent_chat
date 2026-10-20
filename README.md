@@ -74,7 +74,8 @@ Agent Chat 是一款基于 **Tauri v2** 构建的桌面 AI Agent 应用。前端
 ├── docs/                 # 需求与设计文档
 │   ├── requirements.md   # 需求文档
 │   ├── design.md         # 设计文档
-│   └── ui-design.md      # UI 设计
+│   ├── ui-design.md      # UI 设计
+│   └── troubleshooting/  # 问题记录（排查过程与解决方案）
 ├── src/
 │   ├── components/       # 界面组件（chat / layout / settings）
 │   ├── pages/            # 路由页面（Chat / Rules / MCP / Skills / Settings 等）
@@ -155,6 +156,7 @@ pnpm tauri build
 - [需求文档](docs/requirements.md)
 - [设计文档](docs/design.md)
 - [UI 设计](docs/ui-design.md)
+- [问题记录](docs/troubleshooting/README.md)
 - [插件内核（Cambia）](cambia/docs/README.md)
 
 ## 许可证
